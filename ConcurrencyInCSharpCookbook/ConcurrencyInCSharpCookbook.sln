@@ -7,6 +7,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ThreadBasic", "ThreadBasic\
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "03ParallerBasic", "03ParallerBasic\03ParallerBasic.csproj", "{EC8B7A77-149A-4DE3-ADE5-8FBD6A044341}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "04DataFlow", "04DataFlow\04DataFlow.csproj", "{AE6C7ECC-7269-4110-9120-73E4CFF799B9}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -44,5 +46,17 @@ Global
 		{EC8B7A77-149A-4DE3-ADE5-8FBD6A044341}.Release|x64.Build.0 = Release|Any CPU
 		{EC8B7A77-149A-4DE3-ADE5-8FBD6A044341}.Release|x86.ActiveCfg = Release|Any CPU
 		{EC8B7A77-149A-4DE3-ADE5-8FBD6A044341}.Release|x86.Build.0 = Release|Any CPU
+		{AE6C7ECC-7269-4110-9120-73E4CFF799B9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AE6C7ECC-7269-4110-9120-73E4CFF799B9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AE6C7ECC-7269-4110-9120-73E4CFF799B9}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{AE6C7ECC-7269-4110-9120-73E4CFF799B9}.Debug|x64.Build.0 = Debug|Any CPU
+		{AE6C7ECC-7269-4110-9120-73E4CFF799B9}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{AE6C7ECC-7269-4110-9120-73E4CFF799B9}.Debug|x86.Build.0 = Debug|Any CPU
+		{AE6C7ECC-7269-4110-9120-73E4CFF799B9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AE6C7ECC-7269-4110-9120-73E4CFF799B9}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AE6C7ECC-7269-4110-9120-73E4CFF799B9}.Release|x64.ActiveCfg = Release|Any CPU
+		{AE6C7ECC-7269-4110-9120-73E4CFF799B9}.Release|x64.Build.0 = Release|Any CPU
+		{AE6C7ECC-7269-4110-9120-73E4CFF799B9}.Release|x86.ActiveCfg = Release|Any CPU
+		{AE6C7ECC-7269-4110-9120-73E4CFF799B9}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
