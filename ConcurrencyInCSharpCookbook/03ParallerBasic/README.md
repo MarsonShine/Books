@@ -102,5 +102,31 @@ Task.WaitAll(new Task[2] {t1, t2});
 
 `Task.WhenAny` : 等待一批次任务中任意一个任务完成并返回新的任务（不堵塞）
 
-### Plinq
+### PLinq
+
+PLinq适用于对一批数据并行处理，并返回全新的一批新数据，或者对数据进行统计。使用方式根 Linq 几乎是一模一样的。
+
+PLinq非常适用于数据流（DataFlow）的操作，一个数据队列作为输入，一个数据队列作为输出。下面这个例子就是在队列集合中每个元素都乘以2
+
+```c#
+static IEnumerable<int> MultiplyBy2(IEnumerable<int> values){
+    return values.AsParallel().Select(item => item * 2);
+}
+```
+
+因为并行运行期间，在没有特殊手段做处理，原来数据的顺序肯定会发生变化，所以我们要在保持逻辑的情况下还要保持顺序，那我们可以这样
+
+```c#
+static IEnumerable<int> MultiplyBy2(IEnumerable<int> values){
+    return values.AsParallel().AsOrdered().Select(item => item * 2);
+}
+```
+
+数据汇总
+
+```c#
+static int MultiplyBy2(IEnumerable<int> values){
+    return values.AsParallel().Sum();
+}
+```
 
