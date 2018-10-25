@@ -1,0 +1,24 @@
+{
+    "version": "2.0.0",
+    "tasks": [{
+            "label": "build",
+            "command": "dotnet",
+            "type": "process",
+            "args": [
+                "build",
+                "${workspaceFolder}/04DataFlow/04DataFlow.csproj"
+            ],
+            "problemMatcher": "$msCompile"
+        },
+        {
+            "label": "build",
+            "command": "dotnet",
+            "type": "process",
+            "args": [
+                "build",
+                "${workspaceFolder}/03ParallerBasic/03ParallerBasic.csproj"
+            ],
+            "problemMatcher": "$msCompile"
+        }
+    ]
+}
