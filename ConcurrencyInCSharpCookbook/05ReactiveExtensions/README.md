@@ -45,13 +45,43 @@ public static void EncapsulateFromNotStandardEventHandler(){
 }
 ```
 
+`FromEventPattern` 第一个参数是一个转换器，它将 `EventHandler<ElapsedEventArgs>` 转换成 `ElapsedEventHandler` 。除了传递事件，它不应该再做其他事。
+
+我们还可以通过反射的方式完成上述同样的效果
+
+```c#
+public static void EncapsulateFromNotStandardEventHandlerByReflection(){
+	var timer = new System.Timers.Timer(interval : 1000) { Enabled = true };
+	var ticks = Observable.FromEventPattern(timer, "Elapsed");
+	ticks.Subscribe(data => Trace.WriteLine("OnNext:" + ((ElapsedEventArgs) data.EventArgs).SignalTime));
+}
+```
+
 （标准事件模式：第一个参数是事件发送者，第二个参数是事件的类型参数）。对于不标准的事件类型，可以用重载 Observable.FromEvent 的办法，把事件封装进 Observable 对象。
 
 封进 Observable 后，每次引发该事件都会触发 OnNext。在处理 AsyncCompletedEventArgs 时会发生令人奇怪的现象，所有的异常信息都是通过数据形式传递的（ OnNext ），而不是通过错误传递（ OnError ）。来看一个例子：
 
 ```c#
-public static void ObservableException(){
+public static void ObservableException() {
     var client = new WebClient();
+    var donwloadedStrings = Observable.FromEventPattern(client, "DownloadStringCompleted");
+    donwloadedStrings.Subscribe(
+        data => {
+            var eventArgs = (DownloadStringCompletedEventArgs) data.EventArgs;
+            if (eventArgs.Error != null)
+                Trace.WriteLine("OnNext:(Error) " + eventArgs);
+            else
+                Trace.WriteLine("OnNext:" + eventArgs.Result);
+        },
+        ex => Trace.WriteLine("OnError:" + ex),
+        () => Trace.WriteLine("OnCompleted")
+    );
+    client.DownloadStringAsync(new Uri("http://invalid.example.com/"));
 }
 ```
 
+`WebClient.DownloadStringAsync` 出错并结束时，引发带有异常 `AsyncCompletedEventArgs.Error` 事件。Rx 会把这作为一个数据事件，因此这个程序的结果是显示 "OnNext:(Error)" 而不是 "OnError"。
+
+有些事件的订阅和退订必须在特定的上下文中进行。例如，很多 UI 控件的事件必须在 UI 线程中。
+
+Rx 提供了一个操作符 `SubscribeOn`，可以控制订阅和退订的上下文。
