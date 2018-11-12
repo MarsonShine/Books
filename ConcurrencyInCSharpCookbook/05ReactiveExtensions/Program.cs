@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Diagnostics;
+using System.IO;
 using System.Net;
 using System.Reactive.Linq;
 using System.Timers;
@@ -7,8 +8,17 @@ using System.Timers;
 namespace _05ReactiveExtensions {
     class Program {
         static void Main(string[] args) {
-            ObservableException();
+            // ObservableException();
+            //Basic.Startup();
+            // Basic.Startup2();
+
+            // Basic.FileSystemWatcher();
+            // string filePath = "D:\\MS\\Project\\dotnet\\Books\\ConcurrencyInCSharpCookbook\\05ReactiveExtensions\\README.md";
+            // File.SetCreationTime(filePath, DateTime.Now);
+
+            SendNotificationToSpecifyContext.Startup();
             Console.WriteLine("Hello World!");
+            Console.ReadLine();
         }
 
         public static void ObservableException() {
@@ -22,10 +32,10 @@ namespace _05ReactiveExtensions {
                     else
                         Trace.WriteLine("OnNext:" + eventArgs.Result);
                 },
-                ex => Trace.WriteLine("OnError:" + ex),
+                ex => Trace.WriteLine("OnError:" + ex.ToString()),
                 () => Trace.WriteLine("OnCompleted")
             );
-            client.DownloadStringAsync(new Uri("http://invalid.example.com/"));
+            client.DownloadStringAsync(new Uri("http://www.baidu.com/"));
         }
 
         public static void EncapsulateFromStandardEventHandler() {
@@ -40,7 +50,7 @@ namespace _05ReactiveExtensions {
         public static void EncapsulateFromNotStandardEventHandler() {
             var timer = new System.Timers.Timer(interval : 1000) { Enabled = true };
             var ticks = Observable.FromEventPattern<ElapsedEventHandler, ElapsedEventArgs>(
-                    handler =>(s, a) => handler(s, a),
+                    handler => (s, a) => handler(s, a),
                     addHandler : handler => timer.Elapsed += handler,
                     removeHandler : handler => timer.Elapsed -= handler
                 );

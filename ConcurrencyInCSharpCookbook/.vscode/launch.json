@@ -3,8 +3,7 @@
     // 悬停以查看现有属性的描述。
     // 欲了解更多信息，请访问: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
-    "configurations": [
-        {
+    "configurations": [{
             "name": "03ParallerBasic",
             "type": "coreclr",
             "request": "launch",
@@ -15,8 +14,7 @@
             "console": "internalConsole",
             "stopAtEntry": false,
             "internalConsoleOptions": "openOnSessionStart"
-        },
-        {
+        }, {
             "name": "04DataFlow",
             "type": "coreclr",
             "request": "launch",
@@ -24,6 +22,18 @@
             "program": "${workspaceFolder}/04DataFlow/bin/Debug/netcoreapp2.1/04DataFlow.dll",
             "args": [],
             "cwd": "${workspaceFolder}/04DataFlow",
+            "console": "internalConsole",
+            "stopAtEntry": false,
+            "internalConsoleOptions": "openOnSessionStart"
+        },
+        {
+            "name": "05ReactiveExtensions",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build",
+            "program": "${workspaceFolder}/05ReactiveExtensions/bin/Debug/netcoreapp2.1/05ReactiveExtensions.dll",
+            "args": [],
+            "cwd": "${workspaceFolder}/05ReactiveExtensions",
             "console": "internalConsole",
             "stopAtEntry": false,
             "internalConsoleOptions": "openOnSessionStart"
