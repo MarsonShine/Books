@@ -16,7 +16,13 @@ namespace _05ReactiveExtensions {
             // string filePath = "D:\\MS\\Project\\dotnet\\Books\\ConcurrencyInCSharpCookbook\\05ReactiveExtensions\\README.md";
             // File.SetCreationTime(filePath, DateTime.Now);
 
-            SendNotificationToSpecifyContext.Startup();
+            // SendNotificationToSpecifyContext.Startup();
+            // SendNotificationToSpecifyContext.ObserveOn();
+
+            // UseWindowAndBufferToGroupEvent.NotificationLoopUseBuffer();
+
+            ThrottleAndSample.UseThrottle();
+
             Console.WriteLine("Hello World!");
             Console.ReadLine();
         }
