@@ -21,8 +21,8 @@ namespace _05ReactiveExtensions {
 
             // UseWindowAndBufferToGroupEvent.NotificationLoopUseBuffer();
 
-            ThrottleAndSample.UseThrottle();
-
+            // ThrottleAndSample.UseThrottle();
+            ThrottleAndSample.UseSample();
             Console.WriteLine("Hello World!");
             Console.ReadLine();
         }
