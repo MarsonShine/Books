@@ -6,6 +6,9 @@ namespace _07Interoperate {
             UseRxObservableEncapsulateAsyncCode.UseStartAsync();
             var response = UseRxObservableEncapsulateAsyncCode.UseFromAsync();
             response.Subscribe();
+
+            UseRxObservableAndDataFlow.UseBufferBlockAndRx();
+            UseRxObservableAndDataFlow.UseActionBlockAndRx();
             Console.WriteLine("Hello World!");
             Console.ReadLine();
         }
