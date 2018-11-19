@@ -10,6 +10,10 @@ namespace _08Collections {
     class Program {
         static void Main(string[] args) {
             Console.WriteLine("Hello World!");
+
+            // ImmutableLists.ForeachCompareFor();
+            new BlockingCollections().Start();
+            Console.ReadLine();
         }
     }
 }
