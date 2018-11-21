@@ -14,7 +14,7 @@ namespace _08Collections {
         private readonly BlockingCollection<int> blockingCollection = new BlockingCollection<int>();
         //阻塞栈 / 包 适用于跟阻塞队列一样的场景，但是不是队列的形式，而是指定以先进后出（ LIFO ）的栈或包形式
         private readonly BlockingCollection<int> m_blockingStack = new BlockingCollection<int>(new ConcurrentStack<int>());
-        private readonly BlockingCollection<int> m_blockingBag = new BlockingCollection<int>(new ConcurrentBag());
+        private readonly BlockingCollection<int> m_blockingBag = new BlockingCollection<int>(new ConcurrentBag<int>());
         public void Consumer() {
             Console.WriteLine("消费者开始消费...");
             foreach (var item in blockingCollection.GetConsumingEnumerable()) {

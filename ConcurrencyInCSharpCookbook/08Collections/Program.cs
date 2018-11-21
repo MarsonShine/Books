@@ -1,4 +1,5 @@
 ﻿using System;
+using Nito.AsyncEx;
 
 /// <summary>
 /// 不可变集合，值永远无法修改的集合，当要对不可变集合写入修改时，会返回一个新的不可变集合
@@ -17,6 +18,10 @@ namespace _08Collections {
             dic.DeepInConcurrentDictionary(0, "零");
             dic.DeepInConcurrentDictionary(0, "新零");
             dic.DeepInConcurrentDictionary(0, "新零");
+            var asyncQueue = new AsyncQueue();
+            //在同步代码下调用异步方法
+            AsyncContext.Run(() => asyncQueue.Start());
+
             Console.ReadLine();
         }
     }
