@@ -12,7 +12,11 @@ namespace _08Collections {
             Console.WriteLine("Hello World!");
 
             // ImmutableLists.ForeachCompareFor();
-            new BlockingCollections().Start();
+            // new BlockingCollections().Start();
+            var dic = new ConCurrentDictionaries();
+            dic.DeepInConcurrentDictionary(0, "零");
+            dic.DeepInConcurrentDictionary(0, "新零");
+            dic.DeepInConcurrentDictionary(0, "新零");
             Console.ReadLine();
         }
     }
