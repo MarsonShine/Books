@@ -16,6 +16,9 @@ namespace _09Cancellation {
             Thread.Sleep(2000); //执行计算逻辑
             cancellationByPoll.Cancel();
             // Thread.Sleep(2000);
+
+            TimeoutAndCancellation timeoutAndCancellation = new TimeoutAndCancellation();
+            AsyncContext.Run(() => timeoutAndCancellation.IssueTimeoutAsync_v2());
             Console.WriteLine("Hello World!");
             Console.ReadLine();
         }
