@@ -13,7 +13,7 @@ namespace _10OOP {
     /// <summary>
     /// 这个类需要异步完成，并提供完成返回的结果
     /// </summary>
-    interface IAsyncCompletion {
+    public interface IAsyncCompletion {
         /// <summary>
         /// 开始本实例的完成过程，类似于“IDisposable.Dispose”
         /// 在调用本方法之后，就不能调用除了 “Completion” 以为的任何成员
