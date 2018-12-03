@@ -12,6 +12,10 @@ namespace _11Sync {
         private int value;
 
         public void Increment() {
+            /// <summary>
+            /// lock 满足绝大多数情况，只有极少数情况才会用到其他类型锁
+            /// </summary>
+            /// <value></value>
             lock(_mutex) {
                 value++;
             }
