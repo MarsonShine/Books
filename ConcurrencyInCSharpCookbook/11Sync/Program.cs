@@ -10,12 +10,16 @@ namespace _11Sync {
     class Program {
         static void Main(string[] args) {
             Console.WriteLine("Hello World!");
-            AsyncContext.Run(() => MeMethodAsync());
+            // AsyncContext.Run(() => MeMethodAsync());
 
-            AsyncContext.Run(async() => {
-                var ret = await ModifyValueCurrentlyAsync();
-                Console.WriteLine(ret);
-            });
+            // AsyncContext.Run(async() => {
+            //     var ret = await ModifyValueCurrentlyAsync();
+            //     Console.WriteLine(ret);
+            // });
+
+            BlockSemaphore blockSemaphore = new BlockSemaphore();
+            blockSemaphore.UseAutoResetEvent();
+            Console.ReadLine();
         }
 
         private static async Task MeMethodAsync() {
