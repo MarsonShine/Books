@@ -11,7 +11,10 @@ namespace _13PracticalSkills {
         //Lazy<T>
         static int _simpleValue;
         static readonly Lazy<int> MySharedInteger = new Lazy<int>(() => _simpleValue++);
-
+        static readonly AsyncLazy<int> MyLazySharedInstance = new AsyncLazy<int>(async() => {
+            await Task.Delay(TimeSpan.FromSeconds(2));
+            return _simpleValue++;
+        });
         void UseSharedInteger() {
             //不管同时有多少线程同时调用 UseSharedInteger，这个工厂委托只会执行一次，并且所有线程都是等待同一个实例。实例在创建后会被缓存起来，以后对这个属性的方法都会返回同一个实例
             //Lazy<T> 内部其实就是用的单例模式
