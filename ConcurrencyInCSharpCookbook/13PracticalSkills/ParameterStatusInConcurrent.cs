@@ -11,7 +11,7 @@ namespace _13PracticalSkills {
     //.net4.0 ASP.NET 可以使用 HttpContext.Current.Items，效果与 CallContext 一样，效率更高
     public class ParameterStatusInConcurrent {
         public void DoLongOperation() {
-            var opertionID = new Guid();
+            // var opertionID = new Guid();
             // CallContext
         }
     }
