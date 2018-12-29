@@ -8,6 +8,7 @@ namespace _13PracticalSkills {
     //或存储在类的成员变量中，或者使用依赖注入来为每个方法提供状态变量
     //这时候就要用 CallContext.LogicalSetData，CallContext.LogicGetData //只在.net framwork存在，.netcore 请用System.Threading.AsyncLock<T>
     //根据http://www.cazzulino.com/callcontext-netstandard-netcore.html 利用 AsyncLocal<T> 与 ConcurrentDictionary 模拟 CallContext
+    //.net4.0 ASP.NET 可以使用 HttpContext.Current.Items，效果与 CallContext 一样，效率更高
     public class ParameterStatusInConcurrent {
         public void DoLongOperation() {
             var opertionID = new Guid();
