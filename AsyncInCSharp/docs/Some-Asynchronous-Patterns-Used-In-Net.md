@@ -95,4 +95,48 @@ Task 的优势很明显，在 Dns 它只有一个方法，能让 API 更加清�
 
 # 手动异步的问题
 
-就如我们所见，有很多种方式来实现异步问题。他们之间很相似。但是你也应该看到他们共同的缺点。
+就如我们所见，有很多种方式来实现异步问题。他们之间很相似。但是你也应该看到他们共同的缺点。你将要写的程序会分成两个方法：主方法和回调方法。使用匿名方法和 lambda 回调能减轻这种问题，但是你的代码会变得难以阅读。
+
+此外还有另一个问题，我们讨论了调用匿名方法，但是你无法知道你是不是还需要另一个的匿名方法，如果你遇到的是匿名方法循环调用呢？你只有递归这一种优化项，它要比一般的循环难读懂。
+
+```c#
+private void LookupHostNames(string[] hostNames) {
+    LookupHostNamesHelper(hostNames, 0);
+}
+
+private void LookupHostNamesHelper(string[] hostNames, int i) {
+    Task<IPAddress[]> iPAddressesPromise = Dns.GetHostAddressesAsync(hostNames[i]);
+    iPAddressesPromise.ContinueWith(_ => {
+        IPAddress[] iPAddresses = iPAddressesPromise.Result;
+        //do something with address
+        if (i + 1 < hostNames.Length) {
+            LookupHostNamesHelper(hostNames, i + 1);
+        }
+    });
+}
+```
+
+以这种编程风格来手写异步编程的话会引起另一个问题。如果你在写异步代码，然后想用在你的程序里面其他地方，那么你就必须要提供异步的API。如果使用这种异步API，那么你就要为一个方法写两边（一个同步，一个异步），这看起来令人困惑和混乱。并且异步代码是连续不断的，所以你也不能只在异步 API 处理，还要在调用源，这样会使得原来的程序一团糟。
+
+# 转换到手写异步代码例子
+
+之前我们有讨论 WPF UI 框架应用程序下在网页是缓慢的，因为它在下载页面的过程中系统是未响应的。那么这节我们用手动异步技术来改造一下。
+
+第一步 发现异步版本的 Task API（WebClient.DownloadData）。就如下面一下，WebClient 使用了 EAP（Event-base Asynchronous Pattern），所以我们可以注册一个事件回调，然后开始下载
+
+```c#
+private void AddFavicon(string domain) {
+    WebClient webclient = new WebClient();
+    webclient.DownloadDataCompleted += OnWebClientOnDownloadDataCompleted;
+    webclient.DownloadDataAsync(new Uri("http://" + domain + "/favicon.ico"));
+}
+
+private void OnWebClientOnDownloadDataCompleted(object sender, DownloadDataCompletedEventArgs e) {
+    var bytes = e.Result; //favicon 字节流
+    Console.WriteLine(Convert.ToBase64String(bytes));
+}
+```
+
+当然，我们的逻辑被拆分到两个方法里。我这里不倾向于使用 lambda EAP 是因为代码在开始下载之前调用，它看起来想是同步的（不可读）。
+
+这个版本的代码例子，你运行它就会发现系统不仅可以保持相应，下载的图片也渐渐显示出来。同时我们也引入了一个新的问题，因为这所有的下载操作都是在一开始触发的，图片的顺序取决于下载的快慢而不是请求图片的顺序。如果你细心检查的话就会发现这个问题，我建议是修复这个问题，这涉及到由循环转化为递归。其他有效的解决方法也都可以。

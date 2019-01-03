@@ -30,7 +30,7 @@ namespace AsyncPatternInNet {
         }
 
         private void LookupHostNameByLambda() {
-            int aUsefulVariable = 3;
+            // int aUsefulVariable = 3;
             // GetHostAddress("oreilly.com", address => {
             //     //Do something with address and aUsefulVariable
             // });
@@ -42,6 +42,32 @@ namespace AsyncPatternInNet {
                 IPAddress[] iPAddresses = iPAddressesPromis.Result;
                 //do something with address
             });
+        }
+
+        private void LookupHostNames(string[] hostNames) {
+            LookupHostNamesHelper(hostNames, 0);
+        }
+
+        private void LookupHostNamesHelper(string[] hostNames, int i) {
+            Task<IPAddress[]> iPAddressesPromise = Dns.GetHostAddressesAsync(hostNames[i]);
+            iPAddressesPromise.ContinueWith(_ => {
+                IPAddress[] iPAddresses = iPAddressesPromise.Result;
+                //do something with address
+                if (i + 1 < hostNames.Length) {
+                    LookupHostNamesHelper(hostNames, i + 1);
+                }
+            });
+        }
+
+        private void AddFavicon(string domain) {
+            WebClient webclient = new WebClient();
+            webclient.DownloadDataCompleted += OnWebClientOnDownloadDataCompleted;
+            webclient.DownloadDataAsync(new Uri("http://" + domain + "/favicon.ico"));
+        }
+
+        private void OnWebClientOnDownloadDataCompleted(object sender, DownloadDataCompletedEventArgs e) {
+            var bytes = e.Result; //favicon 字节流
+            Console.WriteLine(Convert.ToBase64String(bytes));
         }
     }
 }
