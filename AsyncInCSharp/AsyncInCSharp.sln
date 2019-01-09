@@ -5,6 +5,8 @@ VisualStudioVersion = 15.0.26124.0
 MinimumVisualStudioVersion = 15.0.26124.0
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AsyncPatternInNet", "AsyncPatternInNet\AsyncPatternInNet.csproj", "{2E0EBB93-1FA8-4B4F-A0D0-0C09473A2334}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AwaitWhatActuallyToDo", "AwaitWhatActuallyToDo\AwaitWhatActuallyToDo.csproj", "{1042307E-2CDD-4DAD-A35F-086D3B8DE7D7}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -30,5 +32,17 @@ Global
 		{2E0EBB93-1FA8-4B4F-A0D0-0C09473A2334}.Release|x64.Build.0 = Release|Any CPU
 		{2E0EBB93-1FA8-4B4F-A0D0-0C09473A2334}.Release|x86.ActiveCfg = Release|Any CPU
 		{2E0EBB93-1FA8-4B4F-A0D0-0C09473A2334}.Release|x86.Build.0 = Release|Any CPU
+		{1042307E-2CDD-4DAD-A35F-086D3B8DE7D7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1042307E-2CDD-4DAD-A35F-086D3B8DE7D7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1042307E-2CDD-4DAD-A35F-086D3B8DE7D7}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{1042307E-2CDD-4DAD-A35F-086D3B8DE7D7}.Debug|x64.Build.0 = Debug|Any CPU
+		{1042307E-2CDD-4DAD-A35F-086D3B8DE7D7}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{1042307E-2CDD-4DAD-A35F-086D3B8DE7D7}.Debug|x86.Build.0 = Debug|Any CPU
+		{1042307E-2CDD-4DAD-A35F-086D3B8DE7D7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1042307E-2CDD-4DAD-A35F-086D3B8DE7D7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1042307E-2CDD-4DAD-A35F-086D3B8DE7D7}.Release|x64.ActiveCfg = Release|Any CPU
+		{1042307E-2CDD-4DAD-A35F-086D3B8DE7D7}.Release|x64.Build.0 = Release|Any CPU
+		{1042307E-2CDD-4DAD-A35F-086D3B8DE7D7}.Release|x86.ActiveCfg = Release|Any CPU
+		{1042307E-2CDD-4DAD-A35F-086D3B8DE7D7}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
