@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Net;
 using System.Threading.Tasks;
 
 namespace TAPs {
@@ -13,9 +14,31 @@ namespace TAPs {
             //新建窗口
             PermissionDialog dialog = new PermissionDialog();
             //当用户完成对话框时，Task 使用 SetResult 来表示完成
-            dialog.Closed += delegate { tcs.SetResult(dialog.PermissionGranted); };
+            // dialog.Closed += delegate { tcs.SetResult(dialog.PermissionGranted); };
             dialog.Show();
             //返回一个“傀儡” Task，它还没有完成。
+            return tcs.Task;
+        }
+
+        public static IAsyncResult BeginGetHostEntry(string hostNameOrAddress, AsyncCallback requestCallback, object stateObject) {
+            var asyncResult = Dns.BeginGetHostEntry(hostNameOrAddress, requestCallback, stateObject);
+            return asyncResult;
+        }
+
+        public IPHostEntry EndGetHostEntry(IAsyncResult asyncResult) {
+            return Dns.EndGetHostEntry(asyncResult);
+        }
+        //在 IAsyncResult 模式应用 TaskCompletionSource
+        public static Task<IPHostEntry> GetHostEntryAsync(string hostNameOrAddress) {
+            TaskCompletionSource<IPHostEntry> tcs = new TaskCompletionSource<IPHostEntry>();
+            Dns.BeginGetHostEntry(hostNameOrAddress, asyncResult => {
+                try {
+                    IPHostEntry result = Dns.EndGetHostEntry(asyncResult);
+                    tcs.SetResult(result);
+                } catch (Exception e) {
+                    tcs.SetException(e);
+                }
+            }, null);
             return tcs.Task;
         }
     }

@@ -98,3 +98,63 @@ if(await GetUserPermission()){
 ```
 
 一个令人烦恼的就是，**TaskCompletionSource** 没有非泛型的版本。但是，由于 Task<T> 是 Task 的子类，你可以使用 Task<T> 的地方使用 Task。反过来就是说你可以使用 TaskCompletionSource<T>，并且通过它的属性 **Task**  返回Task<T> ，它（返回的Task<T>）是一个有效的 Task。我倾向于使用 **TaskCompletionSource<object>** 以及 调用 **SetResult(null) **来完成它。你可以根据需要创建一个非泛型的 **TaskCompletionSource**，在泛型的基础之上。
+
+# 与旧的异步模式交互
+
+在 .NET 类库里，.NET 开发团队已经创建了 TAP 版本的重要的异步 APIs。万一你需要和一些已经存在的异步代码库交互的话，是想知道怎么去构建一个从非 TAP 的异步代码到 TAP 的异步代码 ，这是很有趣的。这是也很有趣的例子来怎样使用 TaskCompletionSource<T>。
+
+让我们来研究一下前面使用的 DNS 的查找示例。.NET4.0 异步版本的 DNS 的查看异步方法是用了 IAsyncResult 异步模式，意味着要考虑 BeginXXX 方法和 EndXXX 方法的:
+
+```c#
+IAsyncResult BeginGetHostEntry(string hostNameOrAddress,AsyncCallback requestCallback,object stateObject)
+
+IPHostEntry EndGetHostEntry(IAsyncResult asyncResult)
+```
+
+特别是你使用 API 用 lambda 表达式作为回调函数的时候，要从 lambda 表达式里面调用 EndXXX 方法。我们刚好可以这样做，但是实际上不是在回调函数里面做，我们只是使用 TaskCompletionSource<T> 来完成一个 Task。
+
+```c#
+public static Task<IPHostEntry> GetHostEntryAsync(string hostNameOrAddress) {
+    TaskCompletionSource<IPHostEntry> tcs = new TaskCompletionSource<IPHostEntry>();
+    Dns.BeginGetHostEntry(hostNameOrAddress, asyncResult => {
+        try {
+            IPHostEntry result = Dns.EndGetHostEntry(asyncResult);
+            tcs.SetResult(result);
+        } catch (Exception e) {
+            tcs.SetException(e);
+        }
+    }, null);
+    return tcs.Task;
+}
+```
+
+由于可能会出现异常，代码变得更加复杂。如果 DNS 解析失败了，当我们调用 **EndGetHostEntry** 会抛出一个异常。这就是为什么 **IAsyncResult** 模式在复杂的系统使用 EndXXX 方法，而不只是直接传递结果值至回调。当异常抛出，我们应该把它放进 TaskCompletionSource<T> 中，以至于根据 TAP 模式，我们调用能获得异常信息。
+
+事实上，.NET 类库有足够多的异步 APIs 是依据 TAP 模式，也提供了公共方法能把方法转换成 TAP 版本的异步模式，只需要这样使用就好了：
+
+```c#
+Task t = Task<IPHostEntry>.Factory.FromAsync<string>(Dns.BeginGetHostEntry,Dns.EndGetHostEntry,null);
+```
+
+它把 BeginXXX 和 EndXXX 方法作为委托，就能转变成使用跟之前我们做的机制一样了。它可能比我们简单的方法更加有效。
+
+# 冷热 Task
+
+当 .NET4.0 在推出 TPL 库的引入 Task 类时，它有一个概念叫 cold Task，它需要被启动，与之相反的是 hot Task，它已经准备好运行了。因此，我们只需要处理 hot Tasks。
+
+TAP 指出所有的 Tasks 从方法中返回的时候， 必须是 hot。幸运的是，我们现在讨论的所有的的 Task 类都是 hot Task。TaskCompletionSource<T> 的技术例外，它是没有 cold 和 hot 概念。你只需要确保 Tasks 会在你自己需要想要返回的时候完成。
+
+# 前期工作
+
+我们早就知道当你调用 TAP 异步方法的时候，该方法与其他方法一样会在当前线程上运行。不同的是 TAP 方法在它返回之前可能实际上是没有完成。它会马上返回一个 Task，并且当 Task 实际操作做完了它就会完成。
+
+话虽如此，在方法中的代码在当前线程中会同步运行。在异步方法这个情况下，在第一次 **await** 时，它代码至少是等待的，包括操作数。就跟之前章节 “async 异步方法在需要之前都是同步的” 提到的一样。
+
+TAP 建议 TAP 方法应该尽可能小的完成同步的工作。你可以检查参数时候有效以及扫描缓存来避免长时间操作，但是你不应该去做缓慢的计算。混合方法，它能很好的做相同的事，比如通过网络访问或是类似一些计算的事，但是你应该是用 **Task.Run** 将计算转移到后台线程。想象一下，上传一个图片到网站，但是需要调整大小已节省宽带：
+
+```c#
+Image resized = await Task.Run(() => ResizeImage(originalImage));
+await UploadImage(resized);
+```
+
+当它在 web 应用程序上没有实际上的收益的时候，在 UI 应用程序里面是非常重要的。然而，当我们看到跟 TAP 很接近的方法时，我们期望它能马上返回。把你的代码移动到 UI 应用程序将会是惊喜，如果你同步慢速的图片尺寸大小。
