@@ -138,3 +138,45 @@ private static async Task<T> WithTimeout<T>(Task<T> task,int timeout){
 }
 ```
 
+我的技术点是用 Task 创建一个延时任务，它将在超时后发生。然后我用 WhenAny 来选择消费在原始的 Task 以及延时的 Task 这两个两个 Task 谁先完成。这个例子就是看谁先完成，延时任务完成则抛出异常，否则就是返回结果。
+
+要注意，我在这个例子中我很小心这个延时异常，当延时发生的时候。我用 **ContinuWith** 捕捉了原始任务的继续任务，它用来出异常或是返回结构之后的后续任务。我知道延时是不会抛出异常的，所以我根本无需处理它。HandleException 方法可以像下面一样这么实现：
+
+```c#
+private static void HandleException<T>(Task<T> task)
+{
+    if (task.Exception != null)
+    {
+        logging.LogException(task.Exception);
+    }
+}
+```
+
+显然，这里做什么明显是取决于你处理异常的策略。通过 **ContinuWith** 捕获异常，我就能确保原始 task 何时才能完成，可能在以后的某个时间点，运行了异常检查。重要的是，这不会影响主程序的运行，因为它早就做了准备当超时的时候它要做什么。
+
+# 取消异步操作
+
+对比 Task 类，TAP 通过 CancellationToken 类型是可以取消的。按照约定，任何 TAP 方法都取消，都有一个带有 **CancellatonToken** 参数的方法重载。举个在 .Framework 中的 **DbCommand** 类型的例子，它查询数据库的方法是异步的。最简单的重载是无参的 ExecuteNonQueryAsync。
+
+```c#
+Task<int> ExecuteNonQueryAsync(CancellationToken cancellationToken token);
+```
+
+我们来看下我们怎么调用取消取消异步任务的。首先，我们需要 **CancellationTokenSource** 类，它会生成 **CancellationToken** 并且控制它们，它跟 **TaskCompletionSource** 生成 Task 并控制它是一样的。下面这段代码是未完成的，但是我会展示一些你需要的技术给你：
+
+```c#
+CancellationTokenSource cts = new CancellationTokenSource();
+cancelButton.Click += delegate { cts.Cancel(); };
+int result = await dbCommand.ExecuteNonQueryAsync(cts.Token);
+```
+
+当你调用 **CancellationTokenSource.Cancel** 方法时，**CancellationToken** 转变为取消状态。当它发生取消时，它可能会注册一个委托来调用，但是实际上，一个更简单的方法就是去轮询检查你的方法是否调用了取消，这样更加有效。如果你在异步方法中轮询，并且 **CancellationToken** 是可用的，你就应该在循环迭代中调用 ThrowIfCancellationRequested：
+
+```c#
+foreach (var x in thingsToProcess)
+{
+	cancellationToken.ThrowIfCancellationRequested();
+    // Process x ...
+}
+```
+

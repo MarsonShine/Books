@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Threading.Tasks;
 
 namespace UtilitiesForTAP {
@@ -14,8 +15,9 @@ namespace UtilitiesForTAP {
             return await task;
         }
 
-        private static void HandleException(Task<object> obj) {
-            throw new NotImplementedException();
+        private static void HandleException<T>(Task<T> task) {
+            if (task.Exception != null)
+                Trace.TraceInformation(task.Exception.Message);
         }
     }
 }
