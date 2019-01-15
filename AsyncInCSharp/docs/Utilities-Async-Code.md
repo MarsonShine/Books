@@ -180,3 +180,30 @@ foreach (var x in thingsToProcess)
 }
 ```
 
+当你调用 **CancellationToken.ThrowIfCancellationRequested** 取消时，它将抛出 **OperationCanceledException** 异常。TPL 就会知道这个错误就代表着你是取消操作而不是失败，将会特殊处理。例如运行的异步方法抛出异常 **OperationCanceledException** 时，Task.IsCancel 就会自动赋值为 true。
+
+还有一个相近的特性就是 token 能够被分布到各个根据需要的异步操作，通过传递它来取消操作。无论是否这些都运行在相同的队列中，还是在循环中竞争和远程操作，相同的 token 都能取消它们。
+
+# 异步返回进度条
+
+在除了保持 UI 做出响应这方面之外，还要给用户一个取消的选择，	还有一个好的方式就是提高体验当无法避免的缓慢操作的时候，显示用户等待多长的时间。为此，TAP 提供了一对类型来表示进度条。这次，你传递一个异步方法接口，**IProgress<T>** ，调用它指示它正在做。
+
+通过约定，**IProgress<T>** 参数一把都在方法的最后一个参数，在 CancellationToken 的后面。这里是你将在方法 DownloadTaskAsync 添加进度条。
+
+```c#
+Task<byte[]> DownloadTaskAsync(Uri address, CancellationToken token, IProgress<DownloadProgressChangedEventArgs> progress);	
+```
+
+像这样使用方法，你需要创建一个 IProgress<T> 的实现。幸运的是，在大多数情况下，已经提供的 **Progress<T>** 满足大多数情况。你可以构造它，无论是通过 lambda 还是注册一个事件，在你使用它更新 UI 的时候，去获得这个新的进度条的通知。
+
+```c#
+new Progress<int>(percentage => progressBar.Value = percentage);
+```
+
+Progress<T> 有个有用的特性，就是它在构造的时候会捕捉同步上下文 SynchronizationContext，并且你可以调用它在正确的线程上更新代码。这个行为跟 Task 之后 await 大部分相同，所以你不需要担心实际上你的 Progress<T> 被其他线程调用。如果当你编写 TAP 方法时愿意报告进度条的话，你只需要调用 IProgress<T>.Report 方法即可。
+
+```c#
+progress.Report(percent);
+```
+
+不同的是你选择参数 T 的类型。它是你传递到 Report 方法的对象类型，它也是之前构造它所给的 lamda 表达式是相同的对象。对于简单的进度条 int 是一个好的选择，但是有时候我们需要更多细节。要小心，因为这个对象将会被消费在不同的线程上。要使用一个不可变量类型来避免这个问题。
