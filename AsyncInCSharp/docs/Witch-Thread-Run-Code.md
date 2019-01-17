@@ -108,3 +108,42 @@ async Task<Image> GetFaviconsAsync(...)
 
 这很复杂，但是我认为这指出来的每个步骤都值得看。注意到通过 UI 线程运行我的每行代码。IO 完成端口线程的运行时间只够向 UI 线程发布一条指令，它运行我的两个方法的后半部分。
 
+# 不使用同步上下文
+
+每个 SynchronizationContext 的实现都会以不同的方式执行的 Post。大多数情况它们都是相对代价昂贵的。为了避免消耗，.NET 在 Task 完成的时候捕捉当前同步上下文时，也会选择不使用 Post。发生这种情况的时候，你可以在调试中看看，就会发现调用栈将会颠倒【upside-down】（忽略框架代码）。从程序员角度来看，其中最深层次的方法被其他方法调用，最后在它完成时调用其他方法。
+
+当 **SynchronizationContext** 不同的时候（实则为线程上下文发生切换），调用它的 Post 消耗是非常大的。在性能敏感的代码中或是在库中，你不关心你使用的是哪个线程，你可能选择不为性能损失买单。[*In performance-critical code, or in library code where you don’t care which thread you*
+*use, you might choose not to pay that performance penalty*]
+
+这个时候你可以等待之前调用在 Task 上的 ConfigureAwait。那样的话，你大可不必在完成时恢复 Post 回来到原始的线程同步上下文。
+
+```c#
+byte[] bytes = await client.DownloadDataTaskAsync(url).ConfigureAwait(false);
+```
+
+尽管 **ConfigureAwait** 可能不会如你期望的那样做。它在 .NET 中原本被设计为一个提示，提示你不用关心你恢复的方法是那个线程上的，它不是一个严格的指令。它具体做什么取决于你正在等待完成的 Task。如果这个线程不重要，也许它取自于线程池，它也应该继续执行的代码。但是如果它对于某些情况来说是很重要，那么 .NET 将优先释放它来做其他事，并且你的方法将会在线程池中恢复。.NET 使用当前同步上下文的线程来判断它是否重要。
+
+# 与同步代码交互
+
+你可能已经在处理已经存在的一个应用程序，并且当你用 TAP 写新代码时，你需要与旧系统的代码沟通。当你这么做的时候，你经常不得不抛弃一些异步优势与同步代码交互，但是它还是值得计划为将来用异步模式风格来写新代码来在某个时刻切换。
+
+从异步到同步的方式也是非常简单。如果你阻塞 API，你只用 **Task.Run** 在线程池上运行并等待它即可。你虽然用了一个线程，但是这是不可避免的。
+
+```c#
+var result = Task.Run(() => MyOldMethod());
+```
+
+从同步代码到异步代码，或者实现一个同步 API 的也是很容易的，但是有隐患。Task 有一个 **Result** 属性，它在等待 **Task** 完成的时候是阻塞的。你可以在 await 的地方使用它，但是你的方法不能被标记为 **async** 或者是返回的是 **Task**。同样，一个线程被浪费了。这次调用线程是为了阻塞。
+
+```c#
+var result = AlexsMethodAsync().Result;
+```
+
+提醒一下，当你使用来自于只有一个线程的同步上下文的时候，这个技术是行不通的，就如同 UI 线程一样。想一下，请求 UI 线程的时候，UI 线程在做什么。它是阻塞的，它正在等 AlexsMethodAsync 的任务完成。AlexsMethodAsync 很有可能调用了其他 TAP 方法，并且也在等待它。当操作完成了，捕捉到了同步上下文（UI 线程）用 Post 指令来恢复 AlexsMethodAsync。但是 UI 线程将永远不会接受这个消息，因为它任然处于等待状态。发生死锁了。幸运的是，这个错误会经常导致死锁的发生，所以调试起来并不困难。
+
+你可以通过启动异步代码之前移动到线程池来避免死锁问题，以至于 **SynchronizationContext** 被捕获时是线程池的，而不是 UI 线程的。尽管代码会变得丑陋。最好花时间调用异步代码。
+
+```c#
+var result = Task.Run(() => AlexsMethodAsync()).Result;
+```
+
