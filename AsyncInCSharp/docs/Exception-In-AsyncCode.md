@@ -113,3 +113,19 @@ catch
 }
 ```
 
+## 同步抛出异常
+
+TAP 还推荐允许方法同步抛出异常，但是只有在调用方法时它标识错误的时候（比如在检查某个值是否为 null），而不是一个真正发生异常的。我们也已经看到异步方法捕捉任何异常以及存储到 Task 中，无论这个异常是否发生在第一个 await 之前。所以如果你想同步抛出异常，那么你就需要严格这样使用：在调用异步方法之前使用同步方法来检查错误。
+
+```c#
+private Task<int> GetIntegerAsync(int number) {
+    if (number == 0) throw new ArgumentException(nameof(number));
+    return GetIntegerInternalAsync(number);
+}
+
+private Task<int> GetIntegerInternalAsync(int number) {
+    return Task.FromResult(number);
+}
+```
+
+这样做可以让你更容易截获追踪堆栈。这种努力值得么？我对此表示怀疑。但是对理解是非常有帮助的。

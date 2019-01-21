@@ -13,6 +13,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UtilitiesForTAP", "Utilitie
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WitchThreadRunCode", "WitchThreadRunCode\WitchThreadRunCode.csproj", "{B7F475B9-AFF1-45B2-B302-510F888ED3C7}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ExceptionInAsync", "ExceptionInAsync\ExceptionInAsync.csproj", "{A7079FAB-7B36-4987-859C-DF5BDA550767}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -86,5 +88,17 @@ Global
 		{B7F475B9-AFF1-45B2-B302-510F888ED3C7}.Release|x64.Build.0 = Release|Any CPU
 		{B7F475B9-AFF1-45B2-B302-510F888ED3C7}.Release|x86.ActiveCfg = Release|Any CPU
 		{B7F475B9-AFF1-45B2-B302-510F888ED3C7}.Release|x86.Build.0 = Release|Any CPU
+		{A7079FAB-7B36-4987-859C-DF5BDA550767}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A7079FAB-7B36-4987-859C-DF5BDA550767}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A7079FAB-7B36-4987-859C-DF5BDA550767}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{A7079FAB-7B36-4987-859C-DF5BDA550767}.Debug|x64.Build.0 = Debug|Any CPU
+		{A7079FAB-7B36-4987-859C-DF5BDA550767}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{A7079FAB-7B36-4987-859C-DF5BDA550767}.Debug|x86.Build.0 = Debug|Any CPU
+		{A7079FAB-7B36-4987-859C-DF5BDA550767}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A7079FAB-7B36-4987-859C-DF5BDA550767}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A7079FAB-7B36-4987-859C-DF5BDA550767}.Release|x64.ActiveCfg = Release|Any CPU
+		{A7079FAB-7B36-4987-859C-DF5BDA550767}.Release|x64.Build.0 = Release|Any CPU
+		{A7079FAB-7B36-4987-859C-DF5BDA550767}.Release|x86.ActiveCfg = Release|Any CPU
+		{A7079FAB-7B36-4987-859C-DF5BDA550767}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
