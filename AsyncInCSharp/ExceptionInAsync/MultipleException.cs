@@ -1,9 +1,10 @@
+using System;
 using System.Threading.Tasks;
 
 namespace ExceptionInAsync {
     public class MultipleException {
-        public void HandleException() {
-            var task = new Task(() => 2);
+        public async Task HandleException() {
+            var task = new Task<int>(() => 2);
             Task<int[]> allTask = Task.WhenAll(task);
             try {
                 await allTask;

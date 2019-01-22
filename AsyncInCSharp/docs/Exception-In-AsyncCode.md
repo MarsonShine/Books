@@ -129,3 +129,27 @@ private Task<int> GetIntegerInternalAsync(int number) {
 ```
 
 这样做可以让你更容易截获追踪堆栈。这种努力值得么？我对此表示怀疑。但是对理解是非常有帮助的。
+
+## 最后
+
+你要在异步方法中使用 **try...finally** 语句块，它会如你期望的那样运行。在方法运行到离开 **finally** 语句块之前，它是能确保运行。这与是否通过正常执行（流经finally块）离开无关，也与 try 块中是否发生异常无关。
+
+但是这也一个隐藏的警告。对于异步方法，它不能保证方法就能运行离开。你很容易的就能写一个方法并 await，暂停，然后被遗忘并垃圾回收。
+
+```c#
+private async void AlexsMethod() {
+    try {
+        await DelayForever();
+    } finally {
+        // 永远不会发生
+    }
+}
+
+private Task DelayForever() {
+    return new TaskCompletionSource<object>().Task;
+}
+```
+
+这里我用了 **TaskCompletionSource** 创建一个可操纵的 Task，然后简单的遗漏它。因为在 AlexsMethod 中已经没有任何线程了，这就意味着它不会恢复或重新抛出异常。最终被垃圾回收。
+
+所以在异步方法中提供 **finally** 会变得更弱。

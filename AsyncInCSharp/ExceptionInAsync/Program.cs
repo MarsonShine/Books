@@ -19,5 +19,17 @@ namespace ExceptionInAsync {
         private Task<int> GetIntegerInternalAsync(int number) {
             return Task.FromResult(number);
         }
+
+        private async void AlexsMethod() {
+            try {
+                await DelayForever();
+            } finally {
+                //
+            }
+        }
+
+        private Task DelayForever() {
+            return new TaskCompletionSource<object>().Task;
+        }
     }
 }
