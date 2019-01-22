@@ -15,6 +15,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WitchThreadRunCode", "Witch
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ExceptionInAsync", "ExceptionInAsync\ExceptionInAsync.csproj", "{A7079FAB-7B36-4987-859C-DF5BDA550767}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ParallelSlimInAsync", "ParallelSlimInAsync\ParallelSlimInAsync.csproj", "{ECA20CF2-4869-4240-B6F5-B3E16CE05C2A}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -100,5 +102,17 @@ Global
 		{A7079FAB-7B36-4987-859C-DF5BDA550767}.Release|x64.Build.0 = Release|Any CPU
 		{A7079FAB-7B36-4987-859C-DF5BDA550767}.Release|x86.ActiveCfg = Release|Any CPU
 		{A7079FAB-7B36-4987-859C-DF5BDA550767}.Release|x86.Build.0 = Release|Any CPU
+		{ECA20CF2-4869-4240-B6F5-B3E16CE05C2A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{ECA20CF2-4869-4240-B6F5-B3E16CE05C2A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{ECA20CF2-4869-4240-B6F5-B3E16CE05C2A}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{ECA20CF2-4869-4240-B6F5-B3E16CE05C2A}.Debug|x64.Build.0 = Debug|Any CPU
+		{ECA20CF2-4869-4240-B6F5-B3E16CE05C2A}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{ECA20CF2-4869-4240-B6F5-B3E16CE05C2A}.Debug|x86.Build.0 = Debug|Any CPU
+		{ECA20CF2-4869-4240-B6F5-B3E16CE05C2A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{ECA20CF2-4869-4240-B6F5-B3E16CE05C2A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{ECA20CF2-4869-4240-B6F5-B3E16CE05C2A}.Release|x64.ActiveCfg = Release|Any CPU
+		{ECA20CF2-4869-4240-B6F5-B3E16CE05C2A}.Release|x64.Build.0 = Release|Any CPU
+		{ECA20CF2-4869-4240-B6F5-B3E16CE05C2A}.Release|x86.ActiveCfg = Release|Any CPU
+		{ECA20CF2-4869-4240-B6F5-B3E16CE05C2A}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
