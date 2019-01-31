@@ -97,3 +97,162 @@ return <foo>5__1;
 return;
 ```
 
+当然，在 Task 完成之后，我使用 return 返回；从 MoveNext 退出。
+
+### 在方法中找到正确的地方
+
+因为每到达 await 就会调用 MoveNext，只要我们方法一旦开始，我们就需要跳到方法中指定正确的地方。这个就好像 **switch** 语句使用生成的 IL 一样，就好像我们正在交换状态。
+
+```c#
+swicth(<>1__state)
+{
+    case -1: //在方法开始的地方
+    	<foo>5__1 = 3;
+    	Task t = Task.Delay(500);
+    	//Logic to await t goes here
+    case 0:	//这是只有一次await，所以标记数字为0
+    	<>t__builder.SetResult(<foo>5__1);
+    	return;
+}
+```
+
+### await 方法正在暂停
+
+在这里，就是我们使用了 TaskAwaiter 来注册任务，来通知我们 Task 何时等待完成。我们需要更新状态来确保我们在正确的位置恢复。一旦所有的事准备注册好了，我们返回，异步方法一定会释放线程去做其他事。
+
+```c#
+...
+<foo>5__1 = 3;
+<>u__$awaiter2 = Task.Delay(500).GetAwaiter();
+<>1__state = 0;
+<>t__builder.AwaitUnsafeOnCompleted(<>u__$awaiter2,this);
+return;
+case 0:
+...
+```
+
+**AsyncTaskMethodBuilder** 也涉及到了注册通知，并且处理过程更加复杂。在这里组织了 await 的高级特性，像捕捉同步上下文（SynchronizationContext）来恢复。最后的结果也是很容易明白。当 Task 完成时，MoveNext 方法将会再次调用。
+
+### Await 后恢复
+
+一旦 Task 完成等待结果，我们会通过 MoveNext 回到正确的地方，在继续处理我们代码之前还是要获取 Task 等待完成的结果。在这个例子，我们使用的是非泛型的 Task，所以没有值能读取存储到变量中。但是还是有几率 Task 会失败的情况，并且异常信息需要抛出。那么在 TaskAwaiter 上调用 GetResult 会做上面说的所有事情。
+
+```c#
+...
+case 0:
+	<>u__$awaiter2.GetResult();
+	<>t__builder.SetResult(<foo>5__1);
+...
+```
+
+### 同步完成
+
+要记住当在 await Task 已经同步完成时，这个过程继续运行，而不会暂停和恢复方法。为了做到这点，我们需要检查这个 Task 是否在return 之前就完成了。如果是这样，我们就只需要使用 goto case 跳到正确的位置继续往下执行。
+
+```c#
+...
+<>u__$awaiter2 = Task.Delay(500).GetAwaiter();
+if(<>u__$awaiter2.IsCompleted)
+{
+    goto case 0;
+}
+<>1__state = 0;
+...
+```
+
+> 关于编译器生成的代码好的地方就是无需去维护它，所以你能随意用 goto，只要你愿意。我以前从没听说有 goto case 语句，这可能是好事。
+
+### 捕捉异常
+
+如果一个异常在执行你的异步方法时被抛出了，并且没有用 try..catch 包裹起来，编译器生成的代码会自动 catch 它。所以它能在失败的时候返回一个 Task，而不是让异常丢失。记住，从原始方法中调用异步方法会调用MoveNext 方法，通过等待完成 Task 也会调用 MoveNext，SynchronizationContext 也是如此。下面这段代码就不会有任何异常丢失。
+
+```c#
+try
+{
+	...Whole method    
+}
+catch (Exception e)
+{
+    <>t__builder.SetException(<>t__ex);
+    return;
+}
+```
+
+### 更多复杂的代码
+
+我的例子非常简单。如果你的代码引入了以下特性，MoveNext 方法会变得更加复杂：
+
+- try..catch..finally 块
+- 分支（if 以及 switch）
+- 循环
+- 在表达式之间使用 await
+
+编译器转换正确处理这些所有的构造，所以作为程序员，我们不需要担心这其中的复杂。
+
+我也鼓励你使用反编译器来看看在你自己的异步方法中的 MoveNext 方法。尝试找出我描述的这些内容，以及转换生成的复杂代码是如何工作的。
+
+## 编写自定义可 await 的类型
+
+Task 是可等待类型（我个人称为异步等待模式），在这个类型里面我们可以用 await。就像我们在 74 页在章节 "IAsyncAction and IAsyncOperation<T>" 一样，其他类型也能是可等待的，举个例子，WinRT 类型 IAsyncAction。实际上，你完全没必要这么做，它只是能让你写自己的可等待的类型。
+
+为此，这个类需要提供被 MoveNext 方法调用的能力。首先，我们需要一个方法 GetAwaiter：
+
+```c#
+class MyAwaitableClass
+{
+    public AlexsAwaiter GetAwaiter()
+    {
+        ...
+    }
+}
+```
+
+GetAwaiter 方法能够成为一个拓展方法，它能够使之更加可拓展的。举个例子，IAsyncAction 并没有GetAwaiter 方法，因为它是来自 WInRT，并且 WinRT 没有可等待这个概念。之所以 IAsyncAction 可以等待是因为 .NET 提供了一个拓展方法 GetAwaiter。
+
+然后，这个类型通过 GetAwaiter 返回的必须要依据一个指定的模式，为了能让 MyAwaitableClass 可等待。最基本要求是：
+
+- 实现了 INotifyCompletion，还包含了 `void OnCompleted(Action handler)`，它负责注册完成时通知
+- 包含属性 `bool IsCompleted { get; }`，它是用来检查是否同步完成
+- 包含方法 `T GetResult()`，它返回操作的结果，并且能抛出任何异常
+
+GetResult 返回的类型 T 也能是 void，就像是 Task 一样。另外，它也能是类型，就像是 Task<T>。只有在第二种情况，编译器才会让你使用 await 表达式——举个例子，把结果值分配到变量中。
+
+这里的可能带的 AlexsAwaiter 可能看起来是这样的：
+
+```c#
+class AlexsAwaiter: INotifyCompletion
+{
+	public bool IsCompleted
+    {
+    	get
+        {
+        	...
+        }
+    }
+    public void OnCompleted(Action continuation)
+    {
+    	...
+    }
+    public void GetResult()
+    {
+    	...
+    }
+}
+```
+
+要记住 TaskCompletionSource 的存在是很重要的，并且一个更好的选择就是当你需要把异步的东西切换成可等待的事。Task 还有很多有用并且你不想错过的特征。
+
+## Debugger
+
+你可能想在编译器转移你代码之后，Visual Studio 调试器要显示所发生的问题将会有问题。事实上，调试器能处理都非常好。这主要是通过编译器链接你源代码的行与对应转移的 MoveNext 方法来实现的。通过映射，存储在 .pdb 文件中，意思就是说这些特性调试器都能正常工作：
+
+- 设置断电
+- 不包括 await 行之间的单步运行
+- 展示异常抛出正确的行的地方。
+
+但是，如果你仔细观察，异步方法当在 await 之后停止断点的时候，你能发现编译器已经完成转换。线索如下：
+
+- 当前方法的名字在某些地方显示为 MoveNext。其中调度堆栈（Call Stack）会成功转换它回到原始方法，但是你无法智能感知。
+- window 的调用堆栈显示调用的堆栈包含 TPL 的基础架构，根据你的方法 参照 *[Resuming Async Method]*。
+
+真正的逻辑可以单步调试代码。Visual Studio 调试器能够正确的单步调试（F10）await，尽管这个方法根据异步特性会在接下来的时间会在不确定的线程上（也有可能是相同的线程）继续执行。你能看到 AsyncTaskMethodBuilder 的能力的基础架构，它有一个属性叫 ObjectIdForDebugger。调试器也能从异步方法单点步出（F11），它将带你到 await 之后，正确等待完成。
