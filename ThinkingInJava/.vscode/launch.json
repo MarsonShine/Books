@@ -2,6 +2,18 @@
     "configurations": [
         {
             "type": "java",
+            "name": "CodeLens (Launch) - OzWitch",
+            "request": "launch",
+            "mainClass": "enumerated.OzWitch"
+        },
+        {
+            "type": "java",
+            "name": "CodeLens (Launch) - SpaceShip",
+            "request": "launch",
+            "mainClass": "enumerated.SpaceShip"
+        },
+        {
+            "type": "java",
             "name": "CodeLens (Launch) - EnumClass",
             "request": "launch",
             "mainClass": "enumerated.EnumClass"
