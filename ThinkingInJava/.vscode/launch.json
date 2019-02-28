@@ -2,6 +2,12 @@
     "configurations": [
         {
             "type": "java",
+            "name": "CodeLens (Launch) - EnumImplementation",
+            "request": "launch",
+            "mainClass": "enumerated.cartoons.EnumImplementation"
+        },
+        {
+            "type": "java",
             "name": "CodeLens (Launch) - OzWitch",
             "request": "launch",
             "mainClass": "enumerated.OzWitch"
