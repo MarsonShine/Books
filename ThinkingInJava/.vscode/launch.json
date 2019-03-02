@@ -2,6 +2,30 @@
     "configurations": [
         {
             "type": "java",
+            "name": "CodeLens (Launch) - VowelsAndConsonants2",
+            "request": "launch",
+            "mainClass": "enumerated.VowelsAndConsonants2"
+        },
+        {
+            "type": "java",
+            "name": "CodeLens (Launch) - SecurityCategory",
+            "request": "launch",
+            "mainClass": "enumerated.SecurityCategory"
+        },
+        {
+            "type": "java",
+            "name": "CodeLens (Launch) - TypeOfFood",
+            "request": "launch",
+            "mainClass": "enumerated.menu.TypeOfFood"
+        },
+        {
+            "type": "java",
+            "name": "CodeLens (Launch) - Meal",
+            "request": "launch",
+            "mainClass": "enumerated.menu.Meal"
+        },
+        {
+            "type": "java",
             "name": "CodeLens (Launch) - EnumImplementation",
             "request": "launch",
             "mainClass": "enumerated.cartoons.EnumImplementation"
