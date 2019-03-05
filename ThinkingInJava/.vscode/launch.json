@@ -2,6 +2,12 @@
     "configurations": [
         {
             "type": "java",
+            "name": "CodeLens (Launch) - UseCaseTracker",
+            "request": "launch",
+            "mainClass": "annotations.UseCaseTracker"
+        },
+        {
+            "type": "java",
             "name": "CodeLens (Launch) - VowelsAndConsonants2",
             "request": "launch",
             "mainClass": "enumerated.VowelsAndConsonants2"
