@@ -2,6 +2,30 @@
     "configurations": [
         {
             "type": "java",
+            "name": "CodeLens (Launch) - E01_Runable",
+            "request": "launch",
+            "mainClass": "excs.concurrency.E01_Runable"
+        },
+        {
+            "type": "java",
+            "name": "CodeLens (Launch) - MoreBasicThreads",
+            "request": "launch",
+            "mainClass": "concurrency.MoreBasicThreads"
+        },
+        {
+            "type": "java",
+            "name": "CodeLens (Launch) - BasicThreads",
+            "request": "launch",
+            "mainClass": "concurrency.BasicThreads"
+        },
+        {
+            "type": "java",
+            "name": "CodeLens (Launch) - MainThread",
+            "request": "launch",
+            "mainClass": "concurrency.MainThread"
+        },
+        {
+            "type": "java",
             "name": "CodeLens (Launch) - UseCaseTracker",
             "request": "launch",
             "mainClass": "annotations.UseCaseTracker"
