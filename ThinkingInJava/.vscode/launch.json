@@ -2,6 +2,30 @@
     "configurations": [
         {
             "type": "java",
+            "name": "CodeLens (Launch) - E08_MoreBasicThreads",
+            "request": "launch",
+            "mainClass": "excs.concurrency.E08_MoreBasicThreads"
+        },
+        {
+            "type": "java",
+            "name": "CodeLens (Launch) - SimplePriorities",
+            "request": "launch",
+            "mainClass": "concurrency.SimplePriorities"
+        },
+        {
+            "type": "java",
+            "name": "CodeLens (Launch) - SleepingTask",
+            "request": "launch",
+            "mainClass": "concurrency.SleepingTask"
+        },
+        {
+            "type": "java",
+            "name": "CodeLens (Launch) - E03_Runnable2",
+            "request": "launch",
+            "mainClass": "excs.concurrency.E03_Runnable2"
+        },
+        {
+            "type": "java",
             "name": "CodeLens (Launch) - E01_Runable",
             "request": "launch",
             "mainClass": "excs.concurrency.E01_Runable"
