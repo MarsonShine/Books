@@ -74,5 +74,6 @@ class InnerThread2 {
 public class ThreadVariations {
     public static void main(String[] args) {
         new InnerThread1("InnerThread1");
+        new InnerThread2("InnerThread2");
     }
 }
