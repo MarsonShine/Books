@@ -2,6 +2,12 @@
     "configurations": [
         {
             "type": "java",
+            "name": "CodeLens (Launch) - NaiveExceptionHandling",
+            "request": "launch",
+            "mainClass": "concurrency.NaiveExceptionHandling"
+        },
+        {
+            "type": "java",
             "name": "CodeLens (Launch) - E08_MoreBasicThreads",
             "request": "launch",
             "mainClass": "excs.concurrency.E08_MoreBasicThreads"
