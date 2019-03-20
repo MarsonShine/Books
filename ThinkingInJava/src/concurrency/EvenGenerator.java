@@ -3,7 +3,7 @@ package concurrency;
 /**
  * EventGenerator
  */
-public class EventGenerator extends IntGenerator {
+public class EvenGenerator extends IntGenerator {
     private int currentEventValue = 0;
 
     public int next() {
@@ -13,7 +13,7 @@ public class EventGenerator extends IntGenerator {
     }
 
     public static void main(String[] args) {
-        EventChecker.test(new EventGenerator());
+        EventChecker.test(new EvenGenerator());
         ;
     }
 }

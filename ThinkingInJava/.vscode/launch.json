@@ -2,6 +2,12 @@
     "configurations": [
         {
             "type": "java",
+            "name": "CodeLens (Launch) - EvenGenerator",
+            "request": "launch",
+            "mainClass": "concurrency.EvenGenerator"
+        },
+        {
+            "type": "java",
             "name": "CodeLens (Launch) - NaiveExceptionHandling",
             "request": "launch",
             "mainClass": "concurrency.NaiveExceptionHandling"

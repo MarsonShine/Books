@@ -6,12 +6,12 @@ import java.util.concurrent.Executors;
 /**
  * EventChecker
  */
-public class EventChecker implements Runnable {
+public class EvenChecker implements Runnable {
 
     private IntGenerator generator;
     private final int id;
 
-    public EventChecker(IntGenerator g, int ident) {
+    public EvenChecker(IntGenerator g, int ident) {
         generator = g;
         id = ident;
     }
@@ -32,7 +32,7 @@ public class EventChecker implements Runnable {
         System.out.println("Press Control -C to exit");
         ExecutorService exec = Executors.newCachedThreadPool();
         for (int i = 0; i < count; i++) {
-            exec.execute(new EventChecker(gp, i));
+            exec.execute(new EvenChecker(gp, i));
         }
         exec.shutdown();
     }
