@@ -69,4 +69,66 @@ Executors.newCachedThreadPool 会生成一个 **ExecutorService** 类型的执�
 
 ## join，加入一个线程
 
-如果想要在一个指定的线程结束后继续另一个线程，就要用到 **join** 方法了。其效果就是等待一段时间直到第二个线程结束才继续执行。如果某个线程在另一个线程t 调用t.join()，此线程将被挂起，直到目标线程t 结束才恢复。
+一个线程运行时可以调用另一个线程的 join 方法。A 线程中调用 B.join() 可以理解为在 A 线程执行过程我要挂起 A 线程转而去执行 B 的线程，等 B 线程结束后在唤起 A 线程来继续执行。看下面例子
+
+```java
+class TaskA extends Thread {
+    private final int sleepTime;
+    public TaskA(String name, int sleepTime) {
+        super(name);
+        this.sleepTime = sleepTime;
+        start();
+    }
+    @Override
+    public void run() {
+        try {
+            System.out.println("TaskA start running...");
+            sleep(sleepTime);
+        } catch (InterruptedException e) {
+            System.err.println(getName() + " interrupted!!");
+            return;
+        }
+        System.out.println(getName() + " awakend");
+    }
+}
+
+class TaskB extends Thread {
+    private TaskA ta;
+    public TaskB(String name, TaskA ta) {
+        super(name);
+        this.ta = ta;
+        start();
+    }
+    @Override
+    public void run() {
+        try {
+            System.out.println("TaskB start running...");
+            ta.join();// 等待ta的结束
+            System.out.println("TaskA finished and continu TaskB");
+        } catch (InterruptedException e) {
+            System.err.println("interrupted!");
+        }
+        System.out.println(getName() + " completed");
+    }
+}
+
+/**
+ * E01_Jonning
+ */
+public class E01_Jonning {
+    public static void main(String[] args) {
+        TaskA ta = new TaskA("A", 2000);
+        TaskB tb = new TaskB("B", ta);
+      	//ta.interrupted();
+    }
+}
+
+print:
+TaskA start running...
+TaskB start running...
+A awakend
+TaskA finished and continu TaskB
+B completed
+```
+
+其实这个可以用于线程与线程之间的调度，有前后顺序之分的场景。可以更加灵活高效。

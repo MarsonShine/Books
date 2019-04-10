@@ -2,6 +2,12 @@
     "configurations": [
         {
             "type": "java",
+            "name": "CodeLens (Launch) - Joining",
+            "request": "launch",
+            "mainClass": "concurrency.Joining"
+        },
+        {
+            "type": "java",
             "name": "CodeLens (Launch) - EvenGenerator",
             "request": "launch",
             "mainClass": "concurrency.EvenGenerator"
