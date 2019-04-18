@@ -1,0 +1,28 @@
+{
+    "configurations": [
+        {
+            "type": "java",
+            "name": "CodeLens (Launch) - BuilderPattern",
+            "request": "launch",
+            "mainClass": "suggests.BuilderPattern"
+        },
+        {
+            "type": "java",
+            "name": "CodeLens (Launch) - HelloWorld",
+            "request": "launch",
+            "mainClass": "HelloWorld"
+        },
+        {
+            "type": "java",
+            "name": "CodeLens (Launch) - Program",
+            "request": "launch",
+            "mainClass": "suggests.Program"
+        },
+        {
+            "type": "java",
+            "name": "CodeLens (Launch) - ObservableSet",
+            "request": "launch",
+            "mainClass": "suggests.ObservableSet"
+        }
+    ]
+}
