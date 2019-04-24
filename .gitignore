@@ -6,5 +6,4 @@
 /.vs
 /.vscode
 [Oo]bj/
-[Bb]in/
-/CSharpGuide/.vs/CSharpGuide
+[Bb]in//CSharpGuide/.vs/CSharpGuide.idea/

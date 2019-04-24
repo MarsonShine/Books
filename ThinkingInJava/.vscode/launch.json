@@ -2,6 +2,120 @@
     "configurations": [
         {
             "type": "java",
+            "name": "CodeLens (Launch) - Joining",
+            "request": "launch",
+            "mainClass": "concurrency.Joining"
+        },
+        {
+            "type": "java",
+            "name": "CodeLens (Launch) - EvenGenerator",
+            "request": "launch",
+            "mainClass": "concurrency.EvenGenerator"
+        },
+        {
+            "type": "java",
+            "name": "CodeLens (Launch) - NaiveExceptionHandling",
+            "request": "launch",
+            "mainClass": "concurrency.NaiveExceptionHandling"
+        },
+        {
+            "type": "java",
+            "name": "CodeLens (Launch) - E08_MoreBasicThreads",
+            "request": "launch",
+            "mainClass": "excs.concurrency.E08_MoreBasicThreads"
+        },
+        {
+            "type": "java",
+            "name": "CodeLens (Launch) - SimplePriorities",
+            "request": "launch",
+            "mainClass": "concurrency.SimplePriorities"
+        },
+        {
+            "type": "java",
+            "name": "CodeLens (Launch) - SleepingTask",
+            "request": "launch",
+            "mainClass": "concurrency.SleepingTask"
+        },
+        {
+            "type": "java",
+            "name": "CodeLens (Launch) - E03_Runnable2",
+            "request": "launch",
+            "mainClass": "excs.concurrency.E03_Runnable2"
+        },
+        {
+            "type": "java",
+            "name": "CodeLens (Launch) - E01_Runable",
+            "request": "launch",
+            "mainClass": "excs.concurrency.E01_Runable"
+        },
+        {
+            "type": "java",
+            "name": "CodeLens (Launch) - MoreBasicThreads",
+            "request": "launch",
+            "mainClass": "concurrency.MoreBasicThreads"
+        },
+        {
+            "type": "java",
+            "name": "CodeLens (Launch) - BasicThreads",
+            "request": "launch",
+            "mainClass": "concurrency.BasicThreads"
+        },
+        {
+            "type": "java",
+            "name": "CodeLens (Launch) - MainThread",
+            "request": "launch",
+            "mainClass": "concurrency.MainThread"
+        },
+        {
+            "type": "java",
+            "name": "CodeLens (Launch) - UseCaseTracker",
+            "request": "launch",
+            "mainClass": "annotations.UseCaseTracker"
+        },
+        {
+            "type": "java",
+            "name": "CodeLens (Launch) - VowelsAndConsonants2",
+            "request": "launch",
+            "mainClass": "enumerated.VowelsAndConsonants2"
+        },
+        {
+            "type": "java",
+            "name": "CodeLens (Launch) - SecurityCategory",
+            "request": "launch",
+            "mainClass": "enumerated.SecurityCategory"
+        },
+        {
+            "type": "java",
+            "name": "CodeLens (Launch) - TypeOfFood",
+            "request": "launch",
+            "mainClass": "enumerated.menu.TypeOfFood"
+        },
+        {
+            "type": "java",
+            "name": "CodeLens (Launch) - Meal",
+            "request": "launch",
+            "mainClass": "enumerated.menu.Meal"
+        },
+        {
+            "type": "java",
+            "name": "CodeLens (Launch) - EnumImplementation",
+            "request": "launch",
+            "mainClass": "enumerated.cartoons.EnumImplementation"
+        },
+        {
+            "type": "java",
+            "name": "CodeLens (Launch) - OzWitch",
+            "request": "launch",
+            "mainClass": "enumerated.OzWitch"
+        },
+        {
+            "type": "java",
+            "name": "CodeLens (Launch) - SpaceShip",
+            "request": "launch",
+            "mainClass": "enumerated.SpaceShip"
+        },
+        {
+            "type": "java",
             "name": "CodeLens (Launch) - EnumClass",
             "request": "launch",
             "mainClass": "enumerated.EnumClass"
