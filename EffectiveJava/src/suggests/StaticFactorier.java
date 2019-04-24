@@ -1,15 +1,13 @@
 package suggests;
 
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.*;
 
-import com.sun.javafx.collections.MappingChange.Map;
-
-public interface Service {
+interface Service {
     // here is specific service method eg.
     String setName();
 }
 
-public interface Provider {
+interface Provider {
     Service newService();
 }
 
@@ -28,7 +26,7 @@ public class StaticFactorier {
     }
 
     public static Service newInstance(String name) {
-        Provider p = providers.map(name);
+        Provider p = providers.get(name);
         if (p == null)
             throw new IllegalArgumentException("No Provider registered with name: " + name);
         return p.newService();

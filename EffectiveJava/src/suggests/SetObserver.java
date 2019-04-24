@@ -4,5 +4,5 @@ package suggests;
  * SetObserver
  */
 public interface SetObserver<E> {
-    void added(ObservableSet<E> set);
+    void added(MyObservableSet<E> set, E element);
 }

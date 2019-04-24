@@ -65,6 +65,6 @@ public class BuilderPattern {
 
 }
 
-public interface Builder<T> {
+interface Builder<T> {
     public T build();
 }

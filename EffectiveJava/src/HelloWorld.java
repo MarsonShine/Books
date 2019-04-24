@@ -1,4 +1,5 @@
 import suggests.*;
+import java.util.*;
 
 /**
  * HelloWorld
@@ -7,6 +8,8 @@ public class HelloWorld {
 
     public static void main(String[] args) {
         System.out.println("Hollo World");
-        ObservableSet<Integer> set = new ObservableSet<Integer>(new HashSet<Integer>());
+        // MyObservableSet<Integer> set = new MyObservableSet<Integer>(new
+        // HashSet<Integer>());
+
     }
 }
