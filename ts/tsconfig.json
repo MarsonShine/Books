@@ -1,17 +1,11 @@
 {
-    "definitions": {
-        "compilerOptionsDefinition": {
-            "properties": {
-                "compilerOptions": {
-                    "properties": {
-                        "onEmitOnError": true
-                    }
-                }
-            }
+    "compilerOptions": {
+        "module": "commonjs",
+        "baseUrl": "./",
+        "paths": {
+            "*": [
+                "types/*"
+            ]
         }
-    },
-    "files": [
-        "/src/declarefile.ts",
-        "/src/files/JQeury.d.ts"
-    ],
+    }
 }
