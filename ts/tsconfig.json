@@ -9,5 +9,9 @@
                 }
             }
         }
-    }
+    },
+    "files": [
+        "/src/declarefile.ts",
+        "/src/files/JQeury.d.ts"
+    ],
 }
