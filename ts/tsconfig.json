@@ -1,0 +1,13 @@
+{
+    "definitions": {
+        "compilerOptionsDefinition": {
+            "properties": {
+                "compilerOptions": {
+                    "properties": {
+                        "onEmitOnError": true
+                    }
+                }
+            }
+        }
+    }
+}
