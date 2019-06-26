@@ -15,20 +15,23 @@
 
 ## <a id="A">A</a>
 
-- **AES**：高级加密标准
+- **AES**：Advanced Encryption Standard 高级加密标准算法
 - **AP**：access point，接入点，（802.11 标准，通常用于连接无线和有线网络部分）
+- **ACCM**：Asynchronous Control Character Map，简称 asyncmap；异步控制字符映射（在PPP中，压缩地址和控制字段以减少开销）
 
 ## <a id="B">B</a>
 
 - **BPDU**：Bridge PDU，网桥协议数据单元
-- **BPSK**：
-- **BSS**：基本服务集合；
+- **BPSK**：Binary phase shift keying，二进制相移键控；使用两个信息相位调制二进制数
+- **BSS**：basic service set，基本服务集合；
 
 ## <a id="C">C</a>
 
-- **CCM**：
-- **CCMP**：
-- **CTS**：明确发送，clear to send
+- **CBC**：cipher block chaining 密码块链接（一种利用XOR运算来链接已加密块的加密模式，用于抵御重排攻击）
+- **CCM**：counter mode，带CBC消息认证码的计算器模式（一种认证加密模式，结合了CTR模式加密和CBC-MAC）
+- **CCMP**：Counter Mode with CBC-MAC Protocol，带CBC-MAC协议的计数器模式（用于WPA2加密；源自IEEE 802.11i 协议；是WPA的继承者）
+- **CTS**：clear to send，明确发送
+- **CTR**：Counter，计数器（一种加密模式，在并行的对多个块进行加密或解密时使用一个计数器的值来维护被加密块间的顺序）
 - **CIDR**：无类别域间路由，classless inter-domain routing
 
 ## <a id="D">D</a>
@@ -39,13 +42,13 @@
 
 ## <a id="E">E</a>
 
-- **EAP**：扩展身份验证协议
+- **EAP**：Extensible Authentication Protocol，扩展身份验证协议（支持各种框架身份验证）
 - **EDCA**：enhanced [DCF](#def) channel access 增强型 DCF 信道访问
-- **EQM**：平等调制
+- **EQM**：Equal Modulation，平等调制（对不同的数据流同时使用相同的调制方案）
 
 ## <a id="F">F</a>
 
-- **FEC**：转发纠错
+- **FEC**：Forward Error Correction，转发纠错（使用冗余位来纠正数据位中的错误）
 
 ## <a id="G">G</a>
 ## <a id="H">H</a>
@@ -65,8 +68,8 @@
 
 - **MAC**：Media Access Control，介质访问控制，对一个共享网络介质的访问控制；通常作为链路层协议的一部分
 - **MAC**：Message Authentication Code，消息认证码；用于协助认证消息完整性的数学函数
-- **MIMO**：多输入多输出
-- **MCS**：调制和编码方案
+- **MIMO**：multiple input multiple output，多输入多输出
+- **MCS**：modulation and coding scheme，调制和编码方案（结合调制和编码 ，802.11n 中有很多可用的组合）
 
 ## <a id="N">N</a>
 
@@ -74,7 +77,7 @@
 
 ## <a id="O">O</a>
 
-- **OFDM**：正交频分复用
+- **OFDM**：Orthogonal Frequency Division Multiplexing，正交频分复用（一种复杂的调制方案，在某个指定的宽带下同时调制多个频率的载波，以实现高吞吐量；用于DSL、80211a/g/n、802.16e，以及包含LTE的高级蜂窝数据标准）
 - 
 
 ## <a id="P">P</a>
