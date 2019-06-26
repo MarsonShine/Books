@@ -18,11 +18,16 @@
 - **AES**：Advanced Encryption Standard 高级加密标准算法
 - **AP**：access point，接入点，（802.11 标准，通常用于连接无线和有线网络部分）
 - **ACCM**：Asynchronous Control Character Map，简称 asyncmap；异步控制字符映射（在PPP中，压缩地址和控制字段以减少开销）
+- **ACK**：确认（一种表明数据已经成功到达接收端的提示，适用于协议栈的多个层次）
 
 ## <a id="B">B</a>
 
+- **BAP**：带宽分配协议
+- **BACP**：带宽分配控制协议
+- **BOD**：按需带宽
 - **BPDU**：Bridge PDU，网桥协议数据单元
 - **BPSK**：Binary phase shift keying，二进制相移键控；使用两个信息相位调制二进制数
+- **BSD**：伯克利软件套件（加州大学伯克利分校的UNIX版本，包括首个广泛使用的TCP/IP实现版本）
 - **BSS**：basic service set，基本服务集合；
 
 ## <a id="C">C</a>
@@ -30,6 +35,8 @@
 - **CBC**：cipher block chaining 密码块链接（一种利用XOR运算来链接已加密块的加密模式，用于抵御重排攻击）
 - **CCM**：counter mode，带CBC消息认证码的计算器模式（一种认证加密模式，结合了CTR模式加密和CBC-MAC）
 - **CCMP**：Counter Mode with CBC-MAC Protocol，带CBC-MAC协议的计数器模式（用于WPA2加密；源自IEEE 802.11i 协议；是WPA的继承者）
+- **CCP**：压缩控制协议
+- **CHAP**：查询-握手认证协议
 - **CTS**：clear to send，明确发送
 - **CTR**：Counter，计数器（一种加密模式，在并行的对多个块进行加密或解密时使用一个计数器的值来维护被加密块间的顺序）
 - **CIDR**：无类别域间路由，classless inter-domain routing
@@ -56,6 +63,7 @@
 - **HC**：hybrid coordinate，混合协调
 - **HCF**：hybrid coordinate function，混合协调功能
 - **HCCA**：HFCA-controlled channel access，HFCA 控制信道访问
+- **HDLC**
 
 ## <a id="I">I</a>
 
@@ -64,6 +72,9 @@
 ## <a id="J">J</a>
 ## <a id="K">K</a>
 ## <a id="L">L</a>
+
+- **LCP**：链路控制协议（在 PPP 中，用于建立一条链路）
+
 ## <a id="M">M</a>
 
 - **MAC**：Media Access Control，介质访问控制，对一个共享网络介质的访问控制；通常作为链路层协议的一部分
@@ -74,6 +85,8 @@
 ## <a id="N">N</a>
 
 - **NAT**：Network Address Translation，网络地址转换；在IP数据报中重写地址的机制；主要用于减少全球可路由IP地址的使用量；通常与私有IP地址共同使用；也支持防火墙功能
+- **NACK**：否定确认（表示未收到或不接受的标识）
+- **NCP**：
 
 ## <a id="O">O</a>
 
@@ -82,11 +95,14 @@
 
 ## <a id="P">P</a>
 
+- **PAP**：密码认证协议
 - **PDU**：protocol data unit，描述在协议层的信息；在非正式情况下，有时与数据包、帧、数据报、报文段以及消息等名词通用
+- **PFF**：
 - **PLCP**：物理层汇聚程序；802.11 用于编码与决定帧类型及无线电参数的方法
 - **PCO**：分阶段共存操作；
 - **PoE**：以太网供电
 - **PSK**：预共享密钥
+- **PPP**：
 
 ## <a id="Q">Q</a>
 
@@ -96,6 +112,7 @@
 
 ## <a id="R">R</a>
 
+- **RAS**：远程访问服务器
 - **RSTP**：rapid spanning tree protocol，快速生成树协议
 - **RSN**：强健网络安全
 - **RSNA**：强健安全网络访问
