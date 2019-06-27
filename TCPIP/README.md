@@ -18,14 +18,15 @@
 - **AES**：Advanced Encryption Standard 高级加密标准算法
 - **AP**：access point，接入点，（802.11 标准，通常用于连接无线和有线网络部分）
 - **ACCM**：Asynchronous Control Character Map，简称 asyncmap；异步控制字符映射（在PPP中，压缩地址和控制字段以减少开销）
+- **ACFC**：地址和控制字段压缩（在 PPP 中，压缩地址和控制字段以减少开销）
 - **ACK**：确认（一种表明数据已经成功到达接收端的提示，适用于协议栈的多个层次）
 
 ## <a id="B">B</a>
 
-- **BAP**：带宽分配协议
-- **BACP**：带宽分配控制协议
-- **BOD**：按需带宽
-- **BPDU**：Bridge PDU，网桥协议数据单元
+- **BAP**：带宽分配协议（在一个 MPPP 绑定中，一种用于配置链路的协议）
+- **BACP**：带宽分配控制协议（与 PPP 一起，一种用于配置 BoD 的协议）
+- **BOD**：按需带宽（动态调整可用链路带宽的能力）
+- **BPDU**：Bridge PDU，网桥协议数据单元（由 STP 使用的 PDU；通过交换机与网桥进行交换）
 - **BPSK**：Binary phase shift keying，二进制相移键控；使用两个信息相位调制二进制数
 - **BSD**：伯克利软件套件（加州大学伯克利分校的UNIX版本，包括首个广泛使用的TCP/IP实现版本）
 - **BSS**：basic service set，基本服务集合；
@@ -33,19 +34,22 @@
 ## <a id="C">C</a>
 
 - **CBC**：cipher block chaining 密码块链接（一种利用XOR运算来链接已加密块的加密模式，用于抵御重排攻击）
+- **CBCP**：回叫控制协议（在 PPP 中建立一个回叫号码）
 - **CCM**：counter mode，带CBC消息认证码的计算器模式（一种认证加密模式，结合了CTR模式加密和CBC-MAC）
 - **CCMP**：Counter Mode with CBC-MAC Protocol，带CBC-MAC协议的计数器模式（用于WPA2加密；源自IEEE 802.11i 协议；是WPA的继承者）
-- **CCP**：压缩控制协议
-- **CHAP**：查询-握手认证协议
-- **CTS**：clear to send，明确发送
+- **CCP**：压缩控制协议（在 PPP 中，建立使用的压缩方法）
+- **CHAP**：查询-握手认证协议（协议要求每一次查询到对应一个响应；易受到中间人攻击）
+- **CTS**：clear to send，清除发送（授权 RTS 发送者进行发送的消息）
 - **CTR**：Counter，计数器（一种加密模式，在并行的对多个块进行加密或解密时使用一个计数器的值来维护被加密块间的顺序）
 - **CIDR**：无类别域间路由，classless inter-domain routing
+- **CSLIP**：压缩串行线路 IP（一种来源于旧的点到点协议）
 
 ## <a id="D">D</a>
 
 - **<a id="dcf">DCF </a>**：distributed coordinate function，分布式协调功能
 - **DIFC**：distributed inter-frame spacing，分布式帧间间隔
 - **DHCP**：dynamic host configuration protocol，动态主机配置协议：BOOTP 演变而来，使用配置信息来建立系统，例如租用的IP地址、默认路由器以及DNS服务器的IP地址
+- **DTCP**：动态隧道配置协议
 
 ## <a id="E">E</a>
 
@@ -55,25 +59,35 @@
 
 ## <a id="F">F</a>
 
+- **FCS**：帧校验序列（用于检查位错误的数据位的通称）
 - **FEC**：Forward Error Correction，转发纠错（使用冗余位来纠正数据位中的错误）
 
 ## <a id="G">G</a>
+
+- **GRE**：通用路由封装（在 IP 数据报中的通用封装）
+
 ## <a id="H">H</a>
 
 - **HC**：hybrid coordinate，混合协调
-- **HCF**：hybrid coordinate function，混合协调功能
+- **HCF**：hybrid coordinate function，混合协调功能（同时支持优先级与基于竞争的 802.11 信道访问的协调功能）
 - **HCCA**：HFCA-controlled channel access，HFCA 控制信道访问
-- **HDLC**
+- **HDLC**：高级数据链路控制（一种流行的的 ISO 数据链路协议标准，是大多数流行的 PPP 变种的基础）
 
 ## <a id="I">I</a>
 
+- **ICMP**：Internet 控制报文协议（一种信息与错误报告协议，被视为 IP 协议的一部分）
+- **ICPC**：*TODO：文章中并没有说明，不知道是什么意思*
+- **IPCP**：IP 控制协议（IPv4 下的NCP）
+- **IPV6CP**：IP 控制协议（IPv6 下的NCP）
 - **ISM**：industry science medicine，工业、科学和医疗（世界上许多地区免许可证的频段，为 Wi-Fi 所用）
 
 ## <a id="J">J</a>
 ## <a id="K">K</a>
 ## <a id="L">L</a>
 
+- **L2TP**：第 2 层隧道协议（IETF 标准的链路层隧道协议）
 - **LCP**：链路控制协议（在 PPP 中，用于建立一条链路）
+- **LQR**：链路质量报告（在 PPP 中，关于链路质量的测量报告，包括接收、发送以及因错误而被拒绝接收的数据包数量）
 
 ## <a id="M">M</a>
 
@@ -81,12 +95,17 @@
 - **MAC**：Message Authentication Code，消息认证码；用于协助认证消息完整性的数学函数
 - **MIMO**：multiple input multiple output，多输入多输出
 - **MCS**：modulation and coding scheme，调制和编码方案（结合调制和编码 ，802.11n 中有很多可用的组合）
+- **MP**：Mesh（网格） 点（在 IEEE 802.11s 中以 Mesh 方式进行配置的节点名称）
+- **MRU**：最大接收单元（接收方能够接收的最大数据包 / 消息的大小）
+- **MRRU**：多链路最大接收重构单元（多条 MP 链路重构之后的最大接收单元）
+- **MPPE**：微软点对点加密（用于 PPP）
+- **MTU**：最大传输单元（一个网路所能传输的最大帧大小）
 
 ## <a id="N">N</a>
 
 - **NAT**：Network Address Translation，网络地址转换；在IP数据报中重写地址的机制；主要用于减少全球可路由IP地址的使用量；通常与私有IP地址共同使用；也支持防火墙功能
 - **NACK**：否定确认（表示未收到或不接受的标识）
-- **NCP**：
+- **NCP**：网络控制协议
 
 ## <a id="O">O</a>
 
@@ -95,54 +114,67 @@
 
 ## <a id="P">P</a>
 
-- **PAP**：密码认证协议
+- **PAP**：密码认证协议（使用明文密码的协议，容易受到中间人的攻击或窃听）
 - **PDU**：protocol data unit，描述在协议层的信息；在非正式情况下，有时与数据包、帧、数据报、报文段以及消息等名词通用
+- **PFC**：协议字段压缩（在 PPP 中，删除了协议字段以减少开销）
 - **PFF**：
 - **PLCP**：物理层汇聚程序；802.11 用于编码与决定帧类型及无线电参数的方法
-- **PCO**：分阶段共存操作；
-- **PoE**：以太网供电
-- **PSK**：预共享密钥
-- **PPP**：
+- **PCO**：分阶段共存操作（802.11 接入点切换信道宽度的一种方法，以减少对旧设备的负面影响）
+- **PoE**：以太网供电（通过以太网布线为设备供电）
+- **PSK**：预共享密钥（预先设置加密密钥，不使用动态密钥交换协议）
+- **PPP**：点对点协议（一个链路层配置与数据封装协议，能够承载多种网络层协议，并能够使用多种底层物理链路）
+- **PMTU**：路径 MTU（在发送方到接收方的路径上所经过链路的最小 MTU 值）
+- **PMTUD**：路径MTU发现（确定 PMTU 的过程；通常依赖于 ICMP PTB 消息）
+- **PPTP**：点对点隧道协议（Microsoft 的链路层隧道协议）
 
 ## <a id="Q">Q</a>
 
-- **QSTA**：
-- **QPSK**：正交相移键控
-- **QAM**：正交幅度调制
+- **QSTA**：基于 QoS 的STA（一种支持 Qos 功能的 802.11 STA）
+- **QPSK**：正交相移键控（一般利用四个信号相位对每个符号进行两位调制，在更高级的版本中每个符号可能对应更多位）
+- **QAM**：正交幅度调制（相位和幅度调制的组合）
+- **QoS**：服务质量（描述如何处理流程的通用术语，通常基于不同的配置参数有更好或更坏的延迟或丢弃优先级）
 
 ## <a id="R">R</a>
 
-- **RAS**：远程访问服务器
-- **RSTP**：rapid spanning tree protocol，快速生成树协议
-- **RSN**：强健网络安全
-- **RSNA**：强健安全网络访问
-- **RTS**：请求发送
+- **RAS**：远程访问服务器（一台服务器，用于处理远程用户的身份认证、访问控制等）
+- **RSTP**：rapid spanning tree protocol，快速生成树协议（STP 的较少延迟版本）
+- **RSN**：强健网络安全（针对 IEEE 802.11i/WPA 的安全改进；已包含于 802.11 标准中）
+- **RSNA**：强健安全网络访问（RSN 的完整利用 / 实施）
+- **RTS**：请求发送（表明希望发送后续消息的消息）
+- **ROHC**：鲁棒性头部压缩（允许同时对多个头部进行压缩）协议头部压缩的当前一代标准
 
 ## <a id="S">S</a>
 
 - **SAP**：session announcement protocol，会话通告协议；携带实验性的组播会话通告
+- **SDLC**：同步数据链路控制（HDLC 协议的前身，SNA 的链路层）
+- **SNA**：系统网格体系结构（IBM 公司的网络体系结构）
 - **STP**：spainning tree protocol，生成树协议
 - **STA**：站点（一个接入点或相关无线主机的 IEEE 802.11 术语）
 
 ## <a id="T">T</a>
 
+- **TCP**：传输控制协议（一种面向连接的无消息边界的可靠流协议，包括了流量与拥塞控制）
 - **TXOP**：Transmission Opportunity，传输机会；在 802.11 中 允许一个站点发送一个或多个帧的模式
-- **TSPEC**：
-- **TKIP**：临时密钥完整性协议
+- **TSPEC**：流量规范（为 802.11 Qos 指明流量参数的一个结构）
+- **TKIP**：临时密钥完整性协议（用 WPA 替换 WEP 的加密算法）
 
 ## <a id="U">U</a>
 
-- **UP**：user priorities，用户优先级
-- **UEQM**：不平等调制
+- **UDL**：单向链路（只提供一个方向通信的链路）
+- **UDP**：用户数据报协议（一种尽力而为的消息协议，带有消息边界，不支持拥塞或流量控制）
+- **UP**：user priorities，用户优先级（802.11 优先级；基于来自 802.1d 的相同术语）
+- **UEQM**：不平等调制（对不同的数据流同时使用不同的调制方案）
 
 ## <a id="V">V</a>
 
 - **VLSM**：Variable-Length Subnet Masks 可变长度子网掩码
+- **VLAN**：虚拟局域网（通常用于在共享的线路上模拟多个不同的局域网）
+- **VPN**：虚拟专用网络（实际上隔离的网络；通常加密）
 
 ## <a id="W">W</a>
 
-- **WEP**：有线等效保密加密算法
-- **WPA**：Wi-Fi 保护访问
+- **WEP**：有线等效保密加密算法（原始的 Wi-Fi 加密；被证实非常脆弱）
+- **WPA**：Wi-Fi 保护访问（802.11 加密方法）
 
 ## <a id="X">X</a>
 ## <a id="Y">Y</a>
