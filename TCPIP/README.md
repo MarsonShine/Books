@@ -20,6 +20,7 @@
 - **ACCM**：Asynchronous Control Character Map，简称 asyncmap；异步控制字符映射（在PPP中，压缩地址和控制字段以减少开销）
 - **ACFC**：Address and Control Field Compression，地址和控制字段压缩（在 PPP 中，压缩地址和控制字段以减少开销）
 - **ACK**：Acknowledgment，确认（一种表明数据已经成功到达接收端的提示，适用于协议栈的多个层次）
+- **ARP**：地址解析协议
 
 ## <a id="B">B</a>
 
@@ -39,6 +40,7 @@
 - **CCMP**：Counter Mode with CBC-MAC Protocol，带CBC-MAC协议的计数器模式（用于WPA2加密；源自IEEE 802.11i 协议；是WPA的继承者）
 - **CCP**：Compression Control Protocol，压缩控制协议（在 PPP 中，建立使用的压缩方法）
 - **CHAP**：Challenge-Handshake Authentication Protocol，查询-握手认证协议（协议要求每一次查询到对应一个响应；易受到中间人攻击）
+- **CRC**：
 - **CTS**：clear to send，清除发送（授权 RTS 发送者进行发送的消息）
 - **CTR**：Counter，计数器（一种加密模式，在并行的对多个块进行加密或解密时使用一个计数器的值来维护被加密块间的顺序）
 - **CIDR**：无类别域间路由，classless inter-domain routing（一种解决地址 ROAD 问题的步骤，通过移除 IP 地址的类边界实现，但要求域间路由使用一个关联的 CIDR 掩码）
@@ -105,6 +107,7 @@
 
 - **NAT**：Network Address Translation，网络地址转换；在IP数据报中重写地址的机制；主要用于减少全球可路由IP地址的使用量；通常与私有IP地址共同使用；也支持防火墙功能
 - **NACK**：Negative Acknowledgment，否定确认（表示未收到或不接受的标识）
+- **NBMA**：非广播多路访问
 - **NCP**：Network Control Protocol，网络控制协议（在 PPP 中，用来建立网络协议层）
 
 ## <a id="O">O</a>
