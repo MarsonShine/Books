@@ -18,6 +18,7 @@
 - **AES**：Advanced Encryption Standard 高级加密标准算法
 - **AP**：access point，接入点，（802.11 标准，通常用于连接无线和有线网络部分）
 - **ACCM**：Asynchronous Control Character Map，简称 asyncmap；异步控制字符映射（在PPP中，压缩地址和控制字段以减少开销）
+- **ACD**：地址冲突检测
 - **ACFC**：Address and Control Field Compression，地址和控制字段压缩（在 PPP 中，压缩地址和控制字段以减少开销）
 - **ACK**：Acknowledgment，确认（一种表明数据已经成功到达接收端的提示，适用于协议栈的多个层次）
 - **ARP**：地址解析协议
