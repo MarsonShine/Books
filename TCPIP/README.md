@@ -15,6 +15,7 @@
 
 ## <a id="A">A</a>
 
+- **AN**：数字分配页面
 - **AES**：Advanced Encryption Standard 高级加密标准算法
 - **AP**：access point，接入点，（802.11 标准，通常用于连接无线和有线网络部分）
 - **ACCM**：Asynchronous Control Character Map，简称 asyncmap；异步控制字符映射（在PPP中，压缩地址和控制字段以减少开销）
@@ -41,7 +42,7 @@
 - **CCMP**：Counter Mode with CBC-MAC Protocol，带CBC-MAC协议的计数器模式（用于WPA2加密；源自IEEE 802.11i 协议；是WPA的继承者）
 - **CCP**：Compression Control Protocol，压缩控制协议（在 PPP 中，建立使用的压缩方法）
 - **CHAP**：Challenge-Handshake Authentication Protocol，查询-握手认证协议（协议要求每一次查询到对应一个响应；易受到中间人攻击）
-- **CRC**：
+- **CRC**：循环冗余校验
 - **CTS**：clear to send，清除发送（授权 RTS 发送者进行发送的消息）
 - **CTR**：Counter，计数器（一种加密模式，在并行的对多个块进行加密或解密时使用一个计数器的值来维护被加密块间的顺序）
 - **CIDR**：无类别域间路由，classless inter-domain routing（一种解决地址 ROAD 问题的步骤，通过移除 IP 地址的类边界实现，但要求域间路由使用一个关联的 CIDR 掩码）
@@ -49,6 +50,7 @@
 
 ## <a id="D">D</a>
 
+- **DS**：区分服务字段
 - **<a id="dcf">DCF </a>**：distributed coordinate function，分布式协调功能（CSMA/CA 介质访问控制方法，用于 802.11 网络）
 - **DIFCS**：distributed inter-frame spacing，分布式帧间间隔（802.11 DCF 帧之间的时间）
 - **DHCP**：dynamic host configuration protocol，动态主机配置协议：BOOTP 演变而来，使用配置信息来建立系统，例如租用的IP地址、默认路由器以及DNS服务器的IP地址
@@ -56,6 +58,7 @@
 
 ## <a id="E">E</a>
 
+- **ECN**：显示拥塞通知字段
 - **EAP**：Extensible Authentication Protocol，扩展身份验证协议（支持各种框架身份验证）
 - **EDCA**：enhanced [DCF](#def) channel access 增强型 DCF 信道访问
 - **EQM**：Equal Modulation，平等调制（对不同的数据流同时使用相同的调制方案）
@@ -78,9 +81,12 @@
 
 ## <a id="I">I</a>
 
+- **IANA**：Internet 号码分配机构（维护协议编号与字段值）
 - **ICMP**：Internet Control Message Protocol，Internet 控制报文协议（一种信息与错误报告协议，被视为 IP 协议的一部分）
-- **ICPC**：*TODO：文章中并没有说明，不知道是什么意思*
+- **ICPC**：*// TODO：文章中并没有说明，不知道是什么意思*
 - **IPCP**：IP 控制协议（在 PPP 中一种用于配置 IPv4 网络链路的 NCP）
+- **IHL**：Internet 头部长度（IPv4 头部的字段，以 32 位字为单位指明头部长度）
+- 
 - **IPV6CP**：IP 控制协议（在 PPP 中一种用于配置 IPv6 网络链路的 NCP）
 - **ISM**：industry science medicine，工业、科学和医疗（世界上许多地区免许可证的频段，为 Wi-Fi 所用）
 
@@ -156,10 +162,12 @@
 
 ## <a id="T">T</a>
 
+- **Tos**：Type of Service，服务类型字段
 - **TCP**：Transmission Control Protocol，传输控制协议（一种面向连接的无消息边界的可靠流协议，包括了流量与拥塞控制）
 - **TXOP**：Transmission Opportunity，传输机会；在 802.11 中 允许一个站点发送一个或多个帧的模式
 - **TSPEC**：Traffic Specification，流量规范（为 802.11 Qos 指明流量参数的一个结构）
 - **TKIP**：Temporal Key Integrity Protocol，临时密钥完整性协议（用 WPA 替换 WEP 的加密算法）
+- **TTL**：生存期字段
 
 ## <a id="U">U</a>
 
