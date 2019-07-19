@@ -1,21 +1,20 @@
-# TCP/IP 协议详解
+TCP/IP 协议详解
 
 这本书里面有很多专业术语的简称，虽说书里面第一次提到的时候有些是什么意思，但是当我继续往后面看的时候，再次碰到这个缩写简称术语时，经常忘记而回过头花大量的时间找到当初这个术语第一次出现的地方。这样很浪费时间，所以才有这个文档。来记录缩写的意思
 
 ## 快速导航
 
-| [A](#a) | [B](#b) | [C](#c) | [D](#d) | [E](#e) | [F](#f) |
-| :-----: | :-----: | :-----: | :-----: | :-----: | :-----: |
-| [G](#g) | [H](#h) | [I](#i) | [J](#j) | [K](#k) |  [L]()  |
-| [M](#m) | [N](#n) | [O](#o) | [P](#p) | [Q](#q) | [R](#r) |
-| [S](#s) | [T](#t) | [U](#u) | [V](#v) | [W](#w) | [X](#x) |
-| [Y](#y) | [Z](#z) |         |         |         |         |
+| [A](#a) | [B](#b) | [C](#c) | [D](#d) | [E](#e) | [F](#f) | [G](#g) | [H](#h) | [I](#i) | [J](#j) |
+| :-----: | :-----: | :-----: | :-----: | :-----: | :-----: | :-----: | :-----: | :-----: | :-----: |
+| [K](#k) | [L](#k) | [M](#m) | [N](#n) | [O](#o) | [P](#p) | [Q](#q) | [R](#R) | [S](#s) | [T](#t) |
+| [U](#u) | [V](#v) | [W](#w) | [X](#x) | [Y](#y) | [Z](#z) |         |         |         |         |
 
 
 
 ## <a id="A">A</a>
 
 - **AN**：数字分配页面
+- **AF**：Assured Forwarding，保证转发（一种提供流量类优先级与类间优先次序的 PHB）
 - **AES**：Advanced Encryption Standard 高级加密标准算法
 - **AP**：access point，接入点，（802.11 标准，通常用于连接无线和有线网络部分）
 - **ACCM**：Asynchronous Control Character Map，简称 asyncmap；异步控制字符映射（在PPP中，压缩地址和控制字段以减少开销）
@@ -42,7 +41,7 @@
 - **CCMP**：Counter Mode with CBC-MAC Protocol，带CBC-MAC协议的计数器模式（用于WPA2加密；源自IEEE 802.11i 协议；是WPA的继承者）
 - **CCP**：Compression Control Protocol，压缩控制协议（在 PPP 中，建立使用的压缩方法）
 - **CHAP**：Challenge-Handshake Authentication Protocol，查询-握手认证协议（协议要求每一次查询到对应一个响应；易受到中间人攻击）
-- **CRC**：循环冗余校验
+- **CRC**：cyclic redundancy check，循环冗余校验
 - **CTS**：clear to send，清除发送（授权 RTS 发送者进行发送的消息）
 - **CTR**：Counter，计数器（一种加密模式，在并行的对多个块进行加密或解密时使用一个计数器的值来维护被加密块间的顺序）
 - **CIDR**：无类别域间路由，classless inter-domain routing（一种解决地址 ROAD 问题的步骤，通过移除 IP 地址的类边界实现，但要求域间路由使用一个关联的 CIDR 掩码）
@@ -50,7 +49,9 @@
 
 ## <a id="D">D</a>
 
-- **DS**：区分服务字段
+- **DS**：Differentiated Services Field，区分服务字段
+- **DS**：distribution services，分布式服务
+- **DSCP**：Differentiated Services Code Point，区分服务代码点（在数据包中知名某种特定转发行为的字段）
 - **<a id="dcf">DCF </a>**：distributed coordinate function，分布式协调功能（CSMA/CA 介质访问控制方法，用于 802.11 网络）
 - **DIFCS**：distributed inter-frame spacing，分布式帧间间隔（802.11 DCF 帧之间的时间）
 - **DHCP**：dynamic host configuration protocol，动态主机配置协议：BOOTP 演变而来，使用配置信息来建立系统，例如租用的IP地址、默认路由器以及DNS服务器的IP地址
@@ -58,10 +59,11 @@
 
 ## <a id="E">E</a>
 
-- **ECN**：显示拥塞通知字段
+- **ECN**：Explicit Congestion Notification，显示拥塞通知字段
 - **EAP**：Extensible Authentication Protocol，扩展身份验证协议（支持各种框架身份验证）
 - **EDCA**：enhanced [DCF](#def) channel access 增强型 DCF 信道访问
 - **EQM**：Equal Modulation，平等调制（对不同的数据流同时使用相同的调制方案）
+- **EF**：Expedited Forwarding，加速转发（在未出现拥塞时，PHB 提供的一个服务类，通常表示其已处于最高优先级，并要求访问控制以避免超额）
 
 ## <a id="F">F</a>
 
@@ -78,6 +80,7 @@
 - **HCF**：hybrid coordinate function，混合协调功能（同时支持优先级与基于竞争的 802.11 信道访问的协调功能）
 - **HCCA**：HFCA-controlled channel access，HFCA 控制信道访问
 - **HDLC**：High-level Data Link Control，高级数据链路控制（一种流行的的 ISO 数据链路协议标准，是大多数流行的 PPP 变种的基础）
+- **HOPOPT**：hop-by-hop options，逐跳选项
 
 ## <a id="I">I</a>
 
@@ -109,6 +112,7 @@
 - **MRRU**：Multilink Maximum Received Reconstructed，多链路最大接收重构单元（多条 MP 链路重构之后的最大接收单元）
 - **MPPE**：Microsoft’s Point-to-Point Encryption，微软点对点加密（用于 PPP）
 - **MTU**：Maximum Transmission Unit，最大传输单元（一个网路所能传输的最大帧大小）
+- **MLPP**：Multilevel Precedence and Preemption，多级优先与抢占
 
 ## <a id="N">N</a>
 
@@ -135,6 +139,7 @@
 - **PMTU**：Path MTU（在发送方到接收方的路径上所经过链路的最小 MTU 值）
 - **PMTUD**：PMTU Discovery，路径MTU发现（确定 PMTU 的过程；通常依赖于 ICMP PTB 消息）
 - **PPTP**：Point-to-Point Tunneling Protocol，点对点隧道协议（Microsoft 的链路层隧道协议）
+- **PHB**：per-hop behavior，每跳行为（在路由器用于实现 DS 的抽象行为）
 
 ## <a id="Q">Q</a>
 
@@ -142,6 +147,7 @@
 - **QPSK**：Quadrature Phase Shift Keying，正交相移键控（一般利用四个信号相位对每个符号进行两位调制，在更高级的版本中每个符号可能对应更多位）
 - **QAM**：Quadrature Amplitude Modulation，正交幅度调制（相位和幅度调制的组合）
 - **QoS**：Quality of Service，服务质量（描述如何处理流程的通用术语，通常基于不同的配置参数有更好或更坏的延迟或丢弃优先级）
+- **QS**：Quick Start，快速启动（在 TCP 协议中的实验性修改，为沿途的设备快速启动行为提供支持）
 
 ## <a id="R">R</a>
 
@@ -151,6 +157,7 @@
 - **RSNA**：RSN Association，强健安全网络访问（RSN 的完整利用 / 实施）
 - **RTS**：Request To Send ，请求发送（表明希望发送后续消息的消息）
 - **ROHC**：鲁棒性头部压缩（允许同时对多个头部进行压缩）协议头部压缩的当前一代标准
+- **RH**：Router Header，路由头部（IPv6 用于改变流量传输途径的拓展头部）
 
 ## <a id="S">S</a>
 
@@ -167,7 +174,8 @@
 - **TXOP**：Transmission Opportunity，传输机会；在 802.11 中 允许一个站点发送一个或多个帧的模式
 - **TSPEC**：Traffic Specification，流量规范（为 802.11 Qos 指明流量参数的一个结构）
 - **TKIP**：Temporal Key Integrity Protocol，临时密钥完整性协议（用 WPA 替换 WEP 的加密算法）
-- **TTL**：生存期字段
+- **TTL**：生存期字段（IPv4 头部字段，指明一个数据报备允许经过剩余路由器数目）
+- **TLV**：类型-长度-值（在协议中使用；表示一个类型、变长值的长度以及值）
 
 ## <a id="U">U</a>
 
