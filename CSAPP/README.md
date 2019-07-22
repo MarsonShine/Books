@@ -17,23 +17,29 @@
 
 ## <a id="A">A</a>
 
-- ALU：逻辑计算单元
+- **ALU**：逻辑计算单元
 
 ## <a id="B">B</a>
 ## <a id="C">C</a>
 
-- CC：条件码寄存器
+- **CC**：条件码寄存器
 
 ## <a id="D">D</a>
 ## <a id="E">E</a>
+
+- **EU**：Execution Unit，执行单元
+
 ## <a id="F">F</a>
 ## <a id="G">G</a>
 ## <a id="H">H</a>
 
-- HCL：Hardware Control Language，硬件控制语言
-- HDL：Hardware Description Language，硬件描述语言
+- **HCL**：Hardware Control Language，硬件控制语言
+- **HDL**：Hardware Description Language，硬件描述语言
 
 ## <a id="I">I</a>
+
+- **ICU**：Instruction Control Unit，执行控制单元
+
 ## <a id="J">J</a>
 ## <a id="K">K</a>
 ## <a id="L">L</a>
@@ -45,7 +51,7 @@
 ## <a id="R">R</a>
 ## <a id="S">S</a>
 
-SEQ：Sequential  顺序的，时序
+**SEQ**：Sequential  顺序的，时序
 
 ## <a id="T">T</a>
 ## <a id="U">U</a>
@@ -55,9 +61,19 @@ SEQ：Sequential  顺序的，时序
 ## <a id="Y">Y</a>
 ## <a id="Z">Z</a>
 
+## 名词中英对照
 
+instruction cache：指令高速缓存
 
+branch prediction：分支预测
 
+speculative execution：投机执行
+
+data cache：数据高速缓存
+
+retirement unit：退役指令
+
+register renaming：寄存器重命名
 
 
 
