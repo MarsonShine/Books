@@ -46,6 +46,10 @@
 - **CTR**：Counter，计数器（一种加密模式，在并行的对多个块进行加密或解密时使用一个计数器的值来维护被加密块间的顺序）
 - **CIDR**：无类别域间路由，classless inter-domain routing（一种解决地址 ROAD 问题的步骤，通过移除 IP 地址的类边界实现，但要求域间路由使用一个关联的 CIDR 掩码）
 - **CSLIP**：压缩串行线路 IP（一种来源于旧的点到点协议）
+- **CN**：通信节点
+- **CoA**：转交地址
+- **CoT**：转交测试
+- **CoTI**：转交测试初始化
 
 ## <a id="D">D</a>
 
@@ -64,6 +68,7 @@
 - **EDCA**：enhanced [DCF](#def) channel access 增强型 DCF 信道访问
 - **EQM**：Equal Modulation，平等调制（对不同的数据流同时使用相同的调制方案）
 - **EF**：Expedited Forwarding，加速转发（在未出现拥塞时，PHB 提供的一个服务类，通常表示其已处于最高优先级，并要求访问控制以避免超额）
+- **ESP**：封装安全有效负载
 
 ## <a id="F">F</a>
 
@@ -81,6 +86,10 @@
 - **HCCA**：HFCA-controlled channel access，HFCA 控制信道访问
 - **HDLC**：High-level Data Link Control，高级数据链路控制（一种流行的的 ISO 数据链路协议标准，是大多数流行的 PPP 变种的基础）
 - **HOPOPT**：hop-by-hop options，逐跳选项
+- **HoA**：家乡地址
+- **HA**：家乡代理
+- **HoT**：家乡测试
+- **HoTI**：家乡测试初始化
 
 ## <a id="I">I</a>
 
@@ -113,6 +122,8 @@
 - **MPPE**：Microsoft’s Point-to-Point Encryption，微软点对点加密（用于 PPP）
 - **MTU**：Maximum Transmission Unit，最大传输单元（一个网路所能传输的最大帧大小）
 - **MLPP**：Multilevel Precedence and Preemption，多级优先与抢占
+- **MPLS**：多协议标签交换
+- **MN**：移动节点
 
 ## <a id="N">N</a>
 
@@ -158,6 +169,8 @@
 - **RTS**：Request To Send ，请求发送（表明希望发送后续消息的消息）
 - **ROHC**：鲁棒性头部压缩（允许同时对多个头部进行压缩）协议头部压缩的当前一代标准
 - **RH**：Router Header，路由头部（IPv6 用于改变流量传输途径的拓展头部）
+- **RO**：路由优化
+- **RRP**：返回路由程序
 
 ## <a id="S">S</a>
 
