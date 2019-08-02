@@ -23,6 +23,7 @@
 ## <a id="C">C</a>
 
 - **CC**：条件码寄存器
+- **CAS**：Column Access Strobe，列访问选通脉冲
 
 ## <a id="D">D</a>
 ## <a id="E">E</a>
@@ -49,6 +50,11 @@
 ## <a id="P">P</a>
 ## <a id="Q">Q</a>
 ## <a id="R">R</a>
+
+**RAM**：随机访问存储器，分两类，静态的（SRAM）和动态的（DRAM）
+
+**RAS**：Row Acess Strobe，行访问选通脉冲
+
 ## <a id="S">S</a>
 
 **SEQ**：Sequential  顺序的，时序
@@ -63,17 +69,27 @@
 
 ## 名词中英对照
 
-instruction cache：指令高速缓存
+| instruction cache：指令高速缓存 | branch prediction：分支预测                       |
+| ------------------------------- | ------------------------------------------------- |
+| speculative execution：投机执行 | data cache：数据高速缓存                          |
+| retirement unit：退役指令       | register renaming：寄存器重命名                   |
+| memory system：存储器系统       | cache memory：高速缓存器                          |
+| main memory：主存储器           | momery mountain：存储器山，描述存储器层级结构性能 |
+| supercell：超单元               | pin：引脚                                         |
+| momery controller：内存控制器   |                                                   |
+|                                 |                                                   |
 
-branch prediction：分支预测
+​														
 
-speculative execution：投机执行
 
-data cache：数据高速缓存
 
-retirement unit：退役指令
 
-register renaming：寄存器重命名
+
+
+
+​	
+
+
 
 
 
