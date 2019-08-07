@@ -7,6 +7,7 @@ namespace CSharpGuide.LanguageVersions._8._0
 {
     /// <summary>
     /// <see cref="https://docs.microsoft.com/zh-cn/dotnet/csharp/tutorials/ranges-indexes"/>
+    /// <seealso cref="https://www.infoq.cn/article/cs8-ranges-and-recursive-patterns/?itm_source=infoq_en&itm_medium=link_on_en_item&itm_campaign=item_in_other_langs"/>
     /// ^ 运算符，指定一个索引与序列末尾相关。
     /// System.Index 表示一个序列索引。
     /// System.Range 表示序列的子范围。
