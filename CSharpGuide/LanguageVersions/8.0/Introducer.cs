@@ -20,6 +20,14 @@ namespace CSharpGuide.LanguageVersions._8._0
             s1?.ToString();
             M(s1);//M 方法也正常运行
 
+            #region warning 可空类型引用值可能为null
+            string? name = null;
+            var _ = name.Length;
+            #endregion
+
+            string? name1 = null;
+            _ = name1!.Length;
+
             //异步流
             //Ranges 与 索引
 
