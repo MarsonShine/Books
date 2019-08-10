@@ -2,6 +2,8 @@
 
 原文地址：[https://github.com/dotnet/roslyn/blob/master/docs/features/async-streams.md](https://github.com/dotnet/roslyn/blob/master/docs/features/async-streams.md)
 
+> 注意：以下内容最好能根据反编译工具查看异步流相关类生成的代码效果最佳
+
 异步流是可枚举类（Enumerable）的异步变体，它会在遍历下一个元素的时候（Next）会涉及异步操作。只要继承自 IAsyncEnumerable<T> 就能实现。
 
 首先我们来看下这些在 .netcore3.0 新增的异步流 API
