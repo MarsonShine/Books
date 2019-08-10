@@ -23,7 +23,7 @@ namespace CSharpGuide.LanguageVersions._8._0
         {
             await foreach (var number in GenerateSequence())
             {
-                Console.WriteLine($"The time is {DateTime.Now:hh:mm:ss}. Retrieved {number}");
+                Console.WriteLine($"The time is {DateTime.Now:hh:mm:sssss}. Retrieved {number}");
             }
             return 0;
         }
