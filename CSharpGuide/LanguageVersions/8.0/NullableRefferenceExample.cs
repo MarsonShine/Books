@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Text;
 
 namespace CSharpGuide.LanguageVersions._8._0
@@ -18,7 +19,7 @@ namespace CSharpGuide.LanguageVersions._8._0
     /// </summary>
     /// <typeparam name="TIn"></typeparam>
     /// <typeparam name="TOut"></typeparam>
-    interface IDoStuff_NotNull<TIn, TOut>
+    public interface IDoStuff_NotNull<TIn, TOut>
         where TIn : notnull
         where TOut : notnull
     {
@@ -26,10 +27,23 @@ namespace CSharpGuide.LanguageVersions._8._0
     }
 
     public class DoStuff<TIn, TOut> : IDoStuff_NotNull<TIn, TOut>
-        //where TIn : notnull
-        //where TOut : notnull
+        where TIn : notnull
+        where TOut : notnull
     {
         TOut IDoStuff_NotNull<TIn, TOut>.DoStuff(TIn input)
+        {
+            throw new NotImplementedException();
+        }
+
+        public TOut Do(TIn input)
+        {
+            throw new NotImplementedException();
+        }
+    }
+
+    public class DoStuff_Nulable<TIn, TOut> : IDoStuff_NotNull<TIn, TOut>
+    {
+        public TOut DoStuff(TIn input)
         {
             throw new NotImplementedException();
         }
@@ -37,5 +51,44 @@ namespace CSharpGuide.LanguageVersions._8._0
 
     class NullableRefferenceExample
     {
+        public static void Start()
+        {
+            DoStuff<int?, string> stuff = new DoStuff<int?, string>();
+            _ = stuff.Do(null);
+            DoStuff_Nulable<int?, int?> doStuff = new DoStuff_Nulable<int?, int?>();
+
+            var d2 = new Dictionary<string, string>(10);
+            var nothing = d2[null];
+        }
+    }
+
+    public class MyClass
+    {
+        private string _innerValue = string.Empty;
+
+        [AllowNull]
+        public string MyValue
+        {
+            get {
+                return _innerValue;
+            }
+            set {
+                _innerValue = value ?? string.Empty;
+            }
+        }
+    }
+
+    public static class HandleMethods
+    {
+        public static void DisposeAndClear(ref MyClass handle)
+        {
+
+        }
+
+        public static void DisposeAndClear_DisallowNull([DisallowNull]ref MyClass handle)
+        {
+
+
+        }
     }
 }

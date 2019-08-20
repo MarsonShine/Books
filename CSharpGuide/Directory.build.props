@@ -1,7 +1,7 @@
 ﻿<Project>
-	<PropertyGroup Condition="'$(Language)' == 'C#'">
+	<PropertyGroup>
     <CheckForOverflowUnderflow>false</CheckForOverflowUnderflow>
-    <!--<LangVersion>8.0</LangVersion>-->
+    <LangVersion>8.0</LangVersion>
     <!-- New name -->
     <Nullable>enable</Nullable>
     
