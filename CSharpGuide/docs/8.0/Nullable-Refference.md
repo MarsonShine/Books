@@ -1,5 +1,7 @@
 # 非空引用类型——C#8.0
 
+原文地址：https://devblogs.microsoft.com/dotnet/try-out-nullable-reference-types/?utm_source=vs_developer_news&utm_medium=referral
+
 该新增的特性最关键的作用是处理泛型和更高级 API 的使用场景。这些都是我们从 .NETCore 上注解衍生过来的经验。
 
 ## 通用不为 NULL 约束
@@ -124,7 +126,7 @@ void M<T>(T? t) where T: notnull
 
 最后，T? 的存在，都能在 null 值类型和 null 引用类型之间工作，但是不能解决泛型所有的问题。你也许想在单一方向用可 null 类型（比如只在输入或只在输出）并且它既不能用 `notnull` 也不能用 T 和 T? 来表示分开，除非你认为对于输入输出分离泛型类。
 
-## 可 null 先决条件：AllowNull 和 DisallowNull
+## 可 null 先决条件：`AllowNull` 和 `DisallowNull`
 
 看下面这段代码
 
@@ -230,7 +232,7 @@ void M(MyHandle handle)
 
 **重要：**这些标签只影响那些注解了的方法调用的 null 分析。这些被注解的方法以及接口实现类的主体不遵循这些特性。
 
-## Nullable 后置条件：MaybeNull 和 NotNull
+## Nullable 后置条件：`MaybeNull` 和 `NotNull`
 
 请看下面代码：
 
@@ -310,7 +312,7 @@ void M(string[] testArray)
 
 **重要提示：**这些特性仅仅只是影响对那些被注解的调用方法的调用者可为 null 性的分析。那些被注解的方法主体和类似接口实现的东西一样不遵循这个这些标签。我们也许会在下一个特性中加入。
 
-## 后置条件：MaybeNullWhen(bool) 和 NotNullWhen(bool)
+## 后置条件：`MaybeNullWhen(bool)` 和 `NotNullWhen(bool)`
 
 考虑如下代码片段：
 
@@ -430,17 +432,132 @@ void QueueTest(MyQueue<string> q)
 
 `NotNullWhen(bool)` 签名的参数是不为 null 的，甚至这个类型本身不允许为 null，条件依赖于 `bool` 方法返回的值。`MaybeNullWhen(bool)` 签名的参数能为 null，甚至是参数类型本身不允许，条件依赖于方法返回 `bool` 值。他们能指定任何参数类型。
 
+## 输入输出之间的无 Null 依赖：`NotNullIfNotNull(string)`
 
+考虑下面代码片段：
 
+```c#
+class MyPath
+{
+    public static string? GetFileName(string? path)
+    {
+        ...
+    }
+}
+```
 
+在这个例子，我们希望能够返回 null 字符串，并且我们也应该接受一个 null 值作输入。所以这个方法能完成我想要的效果。
 
+但是，如果 `path` 不为 null，我们希望确保返回总是能返回一个字符串。即我想要 `GetFileName` 返回一个不为 null 的值，条件是 path 不为 null。这里是没有方法去表达这个意思的。
 
+而 `[NotNullIfNotNull]` 就登场了。这个特性能使你的代码变得更花哨，所以小心的使用它！
 
+这里我将展示我使用这个 API 的代码：
 
+```c#
+class MyPath
+{
+    [return: NotNullIfNotNull("path")]
+    public static string? GetFileName(string? path)
+    {
+        ...
+    }
+}
+```
 
+那么我们调用这个方法就有这样的效果：
 
+```c#
+void PathTest(string? path)
+{
+    var possiblyNullPath = MyPath.GetFileName(path);
+    Console.WriteLine(possiblyNullPath);// Warning: 取消引用可能出现空引用
+    if(!string.IsNullOrEmpty(path))
+    {
+        var goodPath = MyPath.GetFileName(path);
+        Console.WriteLine(goodPath);// safe	注意：在我的验证下仍然有警告
+    }
+}
+```
 
+正式的：
 
+`NotNullIfNotNull(string)` 特性签名表示任何输出值是不为 null 的，条件依赖于给出的特性指定的名称参数的可 null 性。它们可以在以下具体结构指定：
+
+- 方法返回
+- `ref` 标明的参数
+
+## 流特性：`DoesNotReturn` 和 `DoesNotReturnIf(bool)`
+
+你可以使用多个方法影响程序的控制流。例如，一个异常帮助类方法，调用它将抛出一个异常，或者一个断言方法，它根据你的输入是 `true` 还是 `false` 来抛出异常。
+
+你也许希望做一些能像 `assert` 这样，这个值不为 null，并且我们认为你们会喜欢它，如果编译器能理解它。
+
+输入 `DoseNotReturn` 和 `DoseNotReturnIf(bool)`。这里有一些例子来告诉你怎样使用：
+
+```c#
+internal static class ThrowHelper
+{
+    [DoseNotReturn]
+    public static void ThrowArgumentNullException(ExceptionArgument arg)
+    {
+        ...
+    }
+}
+
+public static class MyAssertionLibrary
+{
+    public static void MyAssert([DoesNotReturnIf(false)] bool condition)
+    {
+        ...
+    }
+}
+```
+
+当 `ThrowArgumentNullException` 在方法中被调用时，它会抛出异常。注解在签名上的 `DoesNotReturn` 将发出信号给编译器表示在之后不要进行非 null 分析，因为代码将会不可达。
+
+当`MyAssert` 被调用时，并且条件传递为 `false`，它会抛出异常。注解的 `DoesNotReturnIf(false)` 以及里面的条件参数能够让编译器知道程序流不会继续往下走，如果条件为 `false`。当你想要断言一个值的可空性的时候，这是非常有用的。在代码中 `MyAssert(value != null)`，那么编译器会假使 `value` 不是 null。
+
+`DoesNotReturn` 用在方法上。`DoesNotReturnIf(bool)` 用在输入参数上。
+
+## 进化（Evolving）你的注解
+
+一旦你在公开的 API 使用了注解，那你就要考虑一个事实，那就是更新 API 会影响下游：
+
+- 增加可空性的注解地方，它们可能会给用户的代码带来警告。
+- 移除可空性注解能如此（比如接口实现）
+
+可空注解在你的公有 API 一部分。增加或移除都会带来警告。我们建议在预览版本开始这个，并且征求你们的反馈，目标是在一个完整的版本之后不改变任何注解。尽管这不总是可能的，但是我们还是推荐。
+
+## Microsoft framwork 和 库目前的状态
+
+因为可空型引用类型是新的，主要的 C# Microsoft framwork 和 lib 的作者也还没有进行合适的注解。
+
+就是说，.NET Core 中的 “Core Lib”，它代表了 .NET Core 共享的 framwork 的 25% 都完整的做了更新。包括了`System`，`System.IO` 以及 `System.Collections.Generic`。我们正在关注对我们的决定的反馈，以便我们做合适的做出调整，在他们的使用变得更加广泛之前。
+
+尽管任然还有大约 80% 的 CoreFX 需要注解，但是最常用的 APIs 都有了注解。
+
+## 可空引用类型的线路
+
+目前，我们把整个可空引用类型视为预览版。它是稳定，但是这个特性涉及到我们自己技术和更好的 .NET 生态。还需要一些时间来完成。
+
+也就是我们鼓励库作者使用在他们的库中开始注解。这个特性只会让库变得更好的使用可空能力，帮忙 .NET 更加安全。
+
+在未来的一年左右，我们将继续提高这个特性以及在 Microsoft frameworks 和 libs 中传播。
+
+针对语言，特别是编译器分析，我们将使它增强以至于我们能使你需要做的事最小化，就像使用非空操作符(`!`)。这些增强都在[这里](https://github.com/dotnet/roslyn/issues?q=is%3Aissue+is%3Aopen+label%3A%22New+Language+Feature+-+Nullable+Reference+Types%22)追踪。
+
+针对 CoreFX，我们将会维护注解到 80% 的 api，同样也会根据反馈做出适当的调整。
+
+对于 ASP.NET Core 和 Entity Framework，我们一旦添加到 CoreFX 和 编译器我们都会添加注解。
+
+我们没有计划去给 WinForms 和 WPFs 的 APIs 注解，但是我们乐意听到你们的反馈在不同的事情上。
+
+最后，我们将继续提高 C# Visual Studio 工具。我们对于这些特性有很多建议去帮助使用这些特性，我们也很喜欢你们的建议。
+
+## 下一步
+
+如果你仍然在读以及在你的代码中没有尝试这个特性，特别是你的库代码，还请尝试以及给我们反馈在你感觉有任何异样。在 .NET 中消除令人意外的 `NullReferenceException` 还需要漫长的过程，但是我们希望在长时间运行的之后，开发者不用担心被隐式的空值影响。你们能帮助导我们。试试这个特性，在你的类库中使用注解。反馈你的经验
 
 
 

@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using System.IO;
 using System.Text;
 
 namespace CSharpGuide.LanguageVersions._8._0
@@ -137,6 +138,32 @@ namespace CSharpGuide.LanguageVersions._8._0
         public void Enqueue(T result)
         {
             _queue.Enqueue(result);
+        }
+    }
+
+    class MyPath
+    {
+        [return: NotNullIfNotNull("path")]
+        public static string? GetFileName(string? path)
+        {
+            return Path.GetFileName(path);
+        }
+    }
+
+    internal static class ThrowHelper
+    {
+        [DoesNotReturn]
+        public static void ThrowArgumentNullException(string? args)
+        {
+            if (args == null) throw new ArgumentNullException(nameof(args));
+        }
+    }
+
+    public static class MyAssertionLibrary
+    {
+        public static void MyAssert([DoesNotReturnIf(false)] bool condition)
+        {
+            //if (condition == false) throw new InvalidOperationException(nameof(condition));
         }
     }
 }

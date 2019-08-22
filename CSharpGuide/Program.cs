@@ -1,5 +1,8 @@
 ﻿using CSharpGuide.LanguageVersions._8._0;
 using System;
+using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
+using System.IO;
 using System.Threading.Tasks;
 
 namespace CSharpGuide
@@ -26,6 +29,8 @@ namespace CSharpGuide
             string[] testArray = new string[] { "Hello!", "World" };
             M(testArray);
             Test();
+            TestThrowException(null);
+            Test_DoesNotReturnIf(null);
         }
 
         public static void M1(MyClass mc)
@@ -47,6 +52,12 @@ namespace CSharpGuide
             Console.WriteLine(testArray.Length);
         }
 
+        public static void M3([DoesNotReturnIf(false)] bool b, string s) {
+            if (!b) throw new Exception(s);
+        }
+        static void Test_DoesNotReturnIf(string? s) {
+            M3(s != null, s.ToString());
+        }
         static void Test()
         {
             string? value = "not null";
@@ -85,6 +96,27 @@ namespace CSharpGuide
                 return;
             }
             Console.WriteLine(s.Length);
+        }
+
+        static void PathTest(string? path)
+        {
+            var possiblyNullPath = MyPath.GetFileName(path);
+            Console.WriteLine(possiblyNullPath.Length); // Warning: Dereference of a possibly null reference
+
+            if (!string.IsNullOrEmpty(path))
+            {
+                var goodPath = MyPath.GetFileName(path);
+                //Debug.Assert(goodPath != null);
+                Console.WriteLine(goodPath.Length); // Safe!
+            }
+        }
+
+        static void TestThrowException(string? args)
+        {
+            ThrowHelper.ThrowArgumentNullException(args);
+
+            MyAssertionLibrary.MyAssert(args != null);
+            
         }
     }
 }
