@@ -516,7 +516,7 @@ public static class MyAssertionLibrary
 
 当 `ThrowArgumentNullException` 在方法中被调用时，它会抛出异常。注解在签名上的 `DoesNotReturn` 将发出信号给编译器表示在之后不要进行非 null 分析，因为代码将会不可达。
 
-当`MyAssert` 被调用时，并且条件传递为 `false`，它会抛出异常。注解的 `DoesNotReturnIf(false)` 以及里面的条件参数能够让编译器知道程序流不会继续往下走，如果条件为 `false`。当你想要断言一个值的可空性的时候，这是非常有用的。在代码中 `MyAssert(value != null)`，那么编译器会假使 `value` 不是 null。
+当`MyAssert` 被调用时，并且条件传递为 `false`，它会抛出异常。注解的 `DoesNotReturnIf(false)` 以及里面的条件参数能够让编译器知道程序流不会继续往下走，如果条件为 `false`。当你想要断言一个值的可空性的时候，这是非常有用的。在代码 `MyAssert(value != null)` 路径之后，那么编译器会假使 `value` 不是 null。
 
 `DoesNotReturn` 用在方法上。`DoesNotReturnIf(bool)` 用在输入参数上。
 

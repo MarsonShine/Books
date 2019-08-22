@@ -29,8 +29,9 @@ namespace CSharpGuide
             string[] testArray = new string[] { "Hello!", "World" };
             M(testArray);
             Test();
-            TestThrowException(null);
-            Test_DoesNotReturnIf(null);
+            //TestThrowException(null);
+            //Test_DoesNotReturnIf(null);
+            Test_NotNullIfNotNull();
         }
 
         public static void M1(MyClass mc)
@@ -88,6 +89,15 @@ namespace CSharpGuide
             Console.WriteLine(version.Major);
         }
 
+        static void Test_NotNullIfNotNull()
+        { 
+            var s = M5();
+            s.ToString();
+        }
+
+        [return: NotNullIfNotNull("p")]
+        static string? M5(params string?[]? p) => p?.ToString();
+
         static void QueueTest(MyQueue<string> q) {
             if (!q.TryDequeue(out string s))
             {
@@ -106,7 +116,7 @@ namespace CSharpGuide
             if (!string.IsNullOrEmpty(path))
             {
                 var goodPath = MyPath.GetFileName(path);
-                //Debug.Assert(goodPath != null);
+                Debug.Assert(goodPath != null);//添加断言则不会有警告
                 Console.WriteLine(goodPath.Length); // Safe!
             }
         }
