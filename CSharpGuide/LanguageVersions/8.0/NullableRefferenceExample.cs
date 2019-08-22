@@ -69,10 +69,12 @@ namespace CSharpGuide.LanguageVersions._8._0
         [AllowNull]
         public string MyValue
         {
-            get {
+            get
+            {
                 return _innerValue;
             }
-            set {
+            set
+            {
                 _innerValue = value ?? string.Empty;
             }
         }
@@ -89,6 +91,52 @@ namespace CSharpGuide.LanguageVersions._8._0
         {
 
 
+        }
+    }
+
+    class MyArray
+    {
+        public static T Find<T>(T[] array, Func<T, bool> match)
+        {
+            if (array == null)
+                throw new ArgumentNullException(nameof(array));
+            if (match == null)
+                throw new ArgumentNullException(nameof(match));
+            return Array.Find<T>(array, s => match.Invoke(s));
+        }
+
+        public static void Resize<T>(ref T[] array, int newSize)
+        {
+            Array.Resize<T>(ref array, newSize);
+        }
+    }
+
+    public class MyString
+    {
+        public static bool IsNullOrEmpty([NotNullWhen(false)]string? value)
+        {
+            return string.IsNullOrEmpty(value);
+        }
+    }
+    public class MyVersion
+    {
+        public static bool TryParse(string? input, [NotNullWhen(true)]out Version? version)
+        {
+            return Version.TryParse(input, out version);
+        }
+    }
+
+    public class MyQueue<T>
+    {
+        private readonly Queue<T> _queue = new Queue<T>();
+        public bool TryDequeue([NotNullWhen(false)]out T result)
+        {
+            return _queue.TryDequeue(out result);
+        }
+
+        public void Enqueue(T result)
+        {
+            _queue.Enqueue(result);
         }
     }
 }

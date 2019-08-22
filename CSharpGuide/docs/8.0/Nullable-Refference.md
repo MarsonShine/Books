@@ -1,4 +1,4 @@
-# 非空引用类型——C#8.0﻿
+# 非空引用类型——C#8.0
 
 该新增的特性最关键的作用是处理泛型和更高级 API 的使用场景。这些都是我们从 .NETCore 上注解衍生过来的经验。
 
@@ -232,7 +232,217 @@ void M(MyHandle handle)
 
 ## Nullable 后置条件：MaybeNull 和 NotNull
 
-// TODO
+请看下面代码：
+
+```c#
+public class MyArray
+{
+    // 返回结果如果不匹配则默认值
+    public static T Find<T>(T[] array, Func<T, bool> match)
+    {
+        ...
+    }
+
+    // 调用的时候不会返回 null
+    public static void Resize<T>(ref T[] array, int newSize)
+    {
+        ...
+    }
+}
+```
+
+这里会有另一个问题。我们希望在 `Find` 方法找到匹配返回 `default`，它是可 null 的引用类型。我们希望 `Resize` 方法接受一个可能为 null 的输入，但是在调用 `Resize` 之后确保我们想要的 `array` 值不是 null。同样，我们用 `notnull` 约束不能解决。
+
+这个时候输入 `[MaybeNull]` 以及 `[NotNull]` 现在就能想象输出的可为 null 了。我们只要做需要做些小修改：
+
+```c#
+public class MyArray
+{
+    [return: MaybeNull]
+    public static T Find<T>(T[] array, Func<T, bool> match)
+    {
+        ...
+    }
+
+    public static void Resize<T>([NotNull] ref T[]? array, int newSize)
+    {
+        ...
+    }
+}
+```
+
+然后我们就调用就会有这样的效果：
+
+```c#
+void M(string[] testArray)
+{
+    var value = MyArray.Find<string>(testArray, s => s == "Hello!");
+    Console.WriteLine(value.Length); // Warning: 取消引用可能出现的空引用
+
+    MyArray.Resize<string>(ref testArray, 200);
+    Console.WriteLine(testArray.Length); // Safe!
+}
+```
+
+> 注意：在 .netcore 3.0 preview 7 下，我的VS2019  16.2.3 版本中以上代码不会爆出警告，只有在当前域引用可能为 null 的引用才会暴警告：
+>
+> ```c#
+> string value = defalt;
+> Console.WriteLine(value.Length);//这里会爆出警告提示
+> ```
+>
+> 也说明了目前的版本还不完善。
+
+第一个方法指定 T 返回的能是 null 值。也就是说当使用调用这个方法返回的结果时，必须要检查值是否为 null。
+
+第二个方法有一个严格的签名：`[NotNull] ref T[]? array`。意思是 `array` 作为输入能为 null，但是当 `Resize` 被调用时，`array` 不能为 null。也就是如果你调用 `Resize` 之后你在 `array` 有引用（"."），你将不会得到一个警告。因为在 调用`Resize` 时，`array` 值永远不为 null 了。
+
+正式说：
+
+`MaybeNull`特性允许你返回可为 null 的类型，甚至这个类型不允许为 null。`NotNull`特性不允许返回的结果的为 null，甚至是本身这个类允许为 null。他们都能指定以下的任何输出上：
+
+- 方法返回
+- `out` 标记参数（在方法调用后）
+- `ref` 标记参数（在方法调用后）
+- 字段
+- 属性
+- 索引
+
+**重要提示：**这些特性仅仅只是影响对那些被注解的调用方法的调用者可为 null 性的分析。那些被注解的方法主体和类似接口实现的东西一样不遵循这个这些标签。我们也许会在下一个特性中加入。
+
+## 后置条件：MaybeNullWhen(bool) 和 NotNullWhen(bool)
+
+考虑如下代码片段：
+
+```c#
+public class MyString
+{
+    // value 为 null 时为 true
+    public static bool IsNullOrEmpty(string? value)
+    {
+        ...
+    }
+}
+
+public class MyVersion
+{
+    // 如果转换成功，Version 将不会为 null
+    public static bool TryParse(string? input, out Version? version)
+    {
+        ...
+    }
+}
+
+public class MyQueue<T>
+{
+    // 如果我们不能将它出队列，那么 result 能为 null
+    public bool TryDequeue(out T result)
+    {
+        ...
+    }
+}
+```
+
+这些方法在 .NET 随处可见，当返回值是 `true` 或 `false` 对应于参数的可为 null 性（或者可能位 null）。`MyQueue` 这个例子有点特殊，因为他是泛型的。`TryDequeque` 方法如果在它返回 `false` 时应该给 `result` 赋值为 `null`，但是这种情况只有 T 是引用类型下才可以。如果 T 是值类型 `struct` 结构体，那么它不会是 null。
+
+所以针对这种情况，我们想做以下三件事：
+
+1. 如果 `IsNullOrEmpty` 返回 `false`，那么 `value` 不会为 null
+2. 如果 `TryParse` 返回 true，那么 version 不为 null
+3. 如果 `TryDequeue` 返回 `false`，那么 `result` 能为 null，如果被提供的参数类型是引用类型的话
+
+很遗憾，C# 编译器并不会将这些方法返回的结果对于参数的可空性关联起来。
+
+现在有了 `NotNullWhen(bool)` 和 `MaybeNullWhen(bool)` 就能对参数进行更细致的处理：
+
+```c#
+public class MyString
+{
+    public static bool IsNullOrEmpty([NotNullWhen(false)] string? value)
+    {
+    	...    
+    }
+}
+
+public class MyVersion
+{
+    public static bool TryParse(string? input, [NotNullWhen(true)]out Version? version)
+    {
+        ...
+    }
+}
+
+public class MyQueue<T>
+{
+	public bool TryDequeue([MaybeNullWhen(false)] out T result)
+	{
+		...
+	}
+}
+```
+
+然后我们就可以这样调用了：
+
+```c#
+void StringTest(string? s)
+{
+    if(MyString.IsNullOrEmpty(s))
+    {
+        //这里会有警告
+        //Console.WriteLine(s.Length);
+        return;
+    }
+    Console.WriteLine(s.Length);	//安全
+}
+
+void VersionTest(string? s)
+{
+    if (!MyVersion.TryParse(s, out var version))
+    {
+        // 警告
+        // Console.WriteLine(version.Major);
+        return;
+    }
+
+    Console.WriteLine(version.Major); // Safe!
+}
+//注意 在我的实验下,以下代码并不会像文中注释中一样会产生警告
+void QueueTest(MyQueue<string> q)
+{
+    if (!q.TryDequeue(out var s))
+    {
+        // This would generate a warning:
+        // Console.WriteLine(s.Length);	//实际上在我VS中是没有警告的
+        return;
+    }
+
+    Console.WriteLine(s.Length); // Safe!
+}
+```
+
+调用者可以使用与往常一样的模式处理 api，没有来自编译器的任何警告：
+
+- 如果 `IsNullOrEmpty` 返回 `true`，那么可以安全的在 `value` 使用 "." 
+- 如果 `TryParse` 返回 `true`，`version` 成功转换并可以安全使用 “.”
+- 如果 `TryDequeue` 返回 `false`，`result` 可能为 null，所以要根据实际需要检查值（例如：当一个类型是值类型结构体时，返回 `false` 不为 null，但如果为引用类型，那么它就为 null）
+
+正式的讲：
+
+`NotNullWhen(bool)` 签名的参数是不为 null 的，甚至这个类型本身不允许为 null，条件依赖于 `bool` 方法返回的值。`MaybeNullWhen(bool)` 签名的参数能为 null，甚至是参数类型本身不允许，条件依赖于方法返回 `bool` 值。他们能指定任何参数类型。
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
