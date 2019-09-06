@@ -1,4 +1,5 @@
-﻿using CSharpGuide.LanguageVersions._8._0;
+﻿using CSharpGuide.LanguageVersions._7._0;
+using CSharpGuide.LanguageVersions._8._0;
 using System;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
@@ -7,31 +8,46 @@ using System.Threading.Tasks;
 
 namespace CSharpGuide
 {
-    class Program
+    public class Program
     {
         static void Main(string[] args)
         {
             //new Introducer().Start();
             //_ = await new AsyncStream().ConsumeStream();
-            Console.WriteLine("Hello World!");
+            //Console.WriteLine("Hello World!");
 
-            MyClass mc = new MyClass();
-            M1(mc);
-            M2(mc);
+            //MyClass mc = new MyClass();
+            //M1(mc);
+            //M2(mc);
 
-            MyClass? local = null;
-            MyClass handle = new MyClass {
-                MyValue = "marson shine"
-            };
-            HandleMethods.DisposeAndClear(ref local);   //warning CS8601 可能的 null 引用赋值
-            HandleMethods.DisposeAndClear_DisallowNull(ref handle);// 没有警告
-            Console.WriteLine(handle.MyValue);
-            string[] testArray = new string[] { "Hello!", "World" };
-            M(testArray);
-            Test();
-            //TestThrowException(null);
-            //Test_DoesNotReturnIf(null);
-            Test_NotNullIfNotNull();
+            //MyClass? local = null;
+            //MyClass handle = new MyClass {
+            //    MyValue = "marson shine"
+            //};
+            //HandleMethods.DisposeAndClear(ref local);   //warning CS8601 可能的 null 引用赋值
+            //HandleMethods.DisposeAndClear_DisallowNull(ref handle);// 没有警告
+            //Console.WriteLine(handle.MyValue);
+            //string[] testArray = new string[] { "Hello!", "World" };
+            //M(testArray);
+            //Test();
+            ////TestThrowException(null);
+            ////Test_DoesNotReturnIf(null);
+            //Test_NotNullIfNotNull();
+
+            var t = ValueTuples.Create(2);
+            //装箱
+            //var o = (object)t.Item1;
+            Console.WriteLine(t.Item1);
+            var tuple = ValueTuples.CreateTuple(2);
+            Console.WriteLine(tuple.Item1);
+            //装箱
+            //var ot = (object)tuple.Item1;
+            var value = tuple.Item1;
+            Console.WriteLine(value);
+
+            //元组解构
+            var (pd, id) = ValueTuples.Create(2, 3);
+            Console.WriteLine($"值：{pd} -- {id}");
         }
 
         public static void M1(MyClass mc)
@@ -44,7 +60,8 @@ namespace CSharpGuide
             Console.WriteLine(mc.MyValue.Length);
         }
 
-        public static void M(string[] testArray) {
+        public static void M(string[] testArray)
+        {
             //string value = MyArray.Find<string>(testArray, s => s == "Hello");
             string value = MyArray.Find<string>(testArray, s => s == "Hello!");
             Console.WriteLine(value.Length);
@@ -53,10 +70,12 @@ namespace CSharpGuide
             Console.WriteLine(testArray.Length);
         }
 
-        public static void M3([DoesNotReturnIf(false)] bool b, string s) {
+        public static void M3([DoesNotReturnIf(false)] bool b, string s)
+        {
             if (!b) throw new Exception(s);
         }
-        static void Test_DoesNotReturnIf(string? s) {
+        static void Test_DoesNotReturnIf(string? s)
+        {
             M3(s != null, s.ToString());
         }
         static void Test()
@@ -81,7 +100,8 @@ namespace CSharpGuide
             }
             Console.WriteLine(s.Length);    //安全
 
-            if (!MyVersion.TryParse(s, out var version)) {
+            if (!MyVersion.TryParse(s, out var version))
+            {
                 //这里有一个警告
                 //Console.WriteLine(version.Major);
                 return;
@@ -90,7 +110,7 @@ namespace CSharpGuide
         }
 
         static void Test_NotNullIfNotNull()
-        { 
+        {
             var s = M5();
             s.ToString();
         }
@@ -98,7 +118,8 @@ namespace CSharpGuide
         [return: NotNullIfNotNull("p")]
         static string? M5(params string?[]? p) => p?.ToString();
 
-        static void QueueTest(MyQueue<string> q) {
+        static void QueueTest(MyQueue<string> q)
+        {
             if (!q.TryDequeue(out string s))
             {
                 //警告
@@ -126,7 +147,7 @@ namespace CSharpGuide
             ThrowHelper.ThrowArgumentNullException(args);
 
             MyAssertionLibrary.MyAssert(args != null);
-            
+
         }
     }
 }
