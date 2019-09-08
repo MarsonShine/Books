@@ -9,11 +9,7 @@
   </PropertyGroup>
   
   <ItemGroup>
-    <None Remove="docs\7.0\TupleVSValueTuple.md" />
-  </ItemGroup>
-  
-  <ItemGroup>
-    <Compile Include="docs\7.0\TupleVSValueTuple.md" />
+    <Folder Include="docs\7.0\" />
   </ItemGroup>
 
 </Project>

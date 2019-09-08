@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Text;
 
 namespace CSharpGuide.LanguageVersions._7._0
@@ -20,4 +21,18 @@ namespace CSharpGuide.LanguageVersions._7._0
             return Tuple.Create(value);
         }
     }
+
+
+    //public class CustomValueTuple<T1> : ITuple
+    //{
+    //    public T1 Item1;
+    //    public object? this[int? index] {
+    //        get {
+    //            if (index != 0) throw new IndexOutOfRangeException();
+    //            return Item1;
+    //        }
+    //    }
+
+    //    public int? Length => 1;
+    //}
 }
