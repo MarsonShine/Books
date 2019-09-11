@@ -5,14 +5,14 @@ using System.Text;
 
 namespace CSharpGuide.LanguageVersions._7._0
 {
-    public interface ITuple
+    public interface IITuple
     {
         object? this[int? index] { get; }
 
         int? Length { get; }
     }
 
-    public class TupleMark : ITuple
+    public class TupleMark : IITuple
     {
         public object? this[int? index] => throw new NotImplementedException();
 

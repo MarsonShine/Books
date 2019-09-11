@@ -4,6 +4,7 @@ using System;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
+using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 
 namespace CSharpGuide
@@ -45,6 +46,14 @@ namespace CSharpGuide
             Console.WriteLine(pd);
             Console.WriteLine(id);
             Console.WriteLine($"元组解构：Item1 = {pd}, Item2= ${id}");
+
+            ITuple tp = new Tuple<int, int>(2, 3);
+            for (int i = 0; i < tp.Length; i++)
+            {
+                var temp = tp[i];
+            }
+
+            ITuple p = new ValueTuple<int, int>(1, 2);
         }
 
         public static void M1(MyClass mc)
