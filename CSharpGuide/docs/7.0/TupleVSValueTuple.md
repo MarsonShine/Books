@@ -53,4 +53,115 @@ int ITuple.Length
 }
 ```
 
-当我在官网看到
+当我在官网看到 ValueTuple 有两个属性是实现接口 ITuple 的，并且 `ITuple.Item[Int32]` 返回的是一个 `object` 对象，我下意识的反映就是难道真的会发生装箱么？仔细想想其实完全不是这样，如果是发生装箱的话，那么这个 ValueTuple 泛型就是一个多余的东西，那就跟 java 中的泛型擦除效果一样了，只是起到了一个编译期的检测作用，不能做到实质的性能提升。
+
+其实再仔细查看便会发现，我们平常引用的 ValueTuple 、Tuple 实例对象引用的 Item1、Item2 等值实际上是字段而不是属性，而这些字段在你初始化或用 `Tuple.Creat,ValueTuple.Create` 函数创建的元组 / 值元组对象时，类型以及 Item 的个数以及值就已经确定了。所以根本不会发生装箱。这一点我们从 IL 代码中就能从中得知
+
+在看 IL 之前我们先来看与 IL 对应的 C# 代码
+
+```c#
+var t = ValueTuple.Create(2, 3);
+Console.WriteLine(t.Item1);
+Console.WriteLine(t.Item2);
+Console.WriteLine($"Item1 = {t.Item1}, Item2= ${t.Item2}");
+```
+
+IL 代码：
+
+```c#
+.method private hidebysig static 
+    void Main (
+        string[] args
+    ) cil managed 
+{
+    // Method begins at RVA 0x2094
+    // Code size 72 (0x48)
+    .maxstack 3
+    .entrypoint
+    .locals init (
+        [0] valuetype [System.Runtime]System.ValueTuple`2<int32, int32> t
+    )
+
+    IL_0000: nop
+    IL_0001: ldc.i4.2
+    IL_0002: ldc.i4.3
+    IL_0003: call valuetype [System.Runtime]System.ValueTuple`2<!!0, !!1> [System.Runtime]System.ValueTuple::Create<int32, int32>(!!0, !!1)
+    IL_0008: stloc.0
+    IL_0009: ldloc.0
+    IL_000a: ldfld !0 valuetype [System.Runtime]System.ValueTuple`2<int32, int32>::Item1
+    IL_000f: call void [System.Console]System.Console::WriteLine(int32)
+    IL_0014: nop
+    IL_0015: ldloc.0
+    IL_0016: ldfld !1 valuetype [System.Runtime]System.ValueTuple`2<int32, int32>::Item2
+    IL_001b: call void [System.Console]System.Console::WriteLine(int32)
+    IL_0020: nop
+    IL_0021: ldstr "Item1 = {0}, Item2= ${1}"
+    IL_0026: ldloc.0
+    IL_0027: ldfld !0 valuetype [System.Runtime]System.ValueTuple`2<int32, int32>::Item1
+    IL_002c: box [System.Runtime]System.Int32
+    IL_0031: ldloc.0
+    IL_0032: ldfld !1 valuetype [System.Runtime]System.ValueTuple`2<int32, int32>::Item2
+    IL_0037: box [System.Runtime]System.Int32
+    IL_003c: call string [System.Runtime]System.String::Format(string, object, object)
+    IL_0041: call void [System.Console]System.Console::WriteLine(string)
+    IL_0046: nop
+    IL_0047: ret
+} // end of method Program::Main
+```
+
+这样我们就能很清楚的知道元组里面的细节了，我们平常取的都是元组 / 值元组的字段，并且 Main 函数开头的 `managed` 标识就代表这是托管资源。值得注意的是 IL_002c 处的装箱只是由于 Console.WriteLine 导致的装箱。
+
+## 元组解构
+
+我们知道 C#7 支持了元组结构了，可以支持我们对元组字段 Item 进行表意话，这样更能提高阅读性和代码美观。那么元组结构跟之前直接引用的字段值变量 Item 有什么区别呢？这一点我们也可以直接从 IL 上轻易得知。
+
+```c#
+var (pd, id) = ValueTuples.Create(2, 3);
+Console.WriteLine(pd);
+Console.WriteLine(id);
+Console.WriteLine($"元组解构：Item1 = {pd}, Item2= ${id}");
+
+//IL
+// Methods
+.method private hidebysig static 
+    void Main (
+        string[] args
+    ) cil managed 
+{
+    // Method begins at RVA 0x2094
+    // Code size 64 (0x40)
+    .maxstack 3
+    .entrypoint
+    .locals init (
+        [0] int32 pd,
+        [1] int32 id
+    )
+
+    IL_0000: nop
+    IL_0001: ldc.i4.2
+    IL_0002: ldc.i4.3
+    IL_0003: call valuetype [System.Runtime]System.ValueTuple`2<!!0, !!0> CSharpGuide.LanguageVersions._7._0.ValueTuples::Create<int32>(!!0, !!0)
+    IL_0008: dup
+    IL_0009: ldfld !0 valuetype [System.Runtime]System.ValueTuple`2<int32, int32>::Item1
+    IL_000e: stloc.0
+    IL_000f: ldfld !1 valuetype [System.Runtime]System.ValueTuple`2<int32, int32>::Item2
+    IL_0014: stloc.1
+    IL_0015: ldloc.0
+    IL_0016: call void [System.Console]System.Console::WriteLine(int32)
+    IL_001b: nop
+    IL_001c: ldloc.1
+    IL_001d: call void [System.Console]System.Console::WriteLine(int32)
+    IL_0022: nop
+    IL_0023: ldstr "元组解构：Item1 = {0}, Item2= ${1}"
+    IL_0028: ldloc.0
+    IL_0029: box [System.Runtime]System.Int32
+    IL_002e: ldloc.1
+    IL_002f: box [System.Runtime]System.Int32
+    IL_0034: call string [System.Runtime]System.String::Format(string, object, object)
+    IL_0039: call void [System.Console]System.Console::WriteLine(string)
+    IL_003e: nop
+    IL_003f: ret
+} // end of method Program::Main
+```
+
+发现了没有，这段 IL 与之前的一模一样，没任何区别。
