@@ -11,7 +11,7 @@ SomeOperationAsync().ContinueWith(task =>{
     try {
         TResult result = task.Result;
         UseResult(result);
-    }catch (Exception e) {
+    } catch (Exception e) {
         HandleException(e);
     }
 })
@@ -109,5 +109,51 @@ public override ValueTask<int> ReadAsync(byte[] buffer, int offset, int count)
     }
 }
 ```
+
+## ValueTask<TResult> 和 异步完成
+
+为了写一个异步方法不需要为结果类型占用额外的分配的情况下完成同步，是一个巨大的胜利。这就是为什么我们把 `ValueTask<TResult>` 添加到 .NET Core 2.0 的原因以及为什么我们期望去使用的新的方法返回 `ValueTask<TResult>` 而不是 `Task<TResult>`。例如，当我们添加新的 `ReadAsync` 重载函数到 `Stream` 类中是为了能够传递给 `Memory<byte>` 而不是 `byte[]`，我们使它返回的类型是 `ValueTask<TResult>`。这样，Stream（它提供 `ReadAsync` 同步完成方法）和之前的 `MemoryStream` 的例子一样，使用这个签名（ValueTask）能够减少内存分配。
+
+然而，工作在高吞吐的服务时，我们还是要考虑尽可能的减少分配，也就是说要考虑减少以及移除异步完成相关的内存分配。
+
+对于 `await` 模式，对于所有的异步完成的操作，我们都需要能够去处理返回表示完成事件的操作的对象：调用者必须能够传递当操作完成时要被调用的回调函数以及要求有一个唯一对象能够被重用，这需要有一个唯一的对象在堆上，它能够作为特定操作的管道。但是，这并不以为这一旦这个操作完成所有关于这个对象都能被重用。如果这个对象能够被重用，那么这个 API 维护一个或多个这样对象的缓存，并且为序列化操作重用，这意思就是说不能使用相同对象到多次异步操作，但是对于非并发访问是可以重用的。
+
+在 .NET Core 2.1，`ValueTask<TResult>` 增强功能支持池化和重用。而不只是包装 `TResult` 或 `Task<TResult>`，y引入了一个新的接口，`IValueTaskSource<TResult>`，增强 `ValueTask<TResult>` 能够包装的很好。`IValueTaskSource<TResult>` 提供必要的核心的支持，以类似于 `Task<TResult>` 的方式来表示 `ValueTask<TResult>` 的异步操作：
+
+```c#
+public interface IValueTaskSource<out TResult>
+{
+	ValueTaskSourceStatus GetStatus(short token);
+	void OnCompleted(Action<object> continuation, object state, short token, ValueTaskSourceOmCompletedFlags flags);
+	TResult GetResult(short token);
+}
+```
+
+`GetStatus` 用来满足像 `ValueTask<TResult>.Completed` 等属性，返回一个表示异步操作是否正在执行中还是是否完成还是怎么样（成功或失败）。`OnCompleted` 是被 `ValueTask<TResult>` 的可等待者用于当操作完成时，从 `await` 中挂起的回调函数继续运行。`GetResult` 用于获取操作的结果，就像操作完成后，等待着能够获得 `TResult` 或传播可能发生的所有异常。
+
+绝大多数开发者不需要去看这个接口：方法简单返回一个 `ValueTask<TResult>`，它被构造去包装这个接口的实例，消费者并不知情（consumer is none-the-wiser）。这个接口主要就是让开发者关注性能的 API 能够避免内存分配。
+
+在 .NET Core 2.1 有一些这样的 API。最值得注意的是 `Socket.ReceiveAsync` 和 `Socket.SendAsync`，有新增的重载，例如
+
+```c#
+public ValueTask<int> ReceiveAsync(Momory<byte> buffer, SocketFlags socketFlags, CancellationToken cancellationToken = default);
+```
+
+这个重载返回 `ValueTask<int>`。如果这个操作同步 完成，它能构造一个 `ValueTask<int>` 并得到一个合适的结果。
+
+```c#
+int result = ...;
+return new ValueTask<int>(result);
+```
+
+`Socket` 实现了维护一个用于接收和一个用来发送的池对象，这样每次每个完成的对象不超过一个，这些重载函数都是 0 分配的，甚至是它们完成了异步操作。然后 `NetworkStream` 就出现了。举个例子，在 .NET Core 2.1 中 `Stream` 暴露这样一个方法：
+
+```c#
+public virtual ValueTask<int> ReadAsync(Memory<byte> buffer, cancellationToken cancellationToken);
+```
+
+这个复写方法 `NetworkStream`。`NetworkStream.ReadAsync` 只是委托给 `Socket.ReceiveAsync`，所以从 `Socket` 转成 `NetworkStream`，并且 `NetworkStream.ReadAsync` 是高效的，无分配的。
+
+## 非泛型 ValueTask
 
 //TODO
