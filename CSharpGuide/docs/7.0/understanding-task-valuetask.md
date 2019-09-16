@@ -156,4 +156,95 @@ public virtual ValueTask<int> ReadAsync(Memory<byte> buffer, cancellationToken c
 
 ## 非泛型 ValueTask
 
-//TODO
+当 .NET Core 2.0 引入 `ValueTask<TResult>` ，它纯碎是为了优化同步完成的情况下，为了避免分配一个 `Task<TResult>` 存储可用的 `TResult`。这也就是说非泛型的 `ValueTask` 是不必要的：对于同步完成的情况，从 `Task` 返回的方法返回 `Task.CompletedTask` 单例，并且为 `async Task` 方法在运行时隐式的返回。
+
+随着异步方法零开销的实现，非泛型 `ValueTask` 变得再次重要起来。因此，在 .NET Core 2.1 中，我们也引入了非泛型的 `ValueTask` 和 `IValueTaskSource`。它们提供泛型的副本版本，相同方式使用，在 void 类型使用。
+
+## IValueTaskSource / IValueTaskSource<T> 实现
+
+大多数开发者不需要实现这些接口。它们也不是那么容易实现的。如果你需要这么做，在 .NET Core 2.1 有一些内部实现作为参考。例如：
+
+- [AwaitableSocketAsyncEventArgs](https://github.com/dotnet/corefx/blob/61f51e6b2b26271de205eb8a14236afef482971b/src/System.Net.Sockets/src/System/Net/Sockets/Socket.Tasks.cs#L808)
+- [AsyncOperation](https://github.com/dotnet/corefx/blob/89ab1e83a7e00d869e1580151e24f01226acaf3f/src/System.Threading.Channels/src/System/Threading/Channels/AsyncOperation.cs#L37)<TResult>
+- [DefaultPipeReader](https://github.com/dotnet/corefx/blob/a10890f4ffe0fadf090c922578ba0e606ebdd16c/src/System.IO.Pipelines/src/System/IO/Pipelines/Pipe.DefaultPipeReader.cs#L16)
+
+为了让开发者想做的更加简单，在 .NET Core 3.0 中，我们计划引入所有封装这些逻辑到 `ManualResetValueTaskSource<TResult>` 类中去，这是一个结构体，能被封装到另一个对象中，这个对象实现了 `IValueTaskSource<TResult>` 以及/或者 `IValueTaskSource`，这个包装类简单的将大部分实现委托给结构体即可。要了解更多相关的问题，详见 dotnet/corefx 仓库中的 [issues](https://github.com/dotnet/corefx/issues/32664)。
+
+## ValueTasks 有效的消费模式
+
+从表面上来看，`ValueTask` 和 `ValueTask<TResult>` 要比 `Task` 和 `Task<TResult>` 更加有限。没错，这个方法主要的消费就是简单的等待它们。
+
+但是，因为 `ValueTask` 和 `ValueTask<TResult>` 可能封装可重用的对象，因此与 `Task` 和 `Task<TResult>` 相比，如果有人偏离期望的路径而只是等待它们，它们的消耗实际上受到了很大的限制。一般的，像下面的操作永远不会执行在 `ValueTask / ValueTask<TResult>` 上：
+
+- 等待 `ValueTask / ValueTask<TResult>` 多次。底层对象可能已经回收了并被其他操作使用。与之对比，`Task / Task<TResult>` 将永不会把从完成状态转成未完成状态，所以你能根据需要等待多次，并每次总是能得到相同的结果。
+- 并发等待 `ValueTask / ValueTask<TResult>`。底层对象期望一次只在从单个消费者的回调函数执行，如果同时等待它很容易发生条件争用以及微妙的程序错误。这也是上述操作具体的例子：“等待 `ValueTask / ValueTask<TResult>` 多次。”，相反，`Task / Task<TResult>` 支持任何数量并发的等待。
+- 当操作还没完成时调用 `.GetAwaiter().GetResult()`。`IValueTaskSource / IValueTaskSource<TResult>` 的实现在操作还没完成之前是不需要支持阻塞的，并且很可能不会，这样的操作本质上就是条件争用，不太可能按照调用者的意图调用。相反，`Task / Task<TResult>` 能够这样做，阻塞调用者一直到任务完成。
+
+如果你在使用 `ValueTask / ValueTask<TResult>` 以及你需要去做上述提到的，你应该使用它的 `.AsTask()` 方法获得 `Task / Task<TResult>`，然后方法会返回一个 Task 对象。在那之后，你就不能再次使用 `ValueTask / ValueTask<TResult>`。
+
+简而言之：对于 `ValueTask / ValueTask<TResult>`，你应该要么直接 `await` （可选 `.ConfigureAwait(false)`）要么调用直接调用 `AsTask()`，并且不会再次使用它了。
+
+```c#
+// 给定一个返回 ValueTask<int> 的方法
+public ValueTask<int> SomeValueTaskReturningMethodAsync();
+...
+// GOOD
+int result = await SomeValueTaskReturningMethodAsync();
+// GOOD
+int result = await SomeValueTaskReturningMethodAsync().ConfigureAwait(false);
+// GOOD
+Task<int> t = SomeValueTaskReturningMethodAsync().AsTask();
+// WARNING
+ValueTask<int> vt = SomeValueTaskReturningMethodAsync();
+... // 存储实例至本地变量会使它更加可能会被滥用
+	// 但是这样写还是 ok 的
+// BAD：等待多次
+ValueTask<int> vt = SomeValueTaskReturningMethodAsync();
+int result = await vt;
+int result2 = await vt;
+// BAD: 并发等待（并且根据定义，多次等待）
+ValueTask<int> vt = SomeValueTaskReturningMethodAsync();
+Task.Run(async () => await vt);
+Task.Run(async () => await vt);
+// BAD: 在不知何时完成时使用 GetAwaiter().GetResult() 
+ValueTask<int> vt = SomeValueTaskReturningMethodAsync();
+int result = vt.GetAwaiter().GetResult();
+```
+
+还有一个高级模式开发者可以选择使用，在自己衡量以及能找到它提供的好处才使用它。
+
+特别的，`ValueTask / ValueTask<TResult>` 提供了一些属性，他们能表明当前操作的状态，例如如果操作还没完成， `IsCompleted` 属性返回 `false` ，以及如果完成则返回 `true`（意思是不会长时间运行以及可能成功完成或相反），如果只有在成功完成时（企图等待它或访问非抛出来的异常的结果）`IsCompletedSuccessfully` 属性返回 `true` 。对于开发者所想的所有热路径，举个例子：开发者想要避免一些额外的开销，而这些开销只在一些必要的径上才会有，可以在执行这些操作之前检查这些属性，这些操作实际上使用 `ValueTask / ValueTask<TResult>`，如 `.await,.AsTask()`。例如，在 .NET Core 2.1 中 `SocketsHttpHandler` 的实现，代码对连接读操作，它返回 `ValueTask<int>`。如果操作同步完成，那么我们无需担心这个操作是否能被取消。但是如果是异步完成的，那么在正在运行时，我们想要取消操作，那么这个取消请求将会关闭连接。这个代码是非常常用的，并且分析显示它只会有一点点不同，这个代码本质上结构如下：
+
+```c#
+int bytesRead;
+{
+    ValueTask<int> readTask = _connection.ReadAsync(buffer);
+    if(readTask.IsCompletedSuccessfully)
+    {
+        bytesRead = readTask.Result;
+    }
+    else
+    {
+        using(_connection.RegisterCancellation())
+        {
+            bytesRead = await readTask;
+        }
+    }
+}
+```
+
+这种模式是可接受的，因为 `ValueTask<int>` 是不会在调用 `.Result` 或 `await` 之后再次使用的。
+
+## 是否每个新的异步 API 都应返回 ValueTask / ValueTask<TResult> ?
+
+不！默认的选择任然还是 `Task / Task<TResult>`。
+
+正如上面强调的，`Task / Task<TResult>` 要比 `ValueTask / ValueTask<TResult>` 更容易正确使用，除非性能影响要大于可用性影响，`Task / Task<TResult>` 任然是优先考虑的。返回 `ValueTask<TResult>` 取代 `Task<TResult>` 会有一些较小的开销，例如在微基准测试中，等待 `Task<TResult>` 要比等待 `ValueTask<TResult>` 快，所以如果你要使用缓存任务（如你返回 `Task / Task<bool>` 的 API），在性能方面，坚持使用 `Task / Task<TResult>` 可能会更好。`ValueTask / ValueTask<TResult>` 也是多字相同大小的，在他们等待的时候，它们的字段存储在一个正在调用异步方法的状态机中，它们会在相同的状态机中消耗更多的空间。
+
+然而，`ValueTask / ValueTask<TResult>` 有时也是更好的选择，a）你期望在你的 API 中只用直接 `await` 他们，b）在你的 API 避免相关的分配开销是重要的，c）无论你是否期望同步完成是通用情况，你都能够有效的将对象池用于异步完成。当添加 `abstract,virtual,interface` 方法时，你也需要考虑这些场景将会在复写/实现中存在。
+
+## ValueTask 和 ValueTask<TResult> 的下一步是什么？
+
+对于 .NET 核心库，我们讲会继续看到新的 API 返回 `Task / ValueTask<TResult>`，但是我们也能看到在合适的地方返回 `ValueTask / ValueTask<TResult>` 的 API。据其中一个关键的例子，计划在 .NET Core 3.0 提供新的 `IAsyncEnuerator `支持。`IEnumerator<T>` 暴露了一个返回 `bool` 的`MoveNext` 方法，并且异步 `IAsyncEnumerator<T>` 提供了 `MoveNextAsync` 方法。当我们初始化开始设计这个特性的时候，我们想过 `MoveNextAsync` 返回 `Task<bool>`，这样能够非常高效对比通用的 `MoveNextAsync` 同步完成的情况。但是，考虑到我们期望的异步枚举影响是很广泛的，并且它们都是基于接口，会有很多不同的实现（其中一些可能非常关注性能和内存分配），考虑到绝大多数的消费者都将通过 `await fearch` 语言支持，我们将 `MoveNextAsync` 改成返回类型为 `ValueTask<bool>`。这样就允许在同步完成场景下更快，也能优化实现可重用对象能够使异步完成更加减少分配。实际上，当实现异步迭代器时，C# 编译器就会利用这点能让异步迭代器尽可能降低分配。
+
+原文地址：https://devblogs.microsoft.com/dotnet/understanding-the-whys-whats-and-whens-of-valuetask/
