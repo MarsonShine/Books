@@ -69,3 +69,14 @@
 - CCP（共同闭包原则）：将同时修改，并且是为了相同目的的修改的类放到同一个组件中，将不会同时修改的，且修改的目的不同的类拆分到不同的组件中去。
 - CRP（共同复用原则）：不要依赖不需要的东西（类和方法）
 
+## 组件耦合
+
+- ADP Acyclic Dependency Principle（无依赖环原则）
+
+- DIP Dependent inversion of control（依赖反转原则）
+
+- SDP Stabilization Dependency Principle（稳定依赖原则）
+
+- SAP Stabilization Abstract Principle（稳定抽象原则）
+
+  
