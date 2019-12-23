@@ -50,6 +50,7 @@
 - **CoA**：转交地址
 - **CoT**：转交测试
 - **CoTI**：转交测试初始化
+- **CSR：**classless static router，无分类静态路由
 
 ## <a id="D">D</a>
 
@@ -60,6 +61,8 @@
 - **DIFCS**：distributed inter-frame spacing，分布式帧间间隔（802.11 DCF 帧之间的时间）
 - **DHCP**：dynamic host configuration protocol，动态主机配置协议：BOOTP 演变而来，使用配置信息来建立系统，例如租用的IP地址、默认路由器以及DNS服务器的IP地址
 - **DTCP**：动态隧道配置协议
+- **DAD：** duplication address detection，重复地址检测 
+- **DUID：** DHCP unique identity，DHCP 唯一标识符
 
 ## <a id="E">E</a>
 
@@ -101,6 +104,8 @@
 - 
 - **IPV6CP**：IP 控制协议（在 PPP 中一种用于配置 IPv6 网络链路的 NCP）
 - **ISM**：industry science medicine，工业、科学和医疗（世界上许多地区免许可证的频段，为 Wi-Fi 所用）
+- **IA：** identity  associated，身份关联
+- **IAID：** identity association identity，IA 标识符
 
 ## <a id="J">J</a>
 ## <a id="K">K</a>

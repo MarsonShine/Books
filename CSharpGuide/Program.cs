@@ -4,6 +4,7 @@ using System;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
+using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 
 namespace CSharpGuide
@@ -34,20 +35,25 @@ namespace CSharpGuide
             ////Test_DoesNotReturnIf(null);
             //Test_NotNullIfNotNull();
 
-            var t = ValueTuples.Create(2);
-            //装箱
-            //var o = (object)t.Item1;
-            Console.WriteLine(t.Item1);
-            var tuple = ValueTuples.CreateTuple(2);
-            Console.WriteLine(tuple.Item1);
-            //装箱
-            //var ot = (object)tuple.Item1;
-            var value = tuple.Item1;
-            Console.WriteLine(value);
+            //var t = ValueTuple.Create(2, 3);
+            //Console.WriteLine(t.Item1);
+            //Console.WriteLine(t.Item2);
+            //Console.WriteLine($"Item1 = {t.Item1}, Item2= ${t.Item2}");
+
 
             //元组解构
             var (pd, id) = ValueTuples.Create(2, 3);
-            Console.WriteLine($"值：{pd} -- {id}");
+            Console.WriteLine(pd);
+            Console.WriteLine(id);
+            Console.WriteLine($"元组解构：Item1 = {pd}, Item2= ${id}");
+
+            ITuple tp = new Tuple<int, int>(2, 3);
+            for (int i = 0; i < tp.Length; i++)
+            {
+                var temp = tp[i];
+            }
+
+            ITuple p = new ValueTuple<int, int>(1, 2);
         }
 
         public static void M1(MyClass mc)
