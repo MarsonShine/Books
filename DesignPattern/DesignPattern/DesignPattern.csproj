@@ -1,0 +1,80 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProjectGuid>{148336F0-3340-4221-AAD4-78CB83BF2404}</ProjectGuid>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>DesignPattern</RootNamespace>
+    <AssemblyName>DesignPattern</AssemblyName>
+    <TargetFrameworkVersion>v4.5.2</TargetFrameworkVersion>
+    <FileAlignment>512</FileAlignment>
+    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Xml.Linq" />
+    <Reference Include="System.Data.DataSetExtensions" />
+    <Reference Include="Microsoft.CSharp" />
+    <Reference Include="System.Data" />
+    <Reference Include="System.Net.Http" />
+    <Reference Include="System.Xml" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Bridge\HandsetAddressList.cs" />
+    <Compile Include="Bridge\HandsetBrand.cs" />
+    <Compile Include="Bridge\HandsetBrandM.cs" />
+    <Compile Include="Bridge\HandsetBrandN.cs" />
+    <Compile Include="Bridge\HandsetGame.cs" />
+    <Compile Include="Bridge\HandsetSoft.cs" />
+    <Compile Include="ChainOfResponsibility\CommonManager.cs" />
+    <Compile Include="ChainOfResponsibility\GeneralManager.cs" />
+    <Compile Include="ChainOfResponsibility\Majordomo.cs" />
+    <Compile Include="ChainOfResponsibility\Manager.cs" />
+    <Compile Include="ChainOfResponsibility\Request.cs" />
+    <Compile Include="Decorator\BigTrouser.cs" />
+    <Compile Include="Decorator\Finery.cs" />
+    <Compile Include="Decorator\Person.cs" />
+    <Compile Include="Decorator\TShirts.cs" />
+    <Compile Include="Program.cs" />
+    <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Proxy\IGiveGift.cs" />
+    <Compile Include="Proxy\Proxy.cs" />
+    <Compile Include="Proxy\Pursuit.cs" />
+    <Compile Include="Proxy\SchoolGirl.cs" />
+    <Compile Include="Visitor\Action.cs" />
+    <Compile Include="Visitor\Amativeness.cs" />
+    <Compile Include="Visitor\Failing.cs" />
+    <Compile Include="Visitor\Man.cs" />
+    <Compile Include="Visitor\ObjectStructure.cs" />
+    <Compile Include="Visitor\Person.cs" />
+    <Compile Include="Visitor\Success.cs" />
+    <Compile Include="Visitor\Woman.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="App.config" />
+  </ItemGroup>
+  <ItemGroup />
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+</Project>
