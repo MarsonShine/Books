@@ -5,6 +5,10 @@ namespace DesignPatternCore.Strategy {
             _strategy = strategy;
         }
 
+        public StrategyContext(Factory.FileType fileType) {
+
+        }
+
         public void DoWork(string filePath) {
             _strategy.Convert(filePath);
         }

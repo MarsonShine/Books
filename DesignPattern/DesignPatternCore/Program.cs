@@ -8,6 +8,7 @@ using DesignPatternCore.ChainOfResponsibility;
 using DesignPatternCore.Decorator;
 using DesignPatternCore.Factory;
 using DesignPatternCore.Proxy;
+using DesignPatternCore.Strategy;
 using DesignPatternCore.Visitor;
 
 namespace DesignPatternCore {
@@ -91,6 +92,16 @@ namespace DesignPatternCore {
             fileType = Enum.Parse<FileType>("Wps");
             var wpsConvertor = PdfConvertorFactory.Create(fileType);
             wpsConvertor.Convert("example.wps");
+
+            // 策略模式
+            var vertor = new Strategy.WordToPdfConvertor();
+            var strategy = new StrategyContext(vertor);
+            strategy.DoWork("example.docx");
+            var excel = new Strategy.ExcelToPdfConvertor();
+            strategy = new StrategyContext(excel);
+            strategy.DoWork("example.xlsx");
+            // 策略模式+工厂模式 封装部分相同逻辑，又有部分业务不同的逻辑变化
+
         }
     }
 }
