@@ -85,3 +85,60 @@ public class PdfConvertorFactory {
 ```
 
 这就是我们平时最常用到的工厂模式。
+
+## 策略模式
+
+抽象工厂我们还暂且不提，这里其实我们还可以用另外一种模式，来避免增加一个类我们就要在 `switch case` 块修改代码，并且还要修改枚举类的值（不用枚举，用其他方法也是如此，比如用字符串代替枚举）。
+
+只需要做些微的改动即可，接口和其具体实现类还是保持不变
+
+```c#
+public interface IFileConvertor {
+  	void Convert(string filePath);
+}
+
+// implement
+public class WordToPdfConvertor : IFileConvertor {
+    public void Convert(string filePath) {
+        Console.WriteLine("strategy:word to pdf success!");
+    }
+}
+
+public class ExcelToPdfConvertor : IFileConvertor {
+    public void Convert(string filePath) {
+        Console.WriteLine("strategy:excel to pdf success!");
+    }
+}
+```
+
+接下来我们就要新增一个上下文**来应付不同需求具体执行不同的业务逻辑**
+
+```c#
+public class FileConvertorContext {
+  private readonly IFileConvertor _convertor;
+  
+  public FileConvertorContext(IFileConvertor converotr)
+  {
+    	_convertor = convertor;
+  }
+  
+  public void Execute(string filePath)
+  {
+    	_convertor.Convert(filePath);
+  }
+}
+```
+
+这样我们调用就只需要像下面这样：
+
+```c#
+WordToPdfConvertor word = new WordToPdfConvertor();
+var fileConvertor = new FileConvertorContext(word);
+fileConvertor.Execute("example.docx");
+
+ExcelToPdfConvertor excel = new ExcelToPdfConvertor();
+fileConvertor = new FileConvertorContext(excel);
+fileConvertor.Execute("example.xlsx");
+```
+
+这样我们共同的转换文件格式方法抽象成接口，然后根据实际业务的不同，具体执行到不同的实现类中。这样也做到了可插拔的，符合 OCP 原则。这样即便是多了另外一种文件转换需求，这种写法也不会影响到客户端，这样就能做到“热更新”了。
