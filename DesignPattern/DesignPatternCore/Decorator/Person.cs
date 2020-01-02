@@ -4,20 +4,16 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace DesignPatternCore.Decorator
-{
-    class Person
-    {
+namespace DesignPatternCore.Decorator {
+    class Person {
         public Person() { }
 
         private string m_name;
-        public Person(string name)
-        {
+        public Person(string name) {
             m_name = name;
         }
 
-        public virtual void Show()
-        {
+        public virtual void Show() {
             Console.WriteLine($"妆扮的{m_name}");
         }
     }

@@ -1,4 +1,5 @@
-﻿using System;
+﻿#define DECORATOR
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -7,6 +8,7 @@ using DesignPatternCore.Bridge;
 using DesignPatternCore.ChainOfResponsibility;
 using DesignPatternCore.Decorator;
 using DesignPatternCore.Factory;
+using DesignPatternCore.Factory.AbstractFactory;
 using DesignPatternCore.Proxy;
 using DesignPatternCore.Strategy;
 using DesignPatternCore.Visitor;
@@ -15,7 +17,7 @@ namespace DesignPatternCore {
     class Program {
         static void Main(string[] args) {
 #if DECORATOR
-            Person ms = new Person("MarsonShine");
+            Decorator.Person ms = new Decorator.Person("MarsonShine");
             Console.WriteLine("\n 第一种妆扮：");
             TShirts dtx = new TShirts();
             BigTrouser bt = new BigTrouser();
@@ -101,6 +103,11 @@ namespace DesignPatternCore {
             strategy = new StrategyContext(excel);
             strategy.DoWork("example.xlsx");
             // 策略模式+工厂模式 封装部分相同逻辑，又有部分业务不同的逻辑变化
+
+            // 抽象工厂模式
+            IConvertorFactory factory = new WordToPdfConvertorFactory();
+            Console.WriteLine("==========抽象工厂============");
+            factory.Create().Convert("example.docx");
 
         }
     }
