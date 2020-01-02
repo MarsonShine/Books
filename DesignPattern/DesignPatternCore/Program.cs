@@ -9,6 +9,7 @@ using DesignPatternCore.ChainOfResponsibility;
 using DesignPatternCore.Decorator;
 using DesignPatternCore.Factory;
 using DesignPatternCore.Factory.AbstractFactory;
+using DesignPatternCore.Property;
 using DesignPatternCore.Proxy;
 using DesignPatternCore.Strategy;
 using DesignPatternCore.Visitor;
@@ -108,7 +109,19 @@ namespace DesignPatternCore {
             IConvertorFactory factory = new WordToPdfConvertorFactory();
             Console.WriteLine("==========抽象工厂============");
             factory.Create().Convert("example.docx");
-
+            // 原型模式
+            Console.WriteLine("==========原型模式============");
+            Resume r = new Resume("marson shine");
+            r.SetPersonalInfo("男", "27");
+            r.SetWorkExperience("6", "kingdee.cpl");
+            r.Display();
+            // 如果我要复制三个 Resume，则不需要实例化三次，而是调用Clone()即可
+            var r2 = (Resume) r.Clone();
+            var r3 = (Resume) r.Clone();
+            r2.SetWorkExperience("5", "yhglobal.cpl");
+            r2.Display();
+            r3.SetWorkExperience("3", "che100.cpl");
+            r3.Display();
         }
     }
 }
