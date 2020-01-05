@@ -151,3 +151,45 @@ public class ComputerCityBoss {
 }
 ```
 
+# 再来看.NETCore源码加深学习
+
+我们在可以通过一些优秀的框架的源码来学习加深我们对知识点的理解。
+
+在 .netcore 中，Builder 模式是很常见的。相信很多人都知道 .netcore 启动程序就是用 Builder 模式：
+
+```c#
+public class Program {
+    public static void Main(string[] args) {
+        CreateHostBuilder(args).Build().Run();
+    }
+
+    public static IHostBuilder CreateHostBuilder(string[] args) =>
+        Host.CreateDefaultBuilder(args)
+        .ConfigureWebHostDefaults(webBuilder => {
+            webBuilder.UseStartup<Startup>();
+        });
+}
+```
+
+其中 IHostBuilder 就是一个构造者。我们来看默认实现者 HostBuilder 的源代码：
+
+```c#
+public IHost Build()
+{
+    if (_hostBuilt)
+    {
+        throw new InvalidOperationException("Build can only be called once.");
+    }
+    _hostBuilt = true;
+
+    BuildHostConfiguration();
+    CreateHostingEnvironment();
+    CreateHostBuilderContext();
+    BuildAppConfiguration();
+    CreateServiceProvider();
+
+    return _appServices.GetRequiredService<IHost>();
+}
+```
+
+很明显，它所做的就跟我们之前讲的例子 —— AbstractFullComputerBuilder 做的是一样的。都了为了构成一个完整的对象，内部组织了很多的模块。而外部客户端（Program）根本不需要知道其内部的具体细节，只负责调用 Builder 即可。
