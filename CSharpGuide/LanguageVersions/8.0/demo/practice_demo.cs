@@ -8,7 +8,7 @@ namespace CSharpGuide.LanguageVersions._8._0.demo
     // https://codeblog.jonskeet.uk/2019/05/25/lying-to-the-compiler/
     public sealed class Address
     {
-
+        public string State { get; set; }
     }
 
     public sealed class Person {
