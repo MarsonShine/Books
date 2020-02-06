@@ -9,6 +9,7 @@ using DesignPatternCore.ChainOfResponsibility;
 using DesignPatternCore.Decorator;
 using DesignPatternCore.Factory;
 using DesignPatternCore.Factory.AbstractFactory;
+using DesignPatternCore.Observer;
 using DesignPatternCore.Property;
 using DesignPatternCore.Proxy;
 using DesignPatternCore.Strategy;
@@ -122,6 +123,16 @@ namespace DesignPatternCore {
             r2.Display();
             r3.SetWorkExperience("3", "che100.cpl");
             r3.Display();
+
+            // 观察者模式
+            Console.WriteLine("==========观察者模式============");
+            StudentOnDuty studentOnDuty = new StudentOnDuty();
+            var student = new StudentObserver("marson shine", studentOnDuty);
+            studentOnDuty.Attach(student);
+            studentOnDuty.Attach(new StudentObserver("summer zhu", studentOnDuty));
+            studentOnDuty.Notify();
+            studentOnDuty.UpdateEvent += student.Update;
+            Console.WriteLine("==========观察者模式============");
         }
     }
 }
