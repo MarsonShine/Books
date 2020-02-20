@@ -1,3 +1,5 @@
+using System;
+
 namespace CSharpGuide.LanguageVersions.Seven.Two {
     /// <summary>
     /// Span<T> 表示一段连续内存的对象，因为是 ref struct 类型，所以该对象只能分配在栈上
