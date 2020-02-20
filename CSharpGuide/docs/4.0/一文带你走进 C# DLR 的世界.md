@@ -57,7 +57,7 @@ void DynamicMethod(dynamic d);	// error 编译器无法通过编译:已经存在
 
 在这里我引用 https://www.codeproject.com/Articles/42997/NET-4-0-FAQ-Part-1-The-DLR 这片文章的一副结构图的意思
 
-![dlr](/Users/summer/Desktop/毛帅/MSProject/Books/CSharpGuide/docs/4.0/dlr.jpg)
+![dlr](dlr.jpg)
 
 ```
 动态编程 = CLR + DLR
