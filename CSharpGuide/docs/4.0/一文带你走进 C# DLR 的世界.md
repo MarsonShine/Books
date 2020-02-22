@@ -110,7 +110,94 @@ DLR运行过程我们总结起来就是，在运行时DLR利用编译运行期�
 
 现在我们就知道了为什么DLR能干出与反射相同的效果，但是性能要远比反射要高的原因了。
 
+# 补充说明
 
+刚看到评论里的同学提到了reflection与dynamic的性能测试比较，发现反射性能占据明显的优势。事实上，从那个例子来看，恰恰说明了DLR的问题。这里我先列出他的测试代码
+
+```c#
+const int Num = 1000 * 100;
+{
+    var mi = typeof(XXX).GetMethod("Go");
+    var go1 = new XXX();
+    for (int i  = 0; i  < Num; i++)
+    {
+        mi.Invoke(go1, null);
+    }
+}
+{
+    dynamic go1 = new XXX();
+    for (int i  = 0; i  < Num; i++)
+    {
+        go1.Go();
+    }
+}
+```
+
+在这个测试中，已经将反射出来的元数据信息缓存到局部变量 mi，所以在调用方法的时候，实际上用到的是已经缓存下来的 mi。那么在没有缓存优势的情况，说明DLR性能是不如 `MethodInfo+Invoke` 的。
+
+其实在文章总结的时候也强调了，**利用缓存机制达到多次重复计算的重用**来提高性能
+
+那么我们在看一个例子：
+
+```c#
+public void DynamicMethod(Foo f) {
+    dynamic d = f;
+    d.DoSomething();
+}
+
+public void ReflectionMethod(Foo f) {
+    var m = typeof(Foo).GetMethod("DoSomething");
+    m?.Invoke(f, null);
+}
+```
+
+方法 DoSomething 只是一个空方法。现在我们来看执行结果
+
+```c#
+// 执行时间
+var f = new Foo();
+Stopwatch sw = new Stopwatch();
+int n = 10000000;
+sw.Start();
+for (int i = 0; i < n; i++) {
+    ReflectionMethod(f);
+}
+sw.Stop();
+Console.WriteLine("ReflectionMethod: " + sw.ElapsedMilliseconds + " ms");
+
+sw.Restart();
+for (int i = 0; i < n; i++) {
+    DynamicMethod(f);
+}
+sw.Stop();
+Console.WriteLine("DynamicMethod: " + sw.ElapsedMilliseconds + " ms");
+
+// 输出
+ReflectionMethod: 1923 ms
+DynamicMethod: 223 ms
+```
+
+这里我们就能明显看出执行时间的差距了。实际上DLR的执行过程我用下面伪代码表示
+
+```c#
+public void DynamicMethod(Foo f) {
+    dynamic d = f;
+    d.DoSomething();
+}
+// 以下是DLR会生成大概的代码
+static DynamicCallSite fooCallSite;
+public void ReflectionMethod(Foo f) {
+    object d = f;
+    if(fooCallSite == null) fooCallSite = new DynamicCallSite();
+    fooCallSite.Invoke("Foo",d);
+}
+```
+
+编译器在编译上述方法`DynamicMethod`时，会询问一次这个调用点调用的方法的类型是否是同一个，如果是则直接将已经准备好的调用点 fooCallSite 进行调用，否则则像文章之前说的，会生成调用点，绑定器绑定成员信息，根据AST将表达式生成表达式树，将这些都缓存下来。在进行计算（调用）。
+
+正因为我们知道了DLR的一些内幕，所以我们自然也知道了注意该如何用 DLR，以及关键字 dynamic。比如我们现在知道了C#编译器会将 dynamic 等同 object 对待。那么我们在使用的时候一定要注意不要被“莫名其妙”的被装箱了，导致不必要的性能损失了。
+
+至于 DLR 的应用，特别是结合动态语言进行编程，来达到静态语言动态编程的目的。其实DLR刚出来之际，就有了如 IronPython 这样的开源组件。这是另外一个话题，并且我们在做实际应用的情况也很少，所以就没有展开来讲了。
 
 参数资料：
 
