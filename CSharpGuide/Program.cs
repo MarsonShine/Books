@@ -12,6 +12,12 @@ using CSharpGuide.random;
 namespace CSharpGuide {
     public class Program {
         static void Main(string[] args) {
+            Console.WriteLine("*************************均匀分布************************");
+            var distribution = StandardContinuousUniform.Distribution.Histogram(0, 1);
+            Console.WriteLine(distribution);
+            Console.WriteLine("*************************正太分布************************");
+            var normalDistribution = Normal.Distribution(1.0, 1.5).Histogram(-4, 4);
+            Console.WriteLine(normalDistribution);
             //new Introducer().Start();
             //_ = await new AsyncStream().ConsumeStream();
             //Console.WriteLine("Hello World!");
@@ -45,21 +51,22 @@ namespace CSharpGuide {
             Console.WriteLine(id);
             Console.WriteLine($"元组解构：Item1 = {pd}, Item2= ${id}");
 
-            ITuple tp = new Tuple<int, int>(2, 3);
-            for (int i = 0; i < tp.Length; i++) {
-                var temp = tp[i];
-            }
+            // ITuple tp = new Tuple<int, int>(2, 3);
+            // for (int i = 0; i < tp.Length; i++) {
+            //     var temp = tp[i];
+            // }
 
-            ITuple p = new ValueTuple<int, int>(1, 2);
+            // ITuple p = new ValueTuple<int, int>(1, 2);
 
-            Example e = new Example();
-            e.Start();
+            // Example e = new Example();
+            // e.Start();
 
-            // 伪随机
-            FakeRandom fr = new FakeRandom();
-            for (int i = 0; i < 100; i++) {
-                fr.Invoke();
-            }
+            // // 伪随机
+            // FakeRandom fr = new FakeRandom();
+            // for (int i = 0; i < 100; i++) {
+            //     fr.Invoke();
+            // }
+            // Console.WriteLine("sizeof(int) = " + sizeof(int));
         }
 
         public static void M1(MyClass mc) {
