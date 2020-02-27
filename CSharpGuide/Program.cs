@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using CSharpGuide.LanguageVersions._7._0;
 using CSharpGuide.LanguageVersions._8._0;
 using CSharpGuide.LanguageVersions.Four.Zero;
+using CSharpGuide.random;
 
 namespace CSharpGuide {
     public class Program {
@@ -53,6 +54,12 @@ namespace CSharpGuide {
 
             Example e = new Example();
             e.Start();
+
+            // 伪随机
+            FakeRandom fr = new FakeRandom();
+            for (int i = 0; i < 100; i++) {
+                fr.Invoke();
+            }
         }
 
         public static void M1(MyClass mc) {

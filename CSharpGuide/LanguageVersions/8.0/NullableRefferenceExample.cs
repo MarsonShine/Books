@@ -4,15 +4,13 @@ using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Text;
 
-namespace CSharpGuide.LanguageVersions._8._0
-{
+namespace CSharpGuide.LanguageVersions._8._0 {
     /// <summary>
     /// 这种通用的写法是不允许为空的
     /// </summary>
     /// <typeparam name="TIn"></typeparam>
     /// <typeparam name="TOut"></typeparam>
-    interface IDoStuff<TIn, TOut>
-    {
+    interface IDoStuff<TIn, TOut> {
         TOut DoStuff(TIn input);
     }
     /// <summary>
@@ -22,38 +20,30 @@ namespace CSharpGuide.LanguageVersions._8._0
     /// <typeparam name="TOut"></typeparam>
     public interface IDoStuff_NotNull<TIn, TOut>
         where TIn : notnull
-        where TOut : notnull
-    {
+    where TOut : notnull {
         TOut DoStuff(TIn input);
     }
 
     public class DoStuff<TIn, TOut> : IDoStuff_NotNull<TIn, TOut>
         where TIn : notnull
-        where TOut : notnull
-    {
-        TOut IDoStuff_NotNull<TIn, TOut>.DoStuff(TIn input)
-        {
+    where TOut : notnull {
+        TOut IDoStuff_NotNull<TIn, TOut>.DoStuff(TIn input) {
             throw new NotImplementedException();
         }
 
-        public TOut Do(TIn input)
-        {
+        public TOut Do(TIn input) {
             throw new NotImplementedException();
         }
     }
 
-    public class DoStuff_Nulable<TIn, TOut> : IDoStuff_NotNull<TIn, TOut>
-    {
-        public TOut DoStuff(TIn input)
-        {
+    public class DoStuff_Nulable<TIn, TOut> : IDoStuff_NotNull<TIn, TOut> {
+        public TOut DoStuff(TIn input) {
             throw new NotImplementedException();
         }
     }
 
-    class NullableRefferenceExample
-    {
-        public static void Start()
-        {
+    class NullableRefferenceExample {
+        public static void Start() {
             DoStuff<int?, string> stuff = new DoStuff<int?, string>();
             _ = stuff.Do(null);
             DoStuff_Nulable<int?, int?> doStuff = new DoStuff_Nulable<int?, int?>();
@@ -63,42 +53,32 @@ namespace CSharpGuide.LanguageVersions._8._0
         }
     }
 
-    public class MyClass
-    {
+    public class MyClass {
         private string _innerValue = string.Empty;
 
         [AllowNull]
-        public string MyValue
-        {
-            get
-            {
+        public string MyValue {
+            get {
                 return _innerValue;
             }
-            set
-            {
+            set {
                 _innerValue = value ?? string.Empty;
             }
         }
     }
 
-    public static class HandleMethods
-    {
-        public static void DisposeAndClear(ref MyClass handle)
-        {
+    public static class HandleMethods {
+        public static void DisposeAndClear(ref MyClass handle) {
 
         }
 
-        public static void DisposeAndClear_DisallowNull([DisallowNull]ref MyClass handle)
-        {
-
+        public static void DisposeAndClear_DisallowNull([DisallowNull] ref MyClass handle) {
 
         }
     }
 
-    class MyArray
-    {
-        public static T Find<T>(T[] array, Func<T, bool> match)
-        {
+    class MyArray {
+        public static T Find<T>(T[] array, Func<T, bool> match) {
             if (array == null)
                 throw new ArgumentNullException(nameof(array));
             if (match == null)
@@ -106,64 +86,92 @@ namespace CSharpGuide.LanguageVersions._8._0
             return Array.Find<T>(array, s => match.Invoke(s));
         }
 
-        public static void Resize<T>(ref T[] array, int newSize)
-        {
+        public static void Resize<T>(ref T[] array, int newSize) {
             Array.Resize<T>(ref array, newSize);
         }
     }
 
-    public class MyString
-    {
-        public static bool IsNullOrEmpty([NotNullWhen(false)]string? value)
-        {
+    public class MyString {
+        public static bool IsNullOrEmpty([NotNullWhen(false)] string? value) {
             return string.IsNullOrEmpty(value);
         }
     }
-    public class MyVersion
-    {
-        public static bool TryParse(string? input, [NotNullWhen(true)]out Version? version)
-        {
+    public class MyVersion {
+        public static bool TryParse(string? input, [NotNullWhen(true)] out Version? version) {
             return Version.TryParse(input, out version);
         }
     }
 
-    public class MyQueue<T>
-    {
+    public class MyQueue<T> {
         private readonly Queue<T> _queue = new Queue<T>();
-        public bool TryDequeue([NotNullWhen(false)]out T result)
-        {
+        public bool TryDequeue([NotNullWhen(false)] out T result) {
             return _queue.TryDequeue(out result);
         }
 
-        public void Enqueue(T result)
-        {
+        public void Enqueue(T result) {
             _queue.Enqueue(result);
         }
     }
 
-    class MyPath
-    {
-        [return: NotNullIfNotNull("path")]
-        public static string? GetFileName(string? path)
-        {
+    class MyPath {
+        [
+            return :NotNullIfNotNull("path")
+        ]
+        public static string? GetFileName(string? path) {
             return Path.GetFileName(path);
         }
     }
 
-    internal static class ThrowHelper
-    {
+    internal static class ThrowHelper {
         [DoesNotReturn]
-        public static void ThrowArgumentNullException(string? args)
-        {
+        public static void ThrowArgumentNullException(string? args) {
             if (args == null) throw new ArgumentNullException(nameof(args));
         }
     }
 
-    public static class MyAssertionLibrary
-    {
-        public static void MyAssert([DoesNotReturnIf(false)] bool condition)
-        {
+    public static class MyAssertionLibrary {
+        public static void MyAssert([DoesNotReturnIf(false)] bool condition) {
             //if (condition == false) throw new InvalidOperationException(nameof(condition));
+        }
+    }
+
+    public class NullAndNotNullDemo {
+        public static string M1(string? text) => text; //报警
+        public static string M2(string text) => text;
+        public static string M3(string? text) {
+            if (text is null) {
+                return "";
+            } else {
+                return text;
+            }
+        }
+        public static string M4(string text) {
+            if (text is null) {
+                return "";
+            } else {
+                return text;
+            }
+        }
+        public static string M5(string? text) {
+            bool isNull = text is null;
+            if (isNull) {
+                return "";
+            } else {
+                return text; //警告
+            }
+        }
+        public static string M6(string text) {
+            bool isNull = text is null;
+            if (isNull) {
+                return "";
+            } else {
+                return text; // Warning
+            }
+        }
+
+        public static string M12(string text) {
+            bool ignored = text is { };
+            return text; // No warning
         }
     }
 }
