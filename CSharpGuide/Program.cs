@@ -2,6 +2,7 @@
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using CSharpGuide.LanguageVersions._7._0;
@@ -18,6 +19,12 @@ namespace CSharpGuide {
             Console.WriteLine("*************************正太分布************************");
             var normalDistribution = Normal.Distribution(1.0, 1.5).Histogram(-4, 4);
             Console.WriteLine(normalDistribution);
+            Console.WriteLine("*************************标准离散分布************************");
+            var discreteDistribution = StandardDiscreteUniform.Distribution(1, 6)
+                .Samples()
+                .Take(10)
+                .Sum();
+            Console.WriteLine(discreteDistribution);
             //new Introducer().Start();
             //_ = await new AsyncStream().ConsumeStream();
             //Console.WriteLine("Hello World!");

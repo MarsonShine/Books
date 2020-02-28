@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 
 namespace CSharpGuide.random {
@@ -21,6 +22,29 @@ namespace CSharpGuide.random {
                         b => b * scale > (height - r) ? '*' : ' '
                     )) + "\n"
                 )) + new string('-', width) + "\n";
+        }
+        // 离散图
+        public static string DiscreteHistogram<T>(this IEnumerable<T> d)
+        where T : notnull {
+            const int sampleCount = 100000;
+            const int width = 40;
+            var dict = d.Take(sampleCount)
+                .GroupBy(x => x)
+                .ToDictionary(g => g.Key, g => g.Count());
+            int labelMax = dict.Keys
+                .Select(x => x.ToString() !.Length)
+                .Max();
+            var sup = dict.Keys.OrderBy(x => x).ToList();
+            int max = dict.Values.Max();
+            double scale = max < width ? 1.0 : ((double) width) / max;
+
+            return string.Join(
+                "\n",
+                sup.Select(s => $"{ToLabel(s)}|{Bar(s)}"));
+            // local method
+            string ToLabel(T t) => t.ToString() !.PadLeft(labelMax);
+            string Bar(T t) =>
+                new string('*', (int) (dict[t] * scale));
         }
     }
 }
