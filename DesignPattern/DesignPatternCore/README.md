@@ -179,3 +179,60 @@ public class Facade {
 ```
 
 这样业务A于业务B就解藕了，弱化了两者关系。具体怎么执行，由外观者决定。
+
+# 状态模式
+
+状态模式其实要解决的问题很纯粹，就是减少业务分支。消除大量 if 语句产生的单个业务发生的逻辑分支。
+
+概念：**当一个对象的内在状态收到改变时，允许其行为也可以改变。然后这个类看起来像换了一个类。**
+
+具体点就是，当一个类中的有一个状态属性，这个属性会发生变化，但是其对应的同一个方法的行为也会因为这个状态的改变而改变。举个例子会好点。
+
+假设这里有一个评分系统，系统逐步显示从 0 到 100 的评价分级。业务逻辑如下：
+
+100：完美；90：优秀；70：优良，60：及格，不及格。那么套用上面状态，即显示功能是统一的功能。这个方法的输出（行为）会根据自身的状态（分数）来做出相应的行为。
+
+```c#
+public abstract Status {
+	public abstract void Handle(Context ctx);
+}
+// 各种状态
+public class PerfectStatus : Status {
+	public override void Handle(Context ctx) {
+		ctx.Status = new GoodStatusStatus();
+	}
+}
+
+public class GoodStatus : Status {
+	public override void Handle(Context ctx) {
+		ctx.Status = new JustSosoStatusStatus();
+	}
+}
+
+public class PassStatus : Status {
+  public override void Handle(Context ctx) {
+		ctx.Status = new NotPassStatus();
+	}
+}
+
+// 装载容器
+public class Context {
+  private Status _status;
+  public Context(Status status) {
+    _status = status;
+  }
+  
+  public Status Status => _status;
+  
+  public void Handle() {
+    this._status.Handle();
+  }
+}
+
+// 调用
+var ctx = new Context(new PerfectStatus());
+ctx.Handle();	// 完美
+ctx.Handle(); // 优良
+...
+...
+```

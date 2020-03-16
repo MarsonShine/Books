@@ -12,6 +12,7 @@ using DesignPatternCore.Factory.AbstractFactory;
 using DesignPatternCore.Observer;
 using DesignPatternCore.Property;
 using DesignPatternCore.Proxy;
+using DesignPatternCore.State;
 using DesignPatternCore.Strategy;
 using DesignPatternCore.Visitor;
 
@@ -133,6 +134,13 @@ namespace DesignPatternCore {
             studentOnDuty.Notify();
             studentOnDuty.UpdateEvent += student.Update;
             Console.WriteLine("==========观察者模式============");
+
+            Console.WriteLine("==========状态模式============");
+            var client = new Client(new PerfectState());
+            client.Handle();
+            client.Handle();
+            client.Handle();
+            Console.WriteLine("==========状态模式============");
         }
     }
 }
