@@ -9,6 +9,7 @@ using DesignPatternCore.ChainOfResponsibility;
 using DesignPatternCore.Decorator;
 using DesignPatternCore.Factory;
 using DesignPatternCore.Factory.AbstractFactory;
+using DesignPatternCore.MementoShapshot;
 using DesignPatternCore.Observer;
 using DesignPatternCore.Property;
 using DesignPatternCore.Proxy;
@@ -141,6 +142,22 @@ namespace DesignPatternCore {
             client.Handle();
             client.Handle();
             Console.WriteLine("==========状态模式============");
+
+            Console.WriteLine("==========备忘录模式============");
+            var originator = new Originator();
+            originator.State = "On";
+            originator.Show();
+
+            MementoManager manager = new MementoManager();
+            manager.Record(originator.CreateMemento());
+
+            originator.State = "Off";
+            originator.Show();
+
+            originator.SetMemento(manager.Memento);
+            originator.Show();
+
+            Console.WriteLine("==========备忘录模式============");
         }
     }
 }
