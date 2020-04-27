@@ -236,3 +236,7 @@ ctx.Handle(); // 优良
 ...
 ...
 ```
+
+# 规格模式
+// TODO ：https://my.oschina.net/HenuToater/blog/171378?p=1
+// https://www.codeproject.com/Articles/670115/Specification-pattern-in-Csharp
