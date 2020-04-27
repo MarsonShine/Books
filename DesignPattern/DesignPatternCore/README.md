@@ -238,5 +238,82 @@ ctx.Handle(); // 优良
 ```
 
 # 规格模式
-// TODO ：https://my.oschina.net/HenuToater/blog/171378?p=1
-// https://www.codeproject.com/Articles/670115/Specification-pattern-in-Csharp
+在我读完《大话设计模式》这本书之后，并没有发现有“规格模式”这种设计模式。我在《驱动领域设计与模式实战》这本书中有提到这种设计模式。遂在这里做下记录。
+
+其实规格模式的作用就是建立一个复杂的规则。我们在查询一个列表信息的时候，我们都会有很多复合条件组成的复杂查询。我相信大部分的人都是用“查询对象”来解决这个问题的。其实除了查询对象之外，规则模式就是为了处理这种情况。
+
+> 规则模式将多个单一条件通过 “and”，“not”，“or” 来组装成一个新的复杂的规则
+
+```c#
+public interface ISpecification<T> {
+    /// <summary>
+    /// 规格的自描述（是否符合规格定义）
+    /// </summary>
+    /// <param name="o"></param>
+    /// <returns></returns>
+    bool IsSatisfiedBy(T o);
+    ISpecification<T> And(ISpecification<T> specification);
+    ISpecification<T> Or(ISpecification<T> specification);
+    ISpecification<T> Not(ISpecification<T> specification);
+}
+
+public abstract class CompositeSpecification<T> : ISpecification<T> {
+    /// <summary>
+    /// 是否符合规格
+    /// </summary>
+    /// <param name="o"></param>
+    /// <returns></returns>
+    public abstract bool IsSatisfiedBy(T o);
+    public ISpecification<T> And(ISpecification<T> specification) {
+        return new AndSpecification<T>(this, specification);
+    }
+
+    public ISpecification<T> Not(ISpecification<T> specification) {
+        return new NotSpecification<T>(specification);
+    }
+
+    public ISpecification<T> Or(ISpecification<T> specification) {
+        return new OrSpecification<T>(this, specification);
+    }
+}
+
+public class AndSpecification<T> : CompositeSpecification<T> {
+    private readonly ISpecification<T> _left;
+    private readonly ISpecification<T> _right;
+
+    public AndSpecification(ISpecification<T> left, ISpecification<T> right) {
+        _left = left;
+        _right = right;
+    }
+
+    public override bool IsSatisfiedBy(T o) {
+        return this._left.IsSatisfiedBy(o) &&
+            this._right.IsSatisfiedBy(o);
+    }
+}
+```
+
+其实现在还有一种做法是直接在对象实体中嵌入一个复合查询的表达式树，其思想其实也是根规格模式一样。
+
+```c#
+public class Mobile {
+		public string Type { get; set; }
+		public decimal Price { get; set; }
+  
+  	public Expression<Func<Mobile,bool>> ToExpression() {
+      	Expression<Func<Mobile,bool>> express = null;
+      	if (!string.IsNullOrEmpty())
+          express.And(p=>p.Type == Type);
+      	if(Price > 0)
+          express.And(p=>p.Price == Price);
+      	return express;
+    }
+}
+```
+
+
+
+from 
+
+https://my.oschina.net/HenuToater/blog/171378?p=1
+https://www.codeproject.com/Articles/670115/Specification-pattern-in-Csharp

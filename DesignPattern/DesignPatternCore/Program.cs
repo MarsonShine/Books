@@ -13,6 +13,7 @@ using DesignPatternCore.MementoShapshot;
 using DesignPatternCore.Observer;
 using DesignPatternCore.Property;
 using DesignPatternCore.Proxy;
+using DesignPatternCore.Specification;
 using DesignPatternCore.State;
 using DesignPatternCore.Strategy;
 using DesignPatternCore.Visitor;
@@ -158,6 +159,25 @@ namespace DesignPatternCore {
             originator.Show();
 
             Console.WriteLine("==========备忘录模式============");
+
+            Console.WriteLine("==========规格模式============");
+            // 只要华为品牌的手机
+            ISpecification<Mobile> huaweiExpression = new ExpressionSpecification<Mobile>(p => p.Type == "华为");
+            // 三星手机
+            ISpecification<Mobile> samsungExpression = new ExpressionSpecification<Mobile>(p => p.Type == "三星");
+            // 华为和三星
+            ISpecification<Mobile> huaweiAndsamsungExpression = huaweiExpression.And(samsungExpression);
+
+            List<Mobile> mobiles = new List<Mobile> {
+                new Mobile("华为", 4888),
+                new Mobile("三星", 6888),
+                new Mobile("苹果", 7888),
+                new Mobile("小米", 3888)
+            };
+            var samsungs = mobiles.FindAll(p => samsungExpression.IsSatisfiedBy(p));
+            var huaweis = mobiles.FindAll(p => huaweiExpression.IsSatisfiedBy(p));
+            var samsungAndhuaweis = mobiles.FindAll(p => huaweiAndsamsungExpression.IsSatisfiedBy(p));
+            Console.WriteLine("==========规格模式============");
         }
     }
 }
