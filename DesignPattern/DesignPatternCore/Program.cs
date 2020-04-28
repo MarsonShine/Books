@@ -1,6 +1,7 @@
 ﻿#define DECORATOR
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -178,6 +179,22 @@ namespace DesignPatternCore {
             var huaweis = mobiles.FindAll(p => huaweiExpression.IsSatisfiedBy(p));
             var samsungAndhuaweis = mobiles.FindAll(p => huaweiAndsamsungExpression.IsSatisfiedBy(p));
             Console.WriteLine("==========规格模式============");
+
+            Console.WriteLine("==========时间格式化-本地文化============");
+            Console.WriteLine(DateTime.Now.ToString());
+            Console.WriteLine("ShortDatePattern:" + CultureInfo.CurrentCulture.DateTimeFormat.ShortDatePattern);
+            Console.WriteLine("LongDatePattern:" + CultureInfo.CurrentCulture.DateTimeFormat.LongDatePattern);
+            Console.WriteLine("LongTimePattern:" + CultureInfo.CurrentCulture.DateTimeFormat.LongTimePattern);
+            CultureInfo culture = (CultureInfo) CultureInfo.CurrentCulture.Clone();
+            culture.DateTimeFormat.ShortDatePattern = "yyyy-MM-dd";
+            culture.DateTimeFormat.LongTimePattern = "h:mm:ss.fff";
+            CultureInfo.CurrentCulture = culture;
+            Console.WriteLine(DateTime.Now.ToString());
+            Console.WriteLine("开始后台线程时间格式化");
+            Task.Run(() => {
+                Console.WriteLine("后台线程：" + DateTime.Now.ToString());
+            });
+            Console.WriteLine("==========时间格式化-本地文化============");
         }
     }
 }
