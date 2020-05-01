@@ -59,3 +59,13 @@
 
 1. 垃圾回收可以并行，每个垃圾回收线程负责回收一个内存堆。这可以明显提高效率
 2. 在某些情况下， 内存分配的速度也会快，特被是对 LOH 而言，因为会在所有的内存堆中同时进行。
+
+## 服务器垃圾回收前发出通知机制
+
+1. 调用 GC.RegisterForFullGCNotification，参数是两个阈值，一个是第 2 代内存堆的阈值，一个是 LOH 的阈值。
+2. 调用 GC.WaitForFullGCApproach 方法来轮训（Poll）垃圾回收状态，可以一直等待下去或者一个超时值。
+3. 如果 WaitForFullGCApproach 方法返回 Success，就将程序转入可接收完全垃圾回收的状态（比如切断发往本机的请求）
+4. 调用 GC.Collect 方法手动强制执行一次完全垃圾回收。
+5. 调用 GC.WaitForFullGCComplete（仍然可指定一个超时值）等待完全垃圾回收的完成。
+6. 重新开启请求
+7. 如果不想再收到完全垃圾回收的通知，可以调用 GC.CancelFullGCNotification 方法。
