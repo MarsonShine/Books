@@ -21,3 +21,42 @@
 > 每个处理器同一时间只能运行一个线程，线程在 “线程时间片（Thread Quantum）” 中执行代码，Thread Quantum 是时钟间隔（Clock Interval）的倍数，在目前的多处理系统中每个时钟间隔大概是 15 ms。当代码从栈顶返回进入等待状态后，或者是 Thread Quantum 时间到，调度程序则会再选一个就绪线程来执行。下一个执行的线程有可能还是同一个线程，也有可能不是，这取决于处理器的竞争情况。—— 《编写高性能的 .NET 代码》
 
 从上面来看，如果从硬性标准来看， 如果你的应用程序执行时间没有超过一个 Thread Quantum 的话，那么直接开辟一个 Thread 是没问题的。不过总的来说，不管什么情况，您都应该使用 Task。
+
+## 并行
+
+PLinq 提供 api `Parallel.For` 来快捷的并行循环执行。我们用的最多的就是 `Parallel.For/ForEach` 这两个 api 了。虽然方便好用，但是也有很多细节需要注意。
+
+如果我们想要在这批量并发的请求逻辑里面，需要中断并发执行。我们就可以借助重载函数的 `ParallelLoopState` 参数。
+
+```c#
+// 需要中断循环执行，可以传对象 ParallelLoopState
+Parallel.ForEach(urls, (url, loopState) => {
+    if (url.Contains("bing")) {
+        // 调用 Break 中断当前请求之后的所有请求
+        loopState.Break();
+        // 调用 Stop
+        // loopState.Stop();
+    }
+})
+```
+
+我们在调用并发方法时，我们一定要注意在执行过程最好不要共享变量，因为这会导致阻塞，丝毫体现不出并行的优势。
+
+还有一点要注意的是，我们在执行并行程序的时候，**通过代码可以发现每次迭代都会生成一个委托，如果每次迭代完成的时间还不如生成委托的开销大，那用这个就有点浪费了。**
+
+我们可以通过并行分区来解决这个问题。
+
+```c#
+// 分区 For 并行循环
+var partitioner = (Partitioner.Create(0, MaxValue));
+sum = 0;
+Parallel.ForEach(partitioner, (range) => {
+    long partialSum = 0;
+    for (var i = range.Item1; i < range.Item2; i++) {
+        partialSum += (long) Math.Sqrt(i);
+    }
+    Interlocked.Add(ref sum, partialSum);
+});
+```
+
+上述方法是在每个分区里运行一个委托。当你不指定分区的时候，默认情况就是为每个迭代项都会创建一个委托。

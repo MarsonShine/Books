@@ -33,6 +33,25 @@ namespace AsyncProgram {
                 });
                 tasks[i].ContinueWith(OnTaskEnd);
             }
+
+            // cancel
+            var tokenSource = new CancellationTokenSource();
+            CancellationToken token = tokenSource.Token;
+            Task task = Task.Run(() => {
+                while (true) {
+                    // 执行其他逻辑
+                    if (token.IsCancellationRequested) {
+                        Console.WriteLine("任务取消");
+                        return;
+                    }
+                    Thread.Sleep(TimeSpan.FromMilliseconds(100));
+                }
+            }, token);
+            Console.WriteLine("按任意键退出");
+            Console.ReadKey();
+            tokenSource.Cancel();
+            task.Wait();
+            Console.WriteLine("任务完成");
         }
 
         private static void OnTaskEnd(Task<long> task) {
