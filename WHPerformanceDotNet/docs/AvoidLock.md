@@ -96,3 +96,38 @@ private static void MultiThreadWriteShareObjectWithoutLocking() {
 5. 其他机制
 
 以上顺序是以性能高低来排序的，但特定的环境条件可能会不一样。取决于采用的方式，比如一次使用多个 Interlocked 方法就不如用一次 lock 语句。
+
+## Lock
+
+```c#
+private bool isComplete = false;
+private object completeLock = new object();
+
+private void Complete()
+{
+	lock(completeLock)
+  {
+    if(isComplete)
+    {
+      return;
+    }
+    isComplete = true;
+  }
+}
+```
+
+在这里你用到两个成员变量来判断方法是否已经被执行过，这其实可以通过 `Interlocked.Increment` 来达到同样的目的，并且性能更高
+
+```c#
+private int isComplete = 0;
+
+private void Complete()
+{
+	if(Interlocked.Increment(ref isComplete) == 1)
+	{
+		...
+	}
+}
+```
+
+Interlocked 附带的方法都是原子操作。并且可以利用它来实现 （无锁）lock-free 的数据结构。
