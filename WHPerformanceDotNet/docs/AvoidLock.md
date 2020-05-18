@@ -130,4 +130,92 @@ private void Complete()
 }
 ```
 
-Interlocked 附带的方法都是原子操作。并且可以利用它来实现 （无锁）lock-free 的数据结构。
+Interlocked 附带的方法都是原子操作。并且可以利用它来实现 （无锁）lock-free 的数据结构。以下是用 `Interlocked.CompareExchange` 实现的简单的无锁数据结构
+
+```c#
+class FreeLockStack<T> {
+  private class Node {
+    public T Value;
+    public Node Next;
+  }
+  
+  private Node head;
+  public void Push (T value) {
+    var newNode = new Node() { Value = value };
+    while(true) {
+      newNode.Next = this.head;
+      if (Interlocked.CompareExchanged(ref this.head, newNode, newNode.Next)) {
+        return;
+      }
+    } 
+  }
+}
+```
+
+## Monitor 混合锁
+
+在一般情况下，我们都应该使用 Monitor 锁机制，微软提供一个关键字 lock 来方便快捷的占有资源。以下代码是等价的
+
+```c#
+object obj = new object();
+bool taken = false;
+try {
+	Monitor.Enter(obj, ref taken);
+} finally {
+  if(taken) {
+    Monitor.Exit(obj);
+  }
+}
+
+// 等价于
+object obj = new object();
+lock(obj) {
+  ...
+}
+```
+
+Monitor 是一种混合锁，在进入等待状态并释放线程之前，会先尝试在循环中自旋一段时间。这样就可以在竞争不激烈或者是竞争时间很短的情况下，可以获得理想的性能。
+
+如果我们在判断有没有获取锁的相关判断，并继而做其他逻辑，Monitor 有个方法 `Monitor.TryEnter` 这个方法会立即返回。
+
+## 异步锁
+
+我们在用上面的锁时，当特别时对象数量很多时，在占有锁的同步情况下，会阻塞线程。所以 .NET 4.5 之后开始增加了一些异步锁。
+
+同步代码详见：[同步锁版本](https://github.com/MarsonShine/Books/blob/master/WHPerformanceDotNet/src/LockFreeWithInterlocked/AsyncLock.cs)
+
+由于在吞吐量大的程序中，在调用 Wait 方法后，线程将会阻塞至心好凉被释放。这会导致资源的浪费，也降低了机器的处理能力，并且很有可能会发生线程上下文切换（内核用户模式切换）。
+
+下面我们来看异步锁的版本：
+
+```c#
+static void WriterFuncAsync() {
+    semaphore.WaitAsync().ContinueWith(_ => {
+        Console.WriteLine("Writer: Obtain");
+        for (int i = length; i < array.Length; i++) {
+            array[i] = i * 2;
+        }
+        Console.WriteLine("Writer: Release");
+        semaphore.Release();
+    }).ContinueWith(_ => WriterFuncAsync()); // 注意，这里不是递归，而是“伪递归”，每次调用都会新开堆栈，之前的方法都会被及时垃圾回收
+}
+```
+
+## 考虑用其他替代方案
+
+我们在实现一个线程安全的操作时，微软为了避免我们花精力去实现线程安全类，提供给我们一些类：`ConcurrentBag<T> 无需集合；ConcurrentDictionary<TKey, TValue> 键值对，ConcurrentQueue<T> 先进先出队列，ConcurrentStack<T> 后进先出队列`
+
+如果数据大部分都是**只读的**，那么我们可以使用非线程安全的集合。在需要修改集合中的元素时，可以生成一个全新的集合对象，在数据修改完毕之后把原来的引用替换掉即可。
+
+```c#
+private volatile Dictionary<string, object> data = new Dictionary<string, object>();
+public Dictionary<string, object> Data => data;
+
+private void UpdateData() {
+    var newData = new Dictionary<string, object>();
+    newData["Foo"] = new { };
+    data = newData;
+}
+```
+
+其中关键字 volatile 关键字是确保 data 所有线程都能正确更新。
