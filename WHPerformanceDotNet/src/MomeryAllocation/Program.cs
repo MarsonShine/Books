@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Collections;
+using System.Collections.Generic;
 
 namespace MomeryAllocation {
     class Program {
@@ -26,6 +28,33 @@ namespace MomeryAllocation {
             diff = after - before;
             Console.WriteLine("数组空对象内存带下：" + diff / size);
             GC.KeepAlive(array);
+
+            var vt = new ValueTypeBox();
+            vt.Name = "summer zhu";
+            InvokeWithStructClass(vt);
+            Console.WriteLine(vt.Name);
+            // 值类型当参数传递
+            void InvokeWithStructClass(ValueTypeBox box) {
+                box.Name = "marson shine";
+                Console.WriteLine(box.Name);
+            }
+
+            // for vs foreach
+            int[] arr = new int[100];
+            for (int i = 0; i < arr.Length; i++) {
+                arr[i] = i;
+            }
+
+            int sum = 0;
+            foreach (var val in arr) {
+                sum += val;
+            }
+
+            sum = 0;
+            IEnumerable<int> arrEnum = arr;
+            foreach (var val in arrEnum) {
+                sum += val;
+            }
         }
     }
 }
