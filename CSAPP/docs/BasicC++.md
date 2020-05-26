@@ -19,6 +19,22 @@ printf("%d",value);	// 十进制整数
 printf("%f",value); // 浮点数
 printf("%c",value); // 字符
 printf("%.2x",value); // 整数必须用至少两个数字的十六进制
+
+// example
+int val = 0x87654321;
+byte_pointer valp = (byte_pointer) &val;
+show_bytes(valp, 1);	// 小端法：21  大端：87
+show_bytes(valp, 2);	// 小端：2143	大端：8765
+show_bytes(valp, 3);	// 小端：214365	大端：876543
+
+void show_bytes(byte_pointer start,size_t len) {
+    size_t i;
+    for (size_t i = 0; i < len; i++)
+    {
+        printf("%.2x",start[i]);
+    }
+    printf("\n"); 
+}
 ```
 
 十进制数 12345 转成 16 进制数和浮点型十六进制数
@@ -43,4 +59,17 @@ printf("%.2x",value); // 整数必须用至少两个数字的十六进制
 int ival = val;
 int *pval = &ival;	// 取 ival 值得地址，并赋值给 *pval 指针
 ```
+
+# 练习
+
+1. 3510593 十六进制数表示为 0x00359141；浮点数 3510593.0 十六进制数为 0x4A564504。写出对应的二进制数：
+
+   ```
+   0x00359141: 0000 0000 0011 0101 1001 0001 0100 0001
+   0x4A564504: 0100 1010 0101 0110 0100 0101 0000 0100 
+   上面两个移动多少位匹配的位数最多
+   00000000001 101011001000101000001
+     010010100 101011001000101000001 00
+   移动 2 位最多有 21 位相同
+   ```
 
