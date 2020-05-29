@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
+using CSharpGuide.LanguageVersions._6._0;
 using CSharpGuide.LanguageVersions._7._0;
 using CSharpGuide.LanguageVersions._8._0;
 using CSharpGuide.LanguageVersions.Four.Zero;
@@ -74,6 +75,12 @@ namespace CSharpGuide {
             //     fr.Invoke();
             // }
             // Console.WriteLine("sizeof(int) = " + sizeof(int));
+
+            Console.WriteLine("*************************TryCatchWhen************************");
+            TryCatchWhenExpress.StartTryCatchWhen();
+
+            Console.WriteLine("*************************SwitchCaseWhen************************");
+            TryCatchWhenExpress.StartSwitchCaseWhen();
         }
 
         public static void M1(MyClass mc) {
