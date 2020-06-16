@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
+using CSharpGuide;
 using CSharpGuide.LanguageVersions._6._0;
 using CSharpGuide.LanguageVersions._7._0;
 using CSharpGuide.LanguageVersions._8._0;
@@ -81,6 +82,10 @@ namespace CSharpGuide {
 
             Console.WriteLine("*************************SwitchCaseWhen************************");
             TryCatchWhenExpress.StartSwitchCaseWhen();
+
+            Console.WriteLine("*************************AsyncLocal via ThreadLocal************************");
+            AsyncLocalViaThreadLocal.AsyncMethodA().ConfigureAwait(false).GetAwaiter();
+            Console.Read();
         }
 
         public static void M1(MyClass mc) {

@@ -14,3 +14,4 @@
 .DS_Store
 # 忽略指定格式文件
 *.exe
+*.user
