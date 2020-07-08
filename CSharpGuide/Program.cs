@@ -15,18 +15,18 @@ using CSharpGuide.random;
 namespace CSharpGuide {
     public class Program {
         static void Main(string[] args) {
-            Console.WriteLine("*************************均匀分布************************");
-            var distribution = StandardContinuousUniform.Distribution.Histogram(0, 1);
-            Console.WriteLine(distribution);
-            Console.WriteLine("*************************正太分布************************");
-            var normalDistribution = Normal.Distribution(1.0, 1.5).Histogram(-4, 4);
-            Console.WriteLine(normalDistribution);
-            Console.WriteLine("*************************标准离散分布************************");
-            var discreteDistribution = StandardDiscreteUniform.Distribution(1, 6)
-                .Samples()
-                .Take(10)
-                .Sum();
-            Console.WriteLine(discreteDistribution);
+            //Console.WriteLine("*************************均匀分布************************");
+            //var distribution = StandardContinuousUniform.Distribution.Histogram(0, 1);
+            //Console.WriteLine(distribution);
+            //Console.WriteLine("*************************正太分布************************");
+            //var normalDistribution = Normal.Distribution(1.0, 1.5).Histogram(-4, 4);
+            //Console.WriteLine(normalDistribution);
+            //Console.WriteLine("*************************标准离散分布************************");
+            //var discreteDistribution = StandardDiscreteUniform.Distribution(1, 6)
+            //    .Samples()
+            //    .Take(10)
+            //    .Sum();
+            //Console.WriteLine(discreteDistribution);
             //new Introducer().Start();
             //_ = await new AsyncStream().ConsumeStream();
             //Console.WriteLine("Hello World!");
@@ -55,10 +55,10 @@ namespace CSharpGuide {
             //Console.WriteLine($"Item1 = {t.Item1}, Item2= ${t.Item2}");
 
             //元组解构
-            var(pd, id) = ValueTuples.Create(2, 3);
-            Console.WriteLine(pd);
-            Console.WriteLine(id);
-            Console.WriteLine($"元组解构：Item1 = {pd}, Item2= ${id}");
+            //var(pd, id) = ValueTuples.Create(2, 3);
+            //Console.WriteLine(pd);
+            //Console.WriteLine(id);
+            //Console.WriteLine($"元组解构：Item1 = {pd}, Item2= ${id}");
 
             // ITuple tp = new Tuple<int, int>(2, 3);
             // for (int i = 0; i < tp.Length; i++) {
@@ -77,14 +77,18 @@ namespace CSharpGuide {
             // }
             // Console.WriteLine("sizeof(int) = " + sizeof(int));
 
-            Console.WriteLine("*************************TryCatchWhen************************");
-            TryCatchWhenExpress.StartTryCatchWhen();
+            //Console.WriteLine("*************************TryCatchWhen************************");
+            //TryCatchWhenExpress.StartTryCatchWhen();
 
-            Console.WriteLine("*************************SwitchCaseWhen************************");
-            TryCatchWhenExpress.StartSwitchCaseWhen();
+            //Console.WriteLine("*************************SwitchCaseWhen************************");
+            //TryCatchWhenExpress.StartSwitchCaseWhen();
 
-            Console.WriteLine("*************************AsyncLocal via ThreadLocal************************");
-            AsyncLocalViaThreadLocal.AsyncMethodA().ConfigureAwait(false).GetAwaiter();
+            //Console.WriteLine("*************************AsyncLocal via ThreadLocal************************");
+            //AsyncLocalViaThreadLocal.AsyncMethodA().ConfigureAwait(false).GetAwaiter();    
+
+            Console.WriteLine("*************************Default Interface Method************************");
+            DefaultInterfaceMethod.Start();
+
             Console.Read();
         }
 
