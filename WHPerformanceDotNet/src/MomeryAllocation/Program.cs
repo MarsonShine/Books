@@ -1,4 +1,5 @@
-﻿using System;
+﻿using MomeryAllocation.MemoryAllocationOfSpan;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 
@@ -55,6 +56,9 @@ namespace MomeryAllocation {
             foreach (var val in arrEnum) {
                 sum += val;
             }
+
+
+            AvoidMemoryAlloctation.Start();
         }
     }
 }
