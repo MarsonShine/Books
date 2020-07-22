@@ -98,7 +98,7 @@ public struct Vector : IEquatable<Vector> {
 
 装箱是需要耗费 CPU 开销来进行对象分配、数据复制和强制类型转换的。严重的会导致 GC 的次数增加，增加 GC 堆的负担，从而导致大量的内存分配。
 
-要尽量杜绝结构类型集成接口，然后引用接口调用。这样会发生装箱，增加 CPU 开销。
+要尽量杜绝结构类型继承接口，然后引用接口调用。这样会发生装箱，增加 CPU 开销。
 
 如果一个结构要以参数形式多次传递，那么这个结构类型应该改成引用类型。
 
@@ -108,7 +108,7 @@ public struct Vector : IEquatable<Vector> {
 
 对于数组和 List 集合来说，for 和 foreach 其实对于编译器来说都是一样的，.net 编译器会把 foreach 转换成 for 循环。
 
-但是要注意，IEnumerable 类型的 foreach 会有很大的性能开销。
+**但是要注意，IEnumerable 类型的 foreach 会有很大的性能开销**。
 
 ## is 操作符 vs as 操作符
 
@@ -268,3 +268,51 @@ ilGenerator.EmitCall(OpCodes.Call, methodInfo, null);
 ilGenerator.Emit(OpCodes.Ret);
 ```
 
+## 使用 RecyclableMemoryStream 代替  MemoryStream 
+
+使用 `RecyclableMemoryStream` 代替 `MemoryStream` 能减少内存分配，我们之前一直在用的 `MemoryStream` 其实都是要临时开辟一个空间来存储我们的 IO 流的。这些对象在各个地方被分配和调整内存大小：入字符串编码，封送（marshall），解封（unmarshall），临时缓冲区等。这样会频繁导致应用程序需要花多部份的时间来执行 GC。
+
+`RecyclableMemoryStream` 的出现就是为了解决这个问题，**这个内存流是被内部池化的，被池化的不是流本身，而是底层的缓冲字节**。提高了内存的重用性，减少内存碎片化。在使用 `RecyclableMemoryStream` 前，要先创建一个 `RecyclableMemoryStreamManager`。这个类它实际上就是管理的缓冲池和追踪资源使用情况。可以把它想象为 CLR 中的微堆。在这个类中，你可以设置所有关于流的配置，比如默认缓冲大小，堆的最大值等等。每个进程并在其生命周期内都会指定一个 manager 对象。
+
+`RecyclableMemoryStream` 内部维护两类缓冲：SmallPool 和 LargePool。他们是由 `ConcurrentStack<byte[]>` 组成的。
+
+SmallPool 是由许多相同大小的缓冲组成。“Small Pool” 中的 “Small” 指的是单个缓冲的大小，而不是 “Pool” 的大小。在里面的缓冲被称为块（因为他们由很长的流组合而成）。
+
+LargePool 包含的是更大的缓冲区，但是很少，设计的初衷就是很少的使用它（只有在调用 `GetBuffer` 时使用）。这两个 pool 都使用统一的缓冲区大小来减小堆碎片化的可能性。
+
+![image-20200722141039789](asserts/smallpool-largepool-buffersize.jpg)
+
+​																		(引用自《编写高性能.NET代码 第二版》)
+
+> 从[块大小设定值](https://github.com/microsoft/Microsoft.IO.RecyclableMemoryStream/blob/master/src/RecyclableMemoryStreamManager.cs#L76)我们知道，small pool 是由多个相同大小的 128KB 的缓冲块组成，large pool [块大小设定值](https://github.com/microsoft/Microsoft.IO.RecyclableMemoryStream/blob/master/src/RecyclableMemoryStreamManager.cs#L84) 是由很少但容量大得多的最小 1MB ，最大 128M 的缓冲块组成。**注意，第二版写的时候时 2018 年，根据 github 上最新的代码看来，Large Pool 的最大缓冲块大小发生变化，最新的是 128MB。**
+
+使用方法：
+
+```c#
+class Program
+{
+    private static readonly RecyclableMemoryStreamManager manager = new RecyclableMemoryStreamManager();
+    static void Main(string[] args)
+    {
+        var sourceBuffer = new byte[] { 0, 1, 2, 3, 4, 5, 6, 7 };
+        using (var stream = manager.GetStream())	// 也可以 using(var stream = manager.GetStream("anytag"))
+        {
+            stream.Write(sourceBuffer, 0, sourceBuffer.Length);
+        }
+    }
+}
+```
+
+manager 是以默认配置创建的，获取了一个流，并向它写入字节，并在调用 `Dispose` 将流块返回给池。要注意的是 `var stream = manager.GetStream()` 这里传一个 tag 参数来构造流。这个 tag 可以不是唯一的，是用于在代码中标识其位置的，这样就能帮助更好的调试。不要求一定要传值，只是传的话更有用处。在内部，每个流都会生成一个 guid 来识别每个流，这样在使用多个 manager 并发追踪的情况下很有用。
+
+在内部，` RecyclableMemoryStream ` 将从 manager 获取一个块。更多数据会写至这个流中，更多的块被链在一起，并且在这个流中的 API 就会把它们视为一个连续的内存块。随着流的长度增长，内存使用总量只会随着块大小的增长而增长（假设块没有被池化的情况下）。这与 `MemoryStream ` 的实现是相反的，后者在流增长时会，它的容量和会翻倍，这样就导致了潜在的内存浪费。
+
+只要方法 `Read` 和 `Write` 被调用，那么块就会被使用。尽管如此，有时候也会需要获取一个连续的缓冲。因此，这里提供了 `GetBuffer` 方法调用，它集成自`MemoryStream `。当 `GetBuffer` 调用就会返回一个已连续的缓冲。如果这里只使用了一个块，则返回对它的引用。如果多个块被使用，则使用 Large Pool 来满足此请求，并将字节从块复制到更大的缓冲区。如果这个缓冲区的请求要比池中的最大缓冲块还要大，然后触发内存分配来满足请求。
+
+值得注意的是，返回的缓冲区大小至少要比包含的数据的大小要一样大——实际它可能还要比这要大得多。要想知道具体得数据的大小，必须调用流的 `Length` 属性。库的本地用户有时候会忽略这个，并写入巨大的缓冲数据给网络或文件。之后再转换这个流为缓冲区，使用与数据相关联的 length，将它们包装再 ArrarySegment<byte> 结构中可能会很有用。
+
+`ToArray` 方法在池化的场景中很少有用。它要求返回一个具有明确大小的数组，即就会发生分配（尽可能在大对象堆），就会发生内存复制。由于这些不高效的因素，`ToArray` 要尽量完全避免使用。
+
+我建议你学习在本节前面提供的链接代码，因为这会对你理解这个库在均衡其他要求的同时是怎么样避免分配是有好处的。
+
+我们在生产环境使用了这个库，我们看到大对象分配减少了 99%。担心昂贵的第二代垃圾回收已经称为过去。花费在垃圾回收的时间从 25% 下降到了不到 1%。
