@@ -1,21 +1,23 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 15
-VisualStudioVersion = 15.0.26124.0
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.30320.27
 MinimumVisualStudioVersion = 15.0.26124.0
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AsyncProgram", "AsyncProgram\AsyncProgram.csproj", "{B1E30817-CB9C-44A6-9860-184978F52014}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "AsyncProgram", "AsyncProgram\AsyncProgram.csproj", "{B1E30817-CB9C-44A6-9860-184978F52014}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FullGCNotification", "FullGCNotification\FullGCNotification.csproj", "{0BA107CB-8AC8-4EDB-95A1-172EF93E53AE}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "FullGCNotification", "FullGCNotification\FullGCNotification.csproj", "{0BA107CB-8AC8-4EDB-95A1-172EF93E53AE}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GCPool", "GCPool\GCPool.csproj", "{D0A1525D-AF5E-42AF-8446-76A6DC755F8D}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "GCPool", "GCPool\GCPool.csproj", "{D0A1525D-AF5E-42AF-8446-76A6DC755F8D}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HighPerformanceIOProgram", "HighPerformanceIOProgram\HighPerformanceIOProgram.csproj", "{35545733-71A2-475D-A872-52A2964CC606}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "HighPerformanceIOProgram", "HighPerformanceIOProgram\HighPerformanceIOProgram.csproj", "{35545733-71A2-475D-A872-52A2964CC606}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LockFreeWithInterlocked", "LockFreeWithInterlocked\LockFreeWithInterlocked.csproj", "{15978901-6FAD-434A-9E49-E13C584D8089}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "LockFreeWithInterlocked", "LockFreeWithInterlocked\LockFreeWithInterlocked.csproj", "{15978901-6FAD-434A-9E49-E13C584D8089}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MomeryAllocation", "MomeryAllocation\MomeryAllocation.csproj", "{BA19011A-0AF8-449E-9076-2864AF16C7FE}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MomeryAllocation", "MomeryAllocation\MomeryAllocation.csproj", "{BA19011A-0AF8-449E-9076-2864AF16C7FE}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Parallel", "Parallel\Parallel.csproj", "{84867F99-3E1F-4CCB-8D00-26BEDBA7B3DB}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Parallel", "Parallel\Parallel.csproj", "{84867F99-3E1F-4CCB-8D00-26BEDBA7B3DB}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GenericOptimization", "GenericOptimization\GenericOptimization.csproj", "{B13E5268-82FC-4E84-B9C7-51258906D634}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -25,9 +27,6 @@ Global
 		Release|Any CPU = Release|Any CPU
 		Release|x64 = Release|x64
 		Release|x86 = Release|x86
-	EndGlobalSection
-	GlobalSection(SolutionProperties) = preSolution
-		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
 		{B1E30817-CB9C-44A6-9860-184978F52014}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
@@ -114,5 +113,23 @@ Global
 		{84867F99-3E1F-4CCB-8D00-26BEDBA7B3DB}.Release|x64.Build.0 = Release|Any CPU
 		{84867F99-3E1F-4CCB-8D00-26BEDBA7B3DB}.Release|x86.ActiveCfg = Release|Any CPU
 		{84867F99-3E1F-4CCB-8D00-26BEDBA7B3DB}.Release|x86.Build.0 = Release|Any CPU
+		{B13E5268-82FC-4E84-B9C7-51258906D634}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B13E5268-82FC-4E84-B9C7-51258906D634}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B13E5268-82FC-4E84-B9C7-51258906D634}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{B13E5268-82FC-4E84-B9C7-51258906D634}.Debug|x64.Build.0 = Debug|Any CPU
+		{B13E5268-82FC-4E84-B9C7-51258906D634}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{B13E5268-82FC-4E84-B9C7-51258906D634}.Debug|x86.Build.0 = Debug|Any CPU
+		{B13E5268-82FC-4E84-B9C7-51258906D634}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B13E5268-82FC-4E84-B9C7-51258906D634}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B13E5268-82FC-4E84-B9C7-51258906D634}.Release|x64.ActiveCfg = Release|Any CPU
+		{B13E5268-82FC-4E84-B9C7-51258906D634}.Release|x64.Build.0 = Release|Any CPU
+		{B13E5268-82FC-4E84-B9C7-51258906D634}.Release|x86.ActiveCfg = Release|Any CPU
+		{B13E5268-82FC-4E84-B9C7-51258906D634}.Release|x86.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {9FC2275C-6BE6-4318-83DD-C5895E3CB963}
 	EndGlobalSection
 EndGlobal
