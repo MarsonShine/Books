@@ -54,7 +54,7 @@ private static void ContinuRead(Task<int> task, FileStream fileStream, MemoryStr
 
 这段是《编写高性能 .NET 代码》书中的一段代码，其中有一段非常有意思的是这段代码：
 
-`newTask.ContinueWith(readTask => ContinuRead(readTask, fileStream, fileContent, buffer ,cts))`，很多人第一反应觉得是这是用了递归。其实不是，这是 “伪递归”。性能要远比真正的递归要高。它的执行复杂度是常数级的，而递归是指数级的。关于伪递归可以详见 [尾递归与Continuation](http://blog.zhaojie.me/2009/03/tail-recursion-and-continuation.html)。
+`newTask.ContinueWith(readTask => ContinuRead(readTask, fileStream, fileContent, buffer ,cts))`，很多人第一反应觉得是这是用了递归。其实不是，这是 “递归”。性能要远比真正的递归要高。它的执行复杂度是常数级的，而递归是指数级的。关于伪递归可以详见 [尾递归与Continuation](http://blog.zhaojie.me/2009/03/tail-recursion-and-continuation.html)。
 
 # 同步线程和锁
 

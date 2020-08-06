@@ -64,3 +64,20 @@ Parallel.ForEach(partitioner, (range) => {
 ```
 
 上述方法是在每个分区里运行一个委托。当你不指定分区的时候，默认情况就是为每个迭代项都会创建一个委托。
+
+## 真异步与线程异步
+
+真正的异步 I/O 与在另一个线程上执行异步 I/O 这两者是有巨大的差别的。前者是实际上把处理控制权交给你操作系统和硬件，此时系统中的代码都不会发生阻塞，等待它们返回。如果你是在其他线程上执行异步 I/O，你会阻塞这个线程做其它工作，同时仍在等待操作系统返回给你。
+
+```c#
+Task.Run( ()=> 
+{ 
+    using (var inputStream = File.OpenRead(filenam e)) { 
+        byte[] buffer = new byte[16384]; 
+        // 调用同步 I/O 仍然会阻塞线程，在执行I/O时，会与底层硬件交互
+        // 操作系统会转向驱动设备程序执行 IRP
+        var input = inputStream.Read(buffer, 0, buffe r.Length); ... 
+    } 
+});
+```
+
