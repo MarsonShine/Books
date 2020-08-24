@@ -6,3 +6,4 @@
 3. [避免阻塞](docs/AvoidLock.md)
 4. [TPL Dataflow](docs/TPL_Dataflow.md)
 5. [泛型优化](docs/GenericOptimization.md)
+6. [集合](docs/Collections.md)
