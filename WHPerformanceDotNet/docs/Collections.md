@@ -12,3 +12,30 @@
 - `Stack` 和 `Queue` 只能插入或者从中删除，所以所有操作的时间复杂度为 O(1)
 - `LinkedList` O(1) 的插入和删除，经常避免被用在大量的基元类型操作，因为它会给你添加的每个元素分配新的 `LinkedListNode<T>` 对象，这会浪费开销。
 - `BitArray` 表示位的数组。你可以单独的设置位以及再整个数组对象上执行布尔逻辑。如果你只需要 32 位的数据，那么就用 `BitVector32`，它会更快并且开销更小（因为是结构体）
+
+# 字典集键值比较
+
+在操作字典集时 `Dictionary<string,object>`，如果要判断某个键值是否存在，进而做下一步的操作，我们很容易会这么写：
+
+```c#
+var key = "myKey";
+var dic = new Dictionary<string, object>();
+...
+foreach(var kvp in dic) {
+	if(kvp.Key.ToUpper() == key.ToUpper()) {
+		...
+	}
+}
+```
+
+这样比较会对 GC 造成压力以及内存浪费，给 CPU 带来不小的开销。特别是 `ToUpper()` 操作。其实我们可以选择设置比较键值是忽略大小写敏感设置。
+
+```c#
+var keytoLookup = "myKey"; 
+var dict = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase); 
+... object val; 
+if (dict.TryGetValue(keyToLookup, out val)) { 
+	... 
+}
+```
+
