@@ -21,9 +21,11 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "GenericOptimization", "Gene
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TPLDataflow", "TPLDataflow\TPLDataflow.csproj", "{1BEDE8CA-EBAC-4F6D-B9F9-9F0D33AD540E}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DynamicLoadExtension", "DynamicLoadExtension\DynamicLoadExtension.csproj", "{87F08352-92C2-4409-BE15-BC698E010B6F}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DynamicLoadExtension", "DynamicLoadExtension\DynamicLoadExtension.csproj", "{87F08352-92C2-4409-BE15-BC698E010B6F}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DynamicLoadExecutor", "DynamicLoadExecutor\DynamicLoadExecutor.csproj", "{42E072A4-C603-4A6E-BF10-E5266CDAB10C}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DynamicLoadExecutor", "DynamicLoadExecutor\DynamicLoadExecutor.csproj", "{42E072A4-C603-4A6E-BF10-E5266CDAB10C}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EtlDemo", "EtlDemo\EtlDemo.csproj", "{63775BC8-69E2-4975-99D5-462EAFDD867F}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -167,6 +169,18 @@ Global
 		{42E072A4-C603-4A6E-BF10-E5266CDAB10C}.Release|x64.Build.0 = Release|Any CPU
 		{42E072A4-C603-4A6E-BF10-E5266CDAB10C}.Release|x86.ActiveCfg = Release|Any CPU
 		{42E072A4-C603-4A6E-BF10-E5266CDAB10C}.Release|x86.Build.0 = Release|Any CPU
+		{63775BC8-69E2-4975-99D5-462EAFDD867F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{63775BC8-69E2-4975-99D5-462EAFDD867F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{63775BC8-69E2-4975-99D5-462EAFDD867F}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{63775BC8-69E2-4975-99D5-462EAFDD867F}.Debug|x64.Build.0 = Debug|Any CPU
+		{63775BC8-69E2-4975-99D5-462EAFDD867F}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{63775BC8-69E2-4975-99D5-462EAFDD867F}.Debug|x86.Build.0 = Debug|Any CPU
+		{63775BC8-69E2-4975-99D5-462EAFDD867F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{63775BC8-69E2-4975-99D5-462EAFDD867F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{63775BC8-69E2-4975-99D5-462EAFDD867F}.Release|x64.ActiveCfg = Release|Any CPU
+		{63775BC8-69E2-4975-99D5-462EAFDD867F}.Release|x64.Build.0 = Release|Any CPU
+		{63775BC8-69E2-4975-99D5-462EAFDD867F}.Release|x86.ActiveCfg = Release|Any CPU
+		{63775BC8-69E2-4975-99D5-462EAFDD867F}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

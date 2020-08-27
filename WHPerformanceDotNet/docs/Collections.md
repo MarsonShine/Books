@@ -39,3 +39,63 @@ if (dict.TryGetValue(keyToLookup, out val)) {
 }
 ```
 
+# 特殊的集合 —— String
+
+字符串是不变的，每次更改字符串都会重新创建一个新的字符串。所以为了高效，设置字符串尽量保持简短，或者以其它形式来替代字符串。
+
+字符串的比较函数效率从高到低为：
+
+```c#
+string.Compare(a, b, StringComparsion.Oridinal);
+
+string.Compare(a, b, StringComparison.OridinalIgnoreCase);
+
+string.Compare(a, b, StringComparison.CurrentCulture);
+```
+
+`string.Equals` 是字符串一种特殊的例子，只有当你不关心排序顺序的时候你可以用这个。在很多时候它并没有多高效，但是它更可读，会使你代码更加好看。
+
+## 字符串格式化 Format
+
+尽量避免乃至不要使用 `string.Format`，此方法会导致装箱对应的参数，调用内部的自定义格式化器，这会增加内存分配和 CPU 的开销。直接使用字符串连接符
+
+```
+string message = string.Format("The file {0} was {1} successfully.", filename, operation);
+// 使用下面替代
+string message = "The file " + filename + " was " + operation + " successfully";
+```
+
+## ToString
+
+要小心所有类的 `ToString` 方法。如果幸运的话，你调用它会返回一个已经缓存好的字符串。这种情况是存在的，比如 `IPAddress` 类就缓存了一次生成的字符串。但是这个生成字符串的过程又是昂贵的。所以当你调用 `ToString` 时如果每次都是返回新的字符串，那么这会很浪费 CPU 的时间，并且也会影响 GC 的频率。
+
+当你在设计自己的类时，你要把 `ToString` 的调用情况也要考虑进来。如果经常调用，那就要确保你生成的字符串是简短的。如果你仅仅只是帮助调试用的，那么就没什么关系了。
+
+## 字符串转换
+
+在任何情况下都要避免字符串转换，因为字符串处理都是 CPU 密集型计算过程，都是重复，耗内存的操作。如果真的需要转换，那么一定要记得调用不会抛出异常的方法，比如用 `int.TryParse` 代替 `int.Parse` 。还有很多跟这个签名一样的都是如此。
+
+## SubStrings
+
+字符串的截断操作会返回全新的字符串，会给这个字符串分配内存。如果是在一个以 `char` 数组的形式组成的部分操作，可以使用 `ReadOnlySpan<T>` ，它可以表示底层数组的一部分：
+
+```c#
+{
+...
+	ReadOnlySpan<char> subString = "NonAllocationSubString".AsSpan().Slice(13);
+	PrintSpan(subString);
+...
+}
+
+private static void PrintSpan<T>(ReadOnlySpan<T> span) {
+	for (int i = 0; i < span.Length; i++) {
+		T val = span[i];
+		Console.Write(val);
+		if (i < span.Length -1) {
+			Console.Write(", ");
+		}
+	}
+	Console.WriteLine();
+}
+```
+

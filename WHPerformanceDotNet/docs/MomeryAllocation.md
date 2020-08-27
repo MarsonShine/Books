@@ -333,3 +333,26 @@ manager 是以默认配置创建的，获取了一个流，并向它写入字节
 4. 方法表插槽（slot）—— 向声明类型添加一个插槽，其中的代码序列可以在几个间接级别内查找准确的类型的（大约 10 时钟周期）
 
 关于泛型更详细的资料详见：https://github.com/dotnet/runtime/issues/3877
+
+## 懒加载 Lazy<T>
+
+在适当的情况下（创建对象需要开销很大，并且不经常使用的对象）用懒加载可以很好的避免内存分配，提高内存使用率，较小 GC 发生的频率，从而提高程序运行效率。`Lazy<T>` 构造函数里面有传一个枚举变量，枚举有三个值：
+
+- None：非线程安全。如非必要，你必须确保在这种场景下是单线程访问 Lazy<T> 对象的
+- ExecutionAndPublication：表示只允许单线程运行创建委托以及给 `Value` 赋值。这是默认的选项
+- PublicationOnly：允许多个线程运行委托，但是只允许一个线程初始化 `Value` 属性。
+
+单列，双检索推荐用懒加载来实现。
+
+如果你有大量的对象以及 `Lazy<T>` 它的开销太大了，那么你可以使用 `LazyInitializer.EnsureInitialized` 方法。方法里使用了 `Interlocked` 来确保对象引用只被分配一次，但是它不确保创建委托只被调用一次。
+
+```c#
+static MyObject[] objects = new MyObject[1024];
+
+static void EnsureInitialized(int index) {
+  LazyInitializer.EnsureInitialized(ref objects[index],
+  () => ExpensiveCreationMethod(index));
+}
+```
+
+注意，这里使用的委托会有额外的内存分配，委托调用的方法也会有内存分配开销。
