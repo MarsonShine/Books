@@ -356,3 +356,12 @@ static void EnsureInitialized(int index) {
 ```
 
 注意，这里使用的委托会有额外的内存分配，委托调用的方法也会有内存分配开销。
+
+## 枚举类的开销
+
+`Enum.HasFlag` 方法开销很大
+
+`Enum.ToString` 方法开销很大，应该用一个字典（`Dictionary<EnumType, String>`）缓存起来。或者你就直接用枚举的数字值，然后赋值给局部变量，然后转换为字符串就能获得更好的性能。
+
+Enum.IsDefined 方法开销很大
+
