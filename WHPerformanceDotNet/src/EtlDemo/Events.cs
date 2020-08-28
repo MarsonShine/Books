@@ -43,7 +43,7 @@ namespace EtlDemo
                 this.WriteEvent(ProcessingFinishId);
             }
         }
-
+        [Event(FoundPrimeId, Level = EventLevel.Informational, Keywords = Keywords.PrimeOutput)]
         public void FoundPrime(long primeNumber)
         {
             if (this.IsEnabled())
