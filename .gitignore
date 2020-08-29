@@ -15,3 +15,9 @@
 # 忽略指定格式文件
 *.exe
 *.user
+*.filters
+
+
+#### C++
+/[Dd]ebug
+[Dd]ebug

@@ -92,3 +92,14 @@ launch.json:
 }
 ```
 
+# 执行命令
+
+```
+// 编译 切换到当前文件目录
+g++ .\typeconvert.cpp	// 会自动生成一个 a.exe 文件
+// 运行 a.exe
+a.exe
+// 如果想要直接编译成指定名称可执行程序
+g++ -o typeconvert .\typeconvert.cpp
+```
+
