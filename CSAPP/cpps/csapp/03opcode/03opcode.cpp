@@ -16,6 +16,23 @@ long exchanges(long* xp, long y) {
 	return x;
 }
 
+void decode1(long* xp, long* yp, long* zp) {
+	long x = *xp;
+	long y = *yp;
+	long z = *zp;
+
+	*yp = x;
+	*zp = y;
+	*xp = z;
+}
+
+void remdiv(long x, long y, long* qp, long* rp) {
+	long q = x / y;
+	long r = x % y;
+	*qp = q;
+	*rp = r;
+}
+
 int main()
 {
 	cout << "Hello World!\n";
