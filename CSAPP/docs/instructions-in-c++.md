@@ -181,3 +181,146 @@ d:	f3 c3			repz retq
 ```
 
 解析：第一条跳转指令表明了要跳转的地址 +0x8。还能看到第一条跳转指令的目标编码为 0x03。把它（0x03）加上 0x5 也就是下一条指令的地址，就得到跳转目标地址 0x08，即第四行指令的地址。同样第二条跳转指令也是如此，只不过这个使用单字节、补码表示编码的为 0xf8（也就是 -8）。将这个数加上 0xd（13），即 6 行指令的地址，我们就会得到 d + (-8) = 5，即第三行指令地址。
+
+# 条件传送指令
+
+由于传统的通过控制的条件转移，当条件满足时，程序沿着一条执行路径执行，不满足时就走另一条路径，这对于现在处理器来说性能比较低下。一种替代的方案就是使用**数据的条件转移**。这种计算方法是**计算操作的两种结果**，然后根据条件是否满足再从中选一个。虽然这个指令有使用限制，但是一旦这种策略可行，那么就可以使用一个简单的指令来实现它。
+
+用一个对比的例子来说明数据的条件转移指令：
+
+```c
+// 原始 C 语言代码
+long absdiff(long x, long y) {
+	long result;
+	if (x < y) {
+		result = y - x;
+	} else {
+		result = x - y;
+	}
+	return result;
+}
+```
+
+下面是使用条件赋值的实现：
+
+```c#
+long cmovdiff(long x, long y) {
+	long rval = y - x;
+	long eval = x - y;
+	long ntest = x >= y;
+    /* 下面一行就是单个数据条件转移指令的效果 */
+	if (ntest) rval = eval;
+	return rval;
+}
+```
+
+而上面对应的反汇编代码：
+
+```
+long absdiff(long x, long y)
+x in %rdi, y in %rsi
+absdiff:
+  movq		%rsi, %rax
+  subq		%rdi, %rax		ravl = y - x
+  movq		%rdi, %rdx		
+  subq		%rsi, %rdx		eval = x - y
+  cmpq		%rsi, %rdi		比较 x:y
+  cmovge	%rdx, %rax		if >=, rval = eval
+  ret					   return rval
+```
+
+**关键代码在于指令 `cmovge` 行，实现了 cmovdiff 的条件赋值功能，只有当 `cmpq` 指令满足条件时，才会把数据源寄存器传送到指定位置。**
+
+为什么基于条件的数据传送指令的代码会比基于条件控制转移的代码性能高，这是因为跟现代处理器使用的 “流水线（pipeling）” 有关系。在 pipelining 中，一条指令的的处理要经过一系列的阶段，每个阶段执行所需操作的一小部分（例如，从内存取指令，指定指令类型，从内存读取数据，执行算术运算，向内存写数据以及更新程序计数器。）这种方法通过重叠连续指令的步骤来获取高性能，比如在去一条指令的同时，可以执行它前面一条指令的算术运算。要做到这一点，**必须要事先确定要执行的指令序列，这样才能保持流水线中充满了待执行的指令**。**而决定往流水线填充待执行的指令是处理器 “分支预测逻辑” 决定的**。只要这种 “猜测” 靠谱，那么流水线中就会充满待执行的指令。另一个方面，当分支预测逻辑预测错误时，就会让处理器抛弃跳转指令后要执行的指令，然后从开始正确的位置处理处理指令。这种预测错误的情况时非常损耗性能的。大约浪费 15-31 个时钟周期。所以我们在写代码的时候，生成的分支代码能让处理器更好的 “分支预测” 是非常有意义的。
+
+## 条件跳转与跳转数据传输区别
+
+`v = test-expr ? then-expr :else-expr `
+
+用条件控制转移的标准方法来编译这个表达式就会得到以下形式：
+
+```
+    if (!test-expr) {
+        goto false;
+    }
+    v = then-expr;
+    goto done;
+false:
+	v = else-expr;
+done:
+```
+
+如果用条件数据传送指令，则是如下形式：
+
+```
+v = then-expr;
+ve = else-expr;
+t = test-expr;
+if (!t) v = ve;
+```
+
+> cmpq	%rsi, %rdi：寄存器 rdi 的值 < 寄存器 rsi 的值
+
+# Switch 语句
+
+switch 语句是可以根据一个整数索引值进行多重分支（multiway branching）。这是通过使用跳转表（jump table）这种数据结构使得实现更加高效。跳转表是一个数组，表项 i 是一个代码段的地址，表示的当索引值等于 i 值所采取的动作，与 if-else 相比，这样就不会根据分支的数量有关系了。举个例子：
+
+```c
+void switch_eg(long x, long n, long* dest) {
+	long val = x;
+	switch (n) {
+		case 100:
+			val *= 13;
+			break;
+		case 102:
+			val += 10;
+		case 103:
+			val += 11;
+			break;
+		case 104:
+		case 106:
+			val *= val;
+			break;
+		default:
+			val = 0;
+	}
+	*dest = val;
+}
+```
+
+那么编译器就会把上面的 case 分支转正一个跳转表来实现，如下：
+
+```c
+void switch_eg_impl(long x, long n, long* dest) {
+	// 代码所处位置的指针表
+	static void *jt[7] = {
+		&&loc_A, &&loc_def, &&loc_B,
+		&&loc_C, &&loc_D, &&loc_def,
+		&&loc_D
+	};
+	unsigned long index = n - 100;
+	long val;
+	if (index > 6)
+		goto loc_def;
+    goto *jt[index];
+    
+	loc_A:		/* case 100 */
+		val = x * 13;
+		goto done;
+	loc_B:		/* case 102 */
+		val = x + 10;
+	loc_C:
+		val = x + 11;
+		goto done;
+	loc_D:
+		val = x * x;
+		goto done;
+	loc_def:	/* default */
+		val = 0;
+	done:
+		*dest = val;
+		
+}
+```
+
+需要注意的是，里面的符号 `&&`，这是 GCC 的作者创造的一个新的运算符，这个运算符指向代码位置的指针。编译器还把 n 的值重排序，所以有了判断 index 是否大于 6 以及 n - 100。这样无论条件分支有多少，都可以只用一次跳转就能到达对应的代码位置去执行代码。
