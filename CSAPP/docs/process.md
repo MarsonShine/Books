@@ -101,3 +101,51 @@ caller:
 
 `ret` 返回
 
+在给寄存器存储参数时，会遵循一定的规则的。因为 OS 要保证确保一个过程调用另一个过程时，被调用者不会覆盖调用者用到的寄存器值。所以，x86-64 采用了一组统一的寄存器使用惯例，所有的过程（包括程序库）都必须严格按照这个遵循。
+
+根据惯例，寄存器 %rbx、%rbp 和 %r12~%r15 被划分为**被调用者保存寄存器**。如过程 P 调用过程 Q 时，Q 必须要保存这些寄存器的值。而所有其它的寄存器，除了栈指针 %rsp 之外，都归类于 **调用者保存寄存器**。举个具体例子：
+
+```c
+long P(long x, long y) {
+	long u = Q(y);
+	long v = Q(x);
+	return u + v;
+}
+```
+
+生成的汇编如下：
+
+```
+long P(long x, long y)
+x in %rdi, y in %rsi
+P:
+  pushq    %rbp    保存寄存器
+  pushq    %rbx    保存寄存器
+  subq     $8, %rsp    分配 8 个字节的占内存     
+  movq     %rdi, %rbp    y 保存到寄存器 rbp
+  movq     %rsi, %rdi    x 保存到寄存器 rdi
+  call     Q    调用Q
+  movq     %rax, %rbx    保存 Q 的结果到 rbx
+  movq     %rbp, %rdi    传递参数 x
+  call     Q	调用Q
+  addq     %rbx, %rax	保存 Q 的结果到 rax + rbx 寄存器的值
+  addq     $8, %rsp    释放栈内存
+  popq     %rbx    弹出栈，恢复这两个被调用者保存寄存器的值
+  popq     %brp
+  ret
+```
+
+## 二维数组的内存大小计算
+
+对于多维数组声明如下：T D\[R][C]；
+
+它的数组元素 D\[i][j] 的内存地址为：
+$$
+\&D[i][j] = x_0 + L(C*i+j)
+$$
+其中 L 是数据类型 T 以字节为单位的大小。
+
+编译器对于定长的多维数组会根据优化等级设置来优化代码。
+
+
+
