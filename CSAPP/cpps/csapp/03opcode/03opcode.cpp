@@ -47,6 +47,14 @@ void multstore(long x, long y, long* dest) {
 	*dest = t;
 }
 
+// 函数指针
+int fun(int x, int* p) {
+	return x + *p;
+}
+
+// 声明指针
+int (*fp)(int, int*);
+
 
 // 运行程序: Ctrl + F5 或调试 >“开始执行(不调试)”菜单
 // 调试程序: F5 或调试 >“开始调试”菜单
@@ -61,5 +69,8 @@ void multstore(long x, long y, long* dest) {
 
 long mult2(long, long)
 {
+	// 给函数指针赋值
+	fp = fun;
+
 	return 0;
 }
