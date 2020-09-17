@@ -230,3 +230,34 @@ void sum(float a[], float p[], long n) {
 
 1. 减少了对程序结果关系不大的操作的数量，如循环索引计算和条件分支
 2. 提供了一些方法，进一步变化代码，减少整个计算中关键路径上的操作数量。
+
+## 提高并行性
+
+我们还可以通过将一组合并运算分割成两个或更多的部分，并最后在合并结果来提高性能。比如计算一组数组的和，那么在循环时，我们可以在循环中计算两组，一种是奇数之和，另一种是偶数之和。最后合并结果。
+
+```c
+void combine6(vec_ptr v, data_t* dest) {
+	long i = 0;
+	long length = vec_length(v);
+	long limit = length - 1;
+	data_t* data = get_vec_start(v);
+	data_t acc0 = IDENT;
+	data_t acc1 = IDENT;
+
+	for (i = 0; i < limit; i+2)
+	{
+		acc0 = acc0 OP data[i];
+		acc1 = acc1 OP data[i + 1];
+	}
+	// 剩下的
+	for (; i < length; i++)
+	{
+		acc0 = acc0 OP data[i];
+	}
+	*dest = acc0 OP acc1;
+}
+```
+
+这里不仅用到了函数展开，还用到了两路并行。
+
+往更进一步还有优化，就是运算的结合律，计算运算时改变计算的顺序，这样在编译器内部会对某些指令操作进行重排序、优化和抽象来减少操作次数。
