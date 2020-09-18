@@ -274,3 +274,63 @@ for (i = 0; i < limit; i+2)
 所有现代处理器都包含一个或多个**高速缓存（cache）**存储器，以对少量的寄存器提供快速的访问。在加载（内存到寄存器）和存储（寄存器到内存）在高速缓存下如何工作的。
 
 现代处理器有功能单元来执行加载和存储操作，这些单元有内部的缓冲区来保存未完成的指令操作请求集合。
+
+如果程序对同一个内存地址进行加载与存储，那么指令会发生什么？
+
+之前我们说过现代处理器每个处理单元都会有内部缓冲区来保存这些已经发生但还未完成的操作指令请求集合，当一个加载操作发生时，它必须检查存储缓冲区中的条目，看看有没有地址相匹配。如果有，就说明写的字节与在读的字节有相同的地址，它就会取出相应的数据条目来作为加载操作的结果。
+
+举个例子说明问题
+
+```c
+void psum1(float a[], float p[], long n) {
+	long i;
+	p[0] = a[0];
+	for (i = 1; i < n; i++)
+		p[i] = p[i - 1] + a[i];
+}
+```
+
+与之对应产生的汇编代码如下：
+
+```c
+// 循环部分
+a in %rdi, i in %rax, cnt in %rdx
+.L5:								loop:
+  vmovss  -4(%rsi,%rax,4), %xmm0		Get p[i-1]
+  vaddss  (%rdi,%rax,4), %xmm0, %xmm0	Add a[i]
+  vmovss  %xmm0, (%rsi,%rax,4)			Store at p[i]
+  addq    $1, %rax						Increament i
+  cmpq    %rdx, %rax					Compare i:cnt
+  jne	  .L5							If !=, goto loop
+```
+
+上面的代码如何进一步优化呢？
+
+```c
+void psum1a(float a[], float p[], long n) {
+	long i;
+	/* 缓存 p[i-1] 的值到 last_val */
+	float last_val, val;
+	last_val = p[0] = a[0];
+	for (i = 1; i < n; i++) {
+		val = last_val + a[i];
+		p[i] = val;
+		last_val = val;
+	}
+}
+```
+
+与之对应的汇编代码为：
+
+```c
+// 循环部分
+a in %rdi, i in %rax, cnt in %rdx
+.L16:								loop:
+  vmovss  (%rdi,%rax,4), %xmm0		    last_val = val = last_val + a[i]
+  vmovss  %xmm0, (%rsi,%rax,4)			Store val in p[i]
+  addq    $1, %rax						Increament i
+  cmpq    %rdx, %rax					Compare i:cnt
+  jne	  .L16							If !=, goto loop
+```
+
+这段代码将 last_val 保存到 %xmm0 中，避免了需要从内存中读出 p[i-1]，所以就消除了 psum1 中看到的写/读相关的操作。

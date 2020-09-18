@@ -127,7 +127,7 @@ void combine6(vec_ptr v, data_t* dest) {
 	data_t acc0 = IDENT;
 	data_t acc1 = IDENT;
 
-	for (i = 0; i < limit; i+2)
+	for (i = 0; i < limit; i + 2)
 	{
 		acc0 = acc0 OP data[i];
 		acc1 = acc1 OP data[i + 1];
@@ -158,4 +158,23 @@ size_t strlen(const char* s) {
 		length++;
 	}
 	return length;
+}
+
+void psum1(float a[], float p[], long n) {
+	long i;
+	p[0] = a[0];
+	for (i = 1; i < n; i++)
+		p[i] = p[i - 1] + a[i];
+}
+
+void psum1a(float a[], float p[], long n) {
+	long i;
+	/* »º´æ p[i-1] µÄÖµµ½ last_val */
+	float last_val, val;
+	last_val = p[0] = a[0];
+	for (i = 1; i < n; i++) {
+		val = last_val + a[i];
+		p[i] = val;
+		last_val = val;
+	}
 }
