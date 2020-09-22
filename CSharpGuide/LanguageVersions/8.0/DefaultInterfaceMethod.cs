@@ -77,7 +77,7 @@ namespace CSharpGuide.LanguageVersions._8._0 {
     }
     class Derived : Base, IB // allowed?
     {
-        static void Main() {
+        static void Main1() {
             IA a = new Derived();
             a.M(); // what does it do?
         }

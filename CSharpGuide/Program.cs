@@ -9,6 +9,7 @@ using CSharpGuide;
 using CSharpGuide.LanguageVersions._6._0;
 using CSharpGuide.LanguageVersions._7._0;
 using CSharpGuide.LanguageVersions._8._0;
+using CSharpGuide.LanguageVersions._9._0;
 using CSharpGuide.LanguageVersions.Four.Zero;
 using CSharpGuide.random;
 
@@ -89,6 +90,9 @@ namespace CSharpGuide {
             Console.WriteLine("*************************Default Interface Method************************");
             DefaultInterfaceMethod.Start();
 
+            Console.WriteLine("************************ C# 9.0 ************************");
+            var ri = new RecordIdentifierDemo();
+            ri.Initial();
             Console.Read();
         }
 
