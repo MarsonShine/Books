@@ -12,6 +12,7 @@ using CSharpGuide.LanguageVersions._8._0;
 using CSharpGuide.LanguageVersions._9._0;
 using CSharpGuide.LanguageVersions.Four.Zero;
 using CSharpGuide.random;
+using CSharpGuide.threads;
 
 namespace CSharpGuide {
     public class Program {
@@ -93,6 +94,10 @@ namespace CSharpGuide {
             Console.WriteLine("************************ C# 9.0 ************************");
             var ri = new RecordIdentifierDemo();
             ri.Initial();
+
+            Console.WriteLine("************************ System.Thread.Channel ************************");
+            ThreadChannelDemo.MultipleProducerSingleConsumer().ConfigureAwait(false).GetAwaiter();
+
             Console.Read();
         }
 

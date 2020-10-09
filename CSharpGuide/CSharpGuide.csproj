@@ -11,5 +11,9 @@
   <ItemGroup>
     <Folder Include="docs\7.0\" />
   </ItemGroup>
+  
+  <ItemGroup>
+    <PackageReference Include="System.Threading.Channels" Version="4.7.1" />
+  </ItemGroup>
 
 </Project>
