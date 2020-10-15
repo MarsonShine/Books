@@ -1,4 +1,6 @@
-﻿using System;
+﻿using BenchmarkDotNet.Running;
+using GenericOptimization.Benchmarks;
+using System;
 using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.ExceptionServices;
@@ -36,6 +38,14 @@ namespace GenericOptimization
                 sw.Restart();
                 for (int i = 0; i < interation; i++)
                 {
+                    Activator.CreateInstance<Node>();
+                }
+                sw.Stop();
+                Console.WriteLine($"Activator.CreateInstance<Node>调用 耗时：{sw.Elapsed}");
+
+                sw.Restart();
+                for (int i = 0; i < interation; i++)
+                {
                     NodeFactory();
                 }
                 sw.Stop();
@@ -58,6 +68,7 @@ namespace GenericOptimization
                 Console.WriteLine($"动态Emit调用 耗时：{sw.Elapsed}");
                 
                 Console.WriteLine("Node was create successfully");
+                BenchmarkRunner.Run<GenericConstraintBenchmark>();
                 Console.ReadKey();
             }
             catch (InvalidOperationException)
