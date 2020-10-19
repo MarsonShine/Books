@@ -130,6 +130,42 @@ Linux 中以小数点 `.` 开头的都是隐藏文件
 
 ```shell
 cp source destination # 拷贝文件从 source 到 destination
+cp [-adfilprsu] source detination
+# 其中可选参数
+-a: 相当于 --presever-all 的意思（常用）
+-d: 若来源文件为链接文件的属性（link file），则复制链接文件属性而非文件本身
+-f: 为强制（force）的意思，若目标文件已经存在且无法打开，则移除后再尝试一次
+-i: 若目标文件（destination）已经存在时，在覆盖时会先询问动作的进行（常用）
+-l: 进行硬式链接（hard link）的链接文件创建，而非复制文件本身
+-p: 连同文件的属性（权限、用户、时间）一起复制过去，而非使用默认属性（备份常用）
+-r: 递回持续复制，用于目录的复制行为（常用）
+-s: 复制成为符号链接文件 （symbolic link），亦即“捷径”文件
+-u: destination 比 source 旧才更新 destination，或 destination 不存在的情况下才复制
+--preserve=all: 除了 -p 的权限相关参数外，还加入 SELinux 的属性, links, xattr 等也复制了。最后需要注意的，如果来源文件有两个以上，则最后一个目的文件一定要是“目录”才行！
+# 如果是密码档等一些特殊文件，需要用 cp -a/-p 才行
+# 当复制链接属性时，如果没有添加可选参数则默认行为就是复制链接文件的原始文件，而 -d 是复制链接文件的属性。
+cp bashrc_slink bashhr_slink1 # 复制的链接文件的原始链接
+cp -d bashrc_slink bashrc_slink2 # 复制的是链接文件的属性
+# 将多个文件一次复制到同一个目录
+cp ~/.bashrc ~/.bash_history /tmp	# 最后一个参数一定是目录
+
+# 删除操作
+rm [-fir] 文件或目录
+-f: 强制删除，忽略不存在的文件，不会弹出警告提示
+-i: 互动模式，在删除前会询问你是否删除
+-r: 递归删除，最常用在目录的删除了，这是非常危险的选项
+# 删除一个带有 '-' 等这种有意义的符号开头的文件会报错，"invalid option -- 'a'"
+# 需要加转义符
+rm .\-aaa-
+
+# 移动文件，文件重命名
+mv [-fiu] source destination
+mv [options] source1 source2 source3 ... directory
+-f: 强制覆盖
+-i: 操作前询问用户
+-u: 若文件已经存在，如果 source 较新，则会更新（常用）
+# 当指令用来重命名时，还有一个指令也可以 rename，这个命令是用与多个文件的重命名
+
 ```
 
 ### 目录处理指令
@@ -194,6 +230,176 @@ ls [--full-time] 文件名或目录名称
 --full-time: 以完整时间模式 （包含年、月、日、时、分） 输出
 --time={atime,ctime}: 输出 access 时间或改变权限属性时间 （ctime）
 					而非内容变更时间 （modification time）
+```
+
+文件名称和目录名称的显示：
+
+```shell
+basename /etc/sysconfig/network	# 显示文件的名称：输出 network
+dirname /etc/sysconfig/network  # 显示目录的名称：输出 /etc/sysconfig
+```
+
+## 文件内容查看相关操作指令
+
+最常用的文件内容操作指令就是：`cat`，`more`，`less`。如果要查看的文件很大，并且只用看尾部几行，那么用前面的指令会很慢，甚至卡死，我们可以用 `tail`、`tac`。
+
+- cat：由第一行开始显示文件内容
+- tac：从最后一行开始显示（cat 与 tac 是倒着的拼写）
+- nl：显示时输出行号
+- more：一页一页的显示文件内容
+- less：与 more 类似，但是可以往前翻页
+- head：只看头几行
+- tail：只看尾几行
+- od：以二进制的方式读取文件内容
+
+```shell
+# cat 可选参数
+-A  ：相当于 -vET 的整合选项，可列出一些特殊字符而不是空白而已；
+-b  ：列出行号，仅针对非空白行做行号显示，空白行不标行号！
+-E  ：将结尾的断行字符 $ 显示出来；
+-n  ：打印出行号，连同空白行也会有行号，与 -b 的选项不同；
+-T  ：将 [tab] 按键以 Î 显示出来；
+-v  ：列出一些看不出来的特殊字符
+```
+
+当文件内容很大时，用 `cat` 查找内容时很不方便，这个时候可以用 `more` 来一页页查看，但是如果要在如此大量的内容找到具体的内容还是很复杂，得一遍遍往下翻，其实有一个查找功能：
+
+**输入 / 之后，光标就会自动到最后一行等待用户继续输入要查找的内容**：`/MANPATH`，然后就会往下搜寻指定的字符串，按 n 继续搜索下一个匹配的字符串，q 退出。
+
+less 指令详情：
+
+```shell
+# less 可选参数
+空白键 ：向下翻动一页；
+[pagedown]：向下翻动一页；
+[pageup] ：向上翻动一页；
+/字串 ：向下搜寻“字串”的功能；
+?字串 ：向上搜寻“字串”的功能；
+n ：重复前一个搜寻 （与 / 或 ? 有关！）
+N ：反向的重复前一个搜寻 （与 / 或 ? 有关！）
+g ：前进到这个数据的第一行去；
+G ：前进到这个数据的最后一行去 （注意大小写）；
+q ：离开 less 这个程序；
+```
+
+特定取 n 行：
+
+```shell
+head -n n # 取头部 n 行
+head -n +n # 取 n 行之后的数据
+head -n 20 /etc/yum.conf | tail -10 # 取21-最后10行
+tail -n n # 取尾部 n 行
+```
+
+查看二进制文件
+
+```shell
+od [-t TYPE] 文件
+-t 后面可以接如下类型：
+	  a       ：利用默认的字符来输出；
+      c       ：使用 ASCII 字符来输出
+      d[size] ：利用十进制（decimal）来输出数据，每个整数占用 size Bytes ；
+      f[size] ：利用浮点数值（floating）来输出数据，每个数占用 size Bytes ；
+      o[size] ：利用八进位（octal）来输出数据，每个整数占用 size Bytes ；
+      x[size] ：利用十六进制（hexadecimal）来输出数据，每个整数占用 size Bytes ；
+# 举个例子：请将/etc/issue这个文件的内容以8进位列出储存值与ASCII的对照表
+od -t oCc /etc/issue
+# 找出任意字符的 ASCII 对照吗
+echo password | od -t oCc echo
+```
+
+*要注意，执行多个命令，可以用分号隔开，如：`date; ls /etc/yum.config`*
+
+## 搜索文件操作指令
+
+which：能找出使用的命令（环境变量PATH）所在的目录位置
+
+```shell
+which [-a] command
+# ifconfig 所在的位置
+which -a ifconfig # 输出 /usr/sbin/ifconfig
+```
+
+文件的搜索，一般情况下 `find` 指令不常用，因为它非常耗时，消耗磁盘。一般都是用 `whereis` 和 `locate` 指令，这两个指令找不到才会用 `find`。
+
+whereis：只招特定目录下的文件
+
+locate：是利用数据库来搜寻文件名
+
+```shell
+whereis -l # 列出 whereis 会向哪些特定的目录查询文件
+whereis [-bmsu] 文件和目录名
+选项与参数：
+-l    :可以列出 whereis 会去查询的几个主要目录而已
+-b    :只找 binary 格式的文件
+-m    :只找在说明文档 manual 路径下的文件
+-s    :只找 source 来源文件
+-u    :搜寻不在上述三个项目当中的其他特殊文件
+
+locate [-ir] keyword
+选项与参数：
+-i  ：忽略大小写的差异；
+-c  ：不输出文件名，仅计算找到的文件数量
+-l  ：仅输出几行的意思，例如输出五行则是 -l 5
+-S  ：输出 locate 所使用的数据库文件的相关信息，包括该数据库纪录的文件/目录数量等
+-r  ：后面可接正则表达式的显示方式
+# 注意，如果在镜像拉去的 centos 可能没有这个命令，则需要下载安装即可
+yum -y install mlocate
+# locate 读取速度很快，那是因为是完全走数据库，并且这是有限制的，centos 每天更新数据库的频率是一天一次，所以有些新建的文件你是查不到（因为没有及时更新数据库）
+# 手动更新数据库命令
+updatedb	# updatedb 是根据 /etc/updatedb.conf 的配置来搜索文件名，并更新 /var/lib/mlocate 内的数据库文件，所以 locate 执行也就是 /var/lib/mlocate 中的数据库文件
+```
+
+## 文件/文件夹解压缩
+
+```shell
+gzip [-cdtv#] 文件名 # 压缩文件
+zcat 文件名.gz	# 查看压缩中的文件，并把内容显示出来
+选项与参数：
+-c  ：将压缩的数据输出到屏幕上，可通过数据流重导向来处理；
+-d  ：解压缩的参数；
+-t  ：可以用来检验一个压缩文件的一致性～看看文件有无错误；
+-v  ：可以显示出原文件/压缩文件的压缩比等信息；
+-#  ：# 为数字的意思，代表压缩等级，-1 最快，但是压缩比最差、-9 最慢，但是压缩比最好！默认是 -6
+
+# 将 services 按最佳压缩率压缩成 services.gz，并保留源文件
+gzip -c -9 services > services.gz
+# 找出压缩文件中 http 这个关键字在哪几行？
+gzrep -n 'http' service.gz
+```
+
+### 打包指令
+
+```shell
+tar [-z|-j|-J] [cv] [-f 待创建的新文件名] filename... <==打包
+选项与参数：
+-c  ：创建打包文件，可搭配 -v 来察看过程中被打包的文件名（filename）
+-t  ：察看打包文件的内容含有哪些文件名，重点在察看“文件名”就是了；
+-x  ：解打包或解压缩的功能，可以搭配 -C （大写） 在特定目录解开
+      特别留意的是， -c, -t, -x 不可同时出现在一串命令行中。
+-z  ：通过 gzip  的支持进行压缩/解压缩：此时文件名最好为 *.tar.gz
+-j  ：通过 bzip2 的支持进行压缩/解压缩：此时文件名最好为 *.tar.bz2
+-J  ：通过 xz    的支持进行压缩/解压缩：此时文件名最好为 *.tar.xz
+      特别留意， -z, -j, -J 不可以同时出现在一串命令行中
+-v  ：在压缩/解压缩的过程中，将正在处理的文件名显示出来！
+-f filename：-f 后面要立刻接要被处理的文件名！建议 -f 单独写一个选项啰！（比较不会忘记）
+-C 目录    ：这个选项用在解压缩，若要在特定目录解压缩，可以使用这个选项。
+其他后续练习会使用到的选项介绍：
+-p（小写） ：保留备份数据的原本权限与属性，常用于备份（-c）重要的配置文件
+-P（大写） ：保留绝对路径，亦即允许备份数据中含有根目录存在之意；
+--exclude=FILE：在压缩的过程中，不要将 FILE 打包！
+
+# 举例
+su - # 切换超级管理员 root
+# 备份 /etc/ 这个目录
+time tar -zpcv -f /root/etc.tar.gz /etc	# 执行完会有一个警告 “tar: Removing leading /' from member names（移除了文件名开头的 /' ，所以你查看打包文件里面的文件，都是去掉了根目录的
+tar -ztv -f /root/etc.tar.gz
+# 解包
+tar -zxv -f /root/etc.tar.gz
+# 解压到 tmp 指定目录
+tar -zxv -f /root/etc.tar.gz -C /tmp
+# 查看 etc 目录所占内存
+du -sm /etc/
 ```
 
 
