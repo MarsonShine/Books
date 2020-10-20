@@ -76,7 +76,7 @@ ls -al # 查看当前目录下的所有文件的详细信息（权限，时间�
 ls -l --full-time	# 显示完整时间
 ```
 
-
+设置命令别名，比如一般情况下都要看某个目录下的文件名称，以及文件属性等信息，所以我每次都要输入如此命令 `ls -al`，设置别名可以让我们自定义命令：`alias lm='ls -al'`。这样以后只需要输入 `lm` 即可。
 
 ## 权限
 
@@ -400,6 +400,61 @@ tar -zxv -f /root/etc.tar.gz
 tar -zxv -f /root/etc.tar.gz -C /tmp
 # 查看 etc 目录所占内存
 du -sm /etc/
+```
+
+## 变量
+
+变量的取用指令：echo；比如输出环境变量：`echo $PATH`，又比如输出 `echo $variable`；读取变量都要在前面加上美元符号 `$`。还有一种变量读取方式：`echo ${PATH};echo ${variable}`。
+
+`myname=marsonshine` 这是直接定义变量 myname 并赋值为 marsonshine，注意赋值的时候中间不能有任何空格字符。
+
+### 变量值的空格问题
+
+不能在一个变量值的内容不存在空格字符，那么如何赋值带有空格字符的内容？——可以使用双引号或单引号将内容结合起来：`myname='marson shine'`。也可以直接使用反斜杠 `\` 来转义：`myname=marson\ shine`。
+
+如果要在变量中引用其他命令的值可以使用反单引号 **`指令`**或者 `$(指令)` 例如：version=\`uname -r\` 或者 `version=$(uname -r)`。 获取内核版本信息
+
+变量值的追加内容：`PATH="PATH":/home/bin` 或 `PATH=${PATH}:/home/bin`。
+
+取消变量：`unset myname`。 
+
+列出环境变量指令：`env`
+
+列出所有定义的变量信息：`set`
+
+## Linux 环境语言相关指令
+
+`locale -a`：查询当前系统支持的语言。关于语言相关的文件存储在 `/usr/lib/locale` 目录中。整体系统默认的语言定义在 `/etc/locale.conf`。
+
+在终端与用户键盘交互：`read`；
+
+```shell
+read [-pt] variable	# 读取变量 variable（用户键盘输入的值）
+选项与参数：
+-p  ：后面可以接提示字符！
+-t  ：后面可以接等待的“秒数”，到达描述自动结束
+# 例子
+read atest	# 此时光标会等待你输入值  当你输入 this is read value
+echo ${atest} # 就会输出用户输入的值 "this is read value"
+read -p "please keyin your name: " -t 30 named # 提示用户 "please keyin your name: " 30 秒有效
+marsonshine summerzhu # 用户输入
+echo ${named} # 输出 "marsonshine summerzhu"
+```
+
+变量内容的删除与替换
+
+```shell
+path=${PATH}
+echo ${path}
+/usr/local/bin:/usr/bin:/usr/local/sbin:/usr/sbin:/home/marsonshine/.local/bin
+
+# 要将 local/bin 删掉
+echo ${path#/*local/bin:}
+/usr/bin:/usr/local/sbin:/usr/sbin:/home/marsonshine/.local/bin
+
+${variable#/*local/bin:}
+# #代表要被删除的部分，由于 # 代表由前面开始删除，所以这里便由开始的 / 写起。
+# 需要注意的是，我们还可以通过万用字符 * 来取代 0 到无穷多个任意字符
 ```
 
 
