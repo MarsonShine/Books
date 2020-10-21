@@ -650,6 +650,49 @@ cat /etc/yum.conf | wc	# 输出三列数字：28     128    1019，分别代表 
 lastlog |grep [a-zA-Z] |grep -v 'wtmp' |grep -v 'reboot' |\>grep -v 'unknown' |wc -l 
 ```
 
+## 分割大文件
+
+如果一个文件内容很大，会导致一些便携式设备无法复制的问题，此时可以用指令 `split` 来将一个大文件依据大小或行数来分区，就可以将大文件分区成小文件了。
+
+```shell
+split [-bl] file FREFIX
+选项与参数:
+ -b :后面可接欲分区成的文件大小，可加单位，例如 b, k, m 等;
+ -l :以行数来进行分区。
+ PREFIX :代表前置字符的意思，可作为分区文件的前导文字。
+```
+
+举个例子：/etc/services 这个文件有几百K，若要分成 300K 一个文件
+
+```shell
+cd /tmp; split -b 300k /etc/services services
+ll -k services*	# 最后的文件名可以随意，我们只要写上前导文字，小文件就会以
+								# xxxaa, xxxab, xxxac 等方式来创建小文件的!
+```
+
+如何将上例的三个小文件合并成一个文件为 servicesback
+
+```shell
+cat services* >> servicesback	# 数据流导向成一个文件即可
+```
+
+将 `ls -al /` 输出的信息以十行记录成一个文件
+
+```shell
+ls -al / |split -l 10 - lsroot
+wc -l lsroot*
+```
+
+## - 符号的作用
+
+在管线命令中，常常会使用前一个指令的 stdout 作为后一个指令的 stdin，某些指令需要用到文件名称 (例如 tar) 来进行处理时，该 stdin 与 stdout 可以利用减号 "-" 来替代。例如
+
+```shell
+mkdir /tmp/homeback
+tar -cvf - /home | tar -xvf - -C /tmp/homeback
+# 将 /home 里面的文件打包，但打包的数据不是记录到文件，而是传送到了stdout；经过管线后，将 tar -cvf - /home 传送给后面的 tar -xvf。后面的 - 则是取的前一个 stdout，因此这里就不需要指定 filename 了 // 这里还没懂
+```
+
 
 
 # 参考资料：
