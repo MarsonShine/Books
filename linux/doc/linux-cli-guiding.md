@@ -455,6 +455,199 @@ echo ${path#/*local/bin:}
 ${variable#/*local/bin:}
 # #代表要被删除的部分，由于 # 代表由前面开始删除，所以这里便由开始的 / 写起。
 # 需要注意的是，我们还可以通过万用字符 * 来取代 0 到无穷多个任意字符
+
+
+```
+
+## 数据流
+
+将 stdout 与 stderr 分存到不同的文件去：`find /home -name .bashrc > list_right 2> list_error`。其中 `>` 表示标准输出，`2>` 表示标准错误输出
+
+将指令的数据全部写入名为 list 的文件中：`find /home -name .bashrc > list 2>&1` 或者 `find /home -name .bashrc &> list`
+
+上面两个是输出，而 standard input 就是标准输入了，而符号 `<` 和 `<<` 表示的是：**将原本需要由键盘输入的改为由文件内容来取代**。
+
+如新建一个文件，并直接输入文本内容
+
+```shell
+cat > catfile	# 新建了一个 catfile 文件，下面的内容直接在 catfile 输入内容
+testing
+cat file test	# 按 ctrl+d 退出
+```
+
+也可以直接用文件的内容代替键盘输入内容
+
+```
+cat > catfile < ~/.bashrc
+```
+
+而 `<<` 这个是结束符，就是说当匹配到指定的符号时就会自动退出，而不会像之前的例子要按 `ctrl+d` 退出
+
+```shell
+cat > catfile << "eof"
+> This is a test.
+> OK now stop
+> eof 		# 当用户输入到 eof 时就会自动退出，而不用按ctrl+d
+```
+
+多个指令一次依次执行用 `;` 连接：`sync; sync; shutdown -h now`
+
+如果指令之间有关联性，前一个指令的成功与后一个执行的执行有关则用 `&&` 或 `||`
+
+```shell
+cmd1 && cmd2	# 若 cmd1 执行完毕并且正确执行（$?=0）,则开始执行 cmd2。如果 cmd1 执行出错（$?不等于0） ，则 cmd2 不执行
+cmd1 || cmd2	# 若 cmd1 执行完毕且正确执行（$?=0），则 cmd2 不执行。 2. 若 cmd1 执行完毕且为错误 （$?≠0），则开始执行 cmd2。
+```
+
+## 管线命令
+
+把前面已经执行的执行输出的的结果然后再次根据后面给出的命令来执行，管线命令是用分隔符 `|` 来连接，`|` 右边的指令不能留有空格，例如查看 /etc 目录下的文件信息，但是由与文件太多，可以通过指令 `less` 协助。**管线命令后面一定接指令，并且必须要能接收标准输入的指令，如 less,more,head,tail 等，而像 ls,cp,mv 这样的指令就不能接受来自标准输入的。**
+
+```shell
+ls -al /etc |less	# less 可以任意前后浏览，不像 cat 一样直接闪到最底部
+```
+
+## 择取命令
+
+所谓择取（撷取）就是将一段分析过后的数据，在其中取出我们想要的。在择取过程中一般都是一行行择取的。择取命令一般有两个：`cut` 和 `grep`
+
+```shell
+cut -d'分割字符' -f fields # 用于特定分割字符
+cut -c 字符区间			  # 用于排列整齐的信息
+选项与参数：
+-d  ：后面接分隔字符。与 -f 一起使用；
+-f  ：依据 -d 的分隔字符将一段讯息分区成为数段，用 -f 取出第几段的意思；
+-c  ：以字符 （characters） 的单位取出固定字符区间；
+```
+
+举个例子，将 PATH 变量的值取出，并找出第五个路径
+
+```shell
+echo ${PATH}	# 输出： /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/root/bin
+echo ${PATH} | cut -d ':' -f 5	# 输出：/root/bin
+```
+
+还可以择取多端内容，比如在上面例子的基础之上找出第三个和第五个路径内容
+
+```shell
+echo ${PATH} | cut -d ':' -f 3,5	# 输出：/usr/sbin:/root/bin
+```
+
+如果要取第几个字符之后的字符串内容
+
+```shell
+export	# 查看 export 输出的信息
+export | cut -c 12-	# 择取出第12个之后的所有字符
+export | cut -c 12-20	# 择取出第12-20的字符
+```
+
+**cut 主要的用途在于将 “同一行里面的数据进行分解！” 最常使用在分析一些数据或文字数据的时候！ 这是因为有时候我们会以某些字符当作分区的参数，然后来将数据加以切割，以取得我们所需要的数据。** 
+
+grep 则是分析一行的信息，从行中拿出我们想要的信息，这个指令非常常用。
+
+```shell
+grep [-acinv] [--color=auto] '搜寻字串' filename
+选项与参数：
+-a ：将 binary 文件以 text 文件的方式搜寻数据
+-c ：计算找到 '搜寻字串' 的次数
+-i ：忽略大小写的不同，所以大小写视为相同
+-n ：顺便输出行号
+-v ：反向选择，亦即显示出没有 '搜寻字串' 内容的那一行！
+--color=auto ：可以将找到的关键字部分加上颜色的显示喔！
+```
+
+例如，在命令 last 显示的信息中，有出现关键字 'root' 的那一行就取出来
+
+```shell
+lastlog | grep 'root'
+```
+
+取出没有 root 的行
+
+```
+lastlog | grep -v 'root'
+```
+
+在 lastlog 的输出讯息中，只要有 root 就取出，并且仅取第一栏
+
+```shell
+lastlog | grep 'root' | cut -d ' ' -f1
+```
+
+## 排序指令
+
+```shell
+sort [-fbMnrtuk] [file or stdin]
+选项与参数：
+-f  ：忽略大小写的差异，例如 A 与 a 视为编码相同；
+-b  ：忽略最前面的空白字符部分；
+-M  ：以月份的名字来排序，例如 JAN, DEC 等等的排序方法；
+-n  ：使用“纯数字”进行排序（默认是以文字体态来排序的）；
+-r  ：反向排序；
+-u  ：就是 uniq ，相同的数据中，仅出现一行代表；
+-t  ：分隔符号，默认是用 [tab] 键来分隔；
+-k  ：以那个区间 （field） 来进行排序的意思
+```
+
+将 /etc/passwd 下的内容，把帐号进行排序
+
+```shell
+cat /etc/passwd | sort	# 默认排序（字母排序）
+```
+
+/etc/passwd 内容是以 : 来分隔的，我想以第三栏来排序
+
+```shell
+cat /etc/passwd | sort -t ':' -k 3
+```
+
+利用 lastlog ，将输出的数据仅取帐号，并加以排序
+
+```shell
+lastlog | cut -d ' ' -f1 | sort
+```
+
+uniq：去重
+
+```shell
+ uniq [-ic]
+ 选项与参数：
+-i  ：忽略大小写字符的不同；
+-c  ：进行计数
+```
+
+使用 lastlog 将帐号列出，仅取出帐号栏，进行排序后仅取出一位
+
+```shell
+lastlog | cut -d ' ' -f1 | sort | uniq
+```
+
+在上面的基础之上还想要知道每个人的登陆总次数
+
+```shell
+lastlog | cut -d ' ' -f1 | sort | uniq -c
+```
+
+wc：统计文件里面有多少字，多少行，多少字符
+
+```shell
+wc [-lwm]
+选项与参数：
+-l  ：仅列出行；
+-w  ：仅列出多少字（英文单字）；
+-m  ：多少字符；
+```
+
+ /etc/yum.conf 里面到底有多少相关字、行、字符数？
+
+```shell
+cat /etc/yum.conf | wc	# 输出三列数字：28     128    1019，分别代表 行，字数，字符数
+```
+
+取得登陆系统的总人次
+
+```
+lastlog |grep [a-zA-Z] |grep -v 'wtmp' |grep -v 'reboot' |\>grep -v 'unknown' |wc -l 
 ```
 
 
@@ -462,3 +655,4 @@ ${variable#/*local/bin:}
 # 参考资料：
 
 - [《鸟哥的Linux私房菜-基础篇》](http://linux.vbird.org/linux_basic/)
+
