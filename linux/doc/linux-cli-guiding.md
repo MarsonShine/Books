@@ -693,6 +693,87 @@ tar -cvf - /home | tar -xvf - -C /tmp/homeback
 # 将 /home 里面的文件打包，但打包的数据不是记录到文件，而是传送到了stdout；经过管线后，将 tar -cvf - /home 传送给后面的 tar -xvf。后面的 - 则是取的前一个 stdout，因此这里就不需要指定 filename 了 // 这里还没懂
 ```
 
+## 在命令中使用正则表达式
+
+在正则表达式中，有一些很常用的特殊符号
+
+| 特殊符号  | 代表含义                                   |
+| --------- | ------------------------------------------ |
+| [:aknum]  | 代表英文大小写字符和素质，即 0-9，A-Z，a-z |
+| [:alpha:] | 代表任意英文大小写字符，即 A-Z，a-z        |
+| [:upper:] | 代表大写字符，即 A-Z                       |
+| [:lower:] | 代表小写字符，即 a-z                       |
+| [:digit:] | 代表数字，即 0-9                           |
+
+我要在某个目录中查找有关键字 ‘mail’ 所有文件
+
+```shell
+grep 'mail' /lib/systemd/system/*
+```
+
+```shell
+grep [-A] [-B] [--color=auto] '搜寻字串' filename
+选项与参数：
+-A ：后面可加数字，为 after 的意思，除了列出该行外，后续的 n 行也列出来；
+-B ：后面可加数字，为 befer 的意思，除了列出该行外，前面的 n 行也列出来；
+--color=auto 可将正确的那个撷取数据列出颜色
+```
+
+用 dmesg 列出核心讯息，再以 grep 找出内含 qxl 那行
+
+```shell
+# dmesg 可列出核心产生的讯息！包括硬件侦测的流程也会显示出来。
+dmesg | grep 'qxl'
+# 由于我的centos是在docker中运行的，在运行这个命令的时候 会报 dmesg: read kernel buffer failed: Operation not permitted
+```
+
+### 正则式联系
+
+联系前提：下载鸟哥的 demo 文件
+
+```shell
+cd /tmp/ ;  wget http://linux.vbird.org/linux_basic/0330regularex/regular_express.txt
+```
+
+搜寻特定字串，输出含有 the 的内容并输出行号
+
+```shell
+grep -n 'the' regular_express.txt
+# 输出发现，匹配出来的内容用黑色加粗先显示了，是因为指令默认加了 --color=auto
+```
+
+反向选择，输出没有 the 的内容
+
+```shell
+grep -vn 'the' regular_express.txt
+```
+
+获取忽略大小写的内容
+
+```shell
+grep -in 'the' regular_express.txt
+```
+
+利用中括号 `[]` 来搜寻集合字符：
+
+如果我想要搜寻 test 或 taste 这两个单词时，可以发现这两个单词共同的 **'t?st'**，这个时候可以这样搜索
+
+```shell
+grep -n 't[ae]st' regular_express.txt
+```
+
+想要匹配出 oo 的内容之外，想限制不想看到 oo 前面有 g 的话
+
+```shell
+grep -n '[^g]oo' regular_express.txt
+```
+
+ oo 前面不想要有小写字符
+
+```shell
+grep -n '[^a-z]oo' regular_express.txt	# 注意，a-z ascii 码是连续的，所以可以这么写，如果是 [^a-Z] 这样是不可以的，会报 grep: Invalid range end
+```
+
 
 
 # 参考资料：
