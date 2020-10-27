@@ -774,6 +774,50 @@ grep -n '[^g]oo' regular_express.txt
 grep -n '[^a-z]oo' regular_express.txt	# 注意，a-z ascii 码是连续的，所以可以这么写，如果是 [^a-Z] 这样是不可以的，会报 grep: Invalid range end
 ```
 
+除了是连续的 ascii 码之外，根据上面的表格信息也可以用下面的命令
+
+```shell
+grep -n '[^[:lower:]]oo' regular_express.txt
+# 上述命令就是表示非 a-z 的意思
+grep -n '[[:digit:]]' regular_express.txt
+# 表示含有任意数字的行
+```
+
+行首 `^` 和行尾定位符 `$`
+
+在前面的例子中，要查出 `the` 字符的行信息很简单，但是如在此基础之上再限制只匹配行首的话
+
+```shell
+grep -n '^the' regular_express.txt	# 这样就会只匹配行首是不是 the
+```
+
+如果是开头是小写字符的
+
+```shell
+grep -n '^[a-z]' regular_express.txt # 或者用
+grep -n '^[:lower:]' regular_express.txt
+```
+
+要注意，减号 `-` 在`[]` 内部表示就是"非"，而在 `[]` 外部就是匹配行首位置。
+
+如果我想要找出来，行尾结束为小数点 (.) 的那一行
+
+```shell
+grep -n '\.$' regular_express.txt
+```
+
+找出空白行
+
+```shell
+grep -n '^$' regular_express.txt
+```
+
+```shell
+grep -v '^$' /etc/rsyslog.conf | grep -v '^#'
+# 其中第一个“ -v '^$' ” 代表 “不要空白行”，
+# 第二个“ -v '^#' ” 代表 “不要开头是 # 的那行”
+```
+
 
 
 # 参考资料：
