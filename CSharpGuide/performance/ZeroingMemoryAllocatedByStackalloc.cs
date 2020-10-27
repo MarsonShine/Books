@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Text;
 
+// https://github.com/dotnet/runtime/issues/43391
 namespace CSharpGuide.performance
 {
     public class ZeroingMemoryAllocatedByStackalloc
