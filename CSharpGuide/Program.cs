@@ -11,6 +11,7 @@ using CSharpGuide.LanguageVersions._7._0;
 using CSharpGuide.LanguageVersions._8._0;
 using CSharpGuide.LanguageVersions._9._0;
 using CSharpGuide.LanguageVersions.Four.Zero;
+using CSharpGuide.performance;
 using CSharpGuide.random;
 using CSharpGuide.threads;
 
@@ -88,16 +89,19 @@ namespace CSharpGuide {
             //Console.WriteLine("*************************AsyncLocal via ThreadLocal************************");
             //AsyncLocalViaThreadLocal.AsyncMethodA().ConfigureAwait(false).GetAwaiter();    
 
-            Console.WriteLine("*************************Default Interface Method************************");
-            DefaultInterfaceMethod.Start();
+            //Console.WriteLine("*************************Default Interface Method************************");
+            //DefaultInterfaceMethod.Start();
 
-            Console.WriteLine("************************ C# 9.0 ************************");
-            var ri = new RecordIdentifierDemo();
-            ri.Initial();
+            //Console.WriteLine("************************ C# 9.0 ************************");
+            //var ri = new RecordIdentifierDemo();
+            //ri.Initial();
 
-            Console.WriteLine("************************ System.Thread.Channel ************************");
-            ThreadChannelDemo.MultipleProducerSingleConsumer().ConfigureAwait(false).GetAwaiter();
+            //Console.WriteLine("************************ System.Thread.Channel ************************");
+            //ThreadChannelDemo.MultipleProducerSingleConsumer().ConfigureAwait(false).GetAwaiter();
 
+
+            for (int i = 1; i >= 0; i--)
+                Console.WriteLine(ZeroingMemoryAllocatedByStackalloc.Test(i)); // Test is inlined
             Console.Read();
         }
 
