@@ -68,6 +68,12 @@ namespace CSharpGuide.LanguageVersions._8._0 {
 
     interface IA {
         void M();
+        // 接口可以定义具有访问器的私有方法，只能给接口 IA 内部访问
+        private void PrivateMethod() { }
+        static string name;
+        static IA() {
+            name = "marsonshine";
+        }
     }
     interface IB : IA {
         // override void M() { WriteLine("IB"); }
