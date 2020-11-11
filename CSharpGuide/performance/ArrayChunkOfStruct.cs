@@ -1,4 +1,5 @@
-﻿using System;
+﻿#define NET5
+using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -60,7 +61,7 @@ namespace CSharpGuide.performance
         } 
 #endif
 
-#if NET5
+#if NET50
         internal static ref T GetArrayDataReference<T>(T[] array)
         {
             return ref Unsafe.As<byte, T>(ref Unsafe.As<RowArrayData>(array).Data);
