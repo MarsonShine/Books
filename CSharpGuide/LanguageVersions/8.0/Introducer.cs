@@ -10,9 +10,9 @@ namespace CSharpGuide.LanguageVersions._8._0
         public void Start()
         {
             //可空引用类型
-            string s = null;
+            string? s = null;
             //引用null.toString 程序报错
-            s.ToString();
+            s?.ToString();
 #pragma warning disable CS8632 // 应仅在 “#nullable” 上下文中的代码中使用可为 null 的引用类型的注释。
             string? s1 = null;
 #pragma warning restore CS8632 // 应仅在 “#nullable” 上下文中的代码中使用可为 null 的引用类型的注释。
