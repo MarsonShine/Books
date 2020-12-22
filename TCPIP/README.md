@@ -23,6 +23,8 @@
 - **ACFC**：Address and Control Field Compression，地址和控制字段压缩（在 PPP 中，压缩地址和控制字段以减少开销）
 - **ACK**：Acknowledgment，确认（一种表明数据已经成功到达接收端的提示，适用于协议栈的多个层次）
 - **ARP**：地址解析协议
+- **ACL**：Access Control Lists，访问控制列表
+- **ALG**：Application-Layer Gateways，应用层网关
 
 ## <a id="B">B</a>
 
@@ -66,6 +68,7 @@
 - **DAD：** duplication address detection，重复地址检测 
 - **DUID：** DHCP unique identity，DHCP 唯一标识符
 - **DSL**：数字用户线（普通老式电话服务线路上的专用宽带数据链路）
+- **DCCP**：Datagram Congestion Control Protocol，数据报拥塞控制协议
 
 ## <a id="E">E</a>
 
@@ -118,6 +121,8 @@
 - **L2TP**：Layer 2 Tunneling Protocol，第 2 层隧道协议（IETF 标准的链路层隧道协议）
 - **LCP**：Link Control Protocol，链路控制协议（在 PPP 中，用于建立一条链路）
 - **LQR**：Link Quality Reports，链路质量报告（在 PPP 中，关于链路质量的测量报告，包括接收、发送以及因错误而被拒绝接收的数据包数量）
+- **LNP**：Local Network Protection，本地网络保护
+- **LSN**：Large-Scale NAT，大规模 NAT
 
 ## <a id="M">M</a>
 
@@ -182,6 +187,7 @@
 - **RH**：Router Header，路由头部（IPv6 用于改变流量传输途径的拓展头部）
 - **RO**：路由优化
 - **RRP**：返回路由程序
+- **RTP**：Real-Time Protocol，实时协议
 
 ## <a id="S">S</a>
 
@@ -191,6 +197,8 @@
 - **SNA**：Systems Network Architecture，系统网格体系结构（IBM 公司的网络体系结构）
 - **STP**：spainning tree protocol，生成树协议
 - **STA**：Station，站点（一个接入点或相关无线主机的 IEEE 802.11 术语）
+- **SCTP**：Stream Control Transmission Protocol，流控制传输协议
+- **SPNAT**：Service Provider NAT，服务提供者 NAT
 
 ## <a id="T">T</a>
 
@@ -208,6 +216,7 @@
 - **UDP**：User Datagram Protocol，用户数据报协议（一种尽力而为的消息协议，带有消息边界，不支持拥塞或流量控制）
 - **UP**：user priorities，用户优先级（802.11 优先级；基于来自 802.1d 的相同术语）
 - **UEQM**：Unequal Modulation，不平等调制（对不同的数据流同时使用不同的调制方案）
+- **ULA**：Unique Local IPv6 Unicast Addresses，IPv6 单播地址
 
 ## <a id="V">V</a>
 
