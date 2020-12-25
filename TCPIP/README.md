@@ -13,6 +13,7 @@
 
 ## <a id="A">A</a>
 
+- **AC**:  Access Concentrator，接入集中器
 - **AN**：数字分配页面
 - **AF**：Assured Forwarding，保证转发（一种提供流量类优先级与类间优先次序的 PHB）
 - **AES**：Advanced Encryption Standard 高级加密标准算法
@@ -22,6 +23,8 @@
 - **ACFC**：Address and Control Field Compression，地址和控制字段压缩（在 PPP 中，压缩地址和控制字段以减少开销）
 - **ACK**：Acknowledgment，确认（一种表明数据已经成功到达接收端的提示，适用于协议栈的多个层次）
 - **ARP**：地址解析协议
+- **ACL**：Access Control Lists，访问控制列表
+- **ALG**：Application-Layer Gateways，应用层网关
 
 ## <a id="B">B</a>
 
@@ -51,6 +54,7 @@
 - **CoT**：转交测试
 - **CoTI**：转交测试初始化
 - **CSR：**classless static router，无分类静态路由
+- **CGA**：密码生成地址（利用基于公钥的散列算法生成的地址）
 
 ## <a id="D">D</a>
 
@@ -63,6 +67,8 @@
 - **DTCP**：动态隧道配置协议
 - **DAD：** duplication address detection，重复地址检测 
 - **DUID：** DHCP unique identity，DHCP 唯一标识符
+- **DSL**：数字用户线（普通老式电话服务线路上的专用宽带数据链路）
+- **DCCP**：Datagram Congestion Control Protocol，数据报拥塞控制协议
 
 ## <a id="E">E</a>
 
@@ -106,6 +112,7 @@
 - **ISM**：industry science medicine，工业、科学和医疗（世界上许多地区免许可证的频段，为 Wi-Fi 所用）
 - **IA：** identity  associated，身份关联
 - **IAID：** identity association identity，IA 标识符
+- **IETF**：Internet 工程任务组（Internet 标准的标准制定组织）
 
 ## <a id="J">J</a>
 ## <a id="K">K</a>
@@ -114,6 +121,8 @@
 - **L2TP**：Layer 2 Tunneling Protocol，第 2 层隧道协议（IETF 标准的链路层隧道协议）
 - **LCP**：Link Control Protocol，链路控制协议（在 PPP 中，用于建立一条链路）
 - **LQR**：Link Quality Reports，链路质量报告（在 PPP 中，关于链路质量的测量报告，包括接收、发送以及因错误而被拒绝接收的数据包数量）
+- **LNP**：Local Network Protection，本地网络保护
+- **LSN**：Large-Scale NAT，大规模 NAT
 
 ## <a id="M">M</a>
 
@@ -152,6 +161,7 @@
 - **PoE**：Power over Ethernet，以太网供电（通过以太网布线为设备供电）
 - **PSK**：Pre-Shared Key，预共享密钥（预先设置加密密钥，不使用动态密钥交换协议）
 - **PPP**：Point-to-Point Protocol，点对点协议（一个链路层配置与数据封装协议，能够承载多种网络层协议，并能够使用多种底层物理链路）
+- **PPPoE**: 以太网的 PoE（以太网链路上建立一条 PPP 关联的方法）
 - **PMTU**：Path MTU（在发送方到接收方的路径上所经过链路的最小 MTU 值）
 - **PMTUD**：PMTU Discovery，路径MTU发现（确定 PMTU 的过程；通常依赖于 ICMP PTB 消息）
 - **PPTP**：Point-to-Point Tunneling Protocol，点对点隧道协议（Microsoft 的链路层隧道协议）
@@ -167,6 +177,7 @@
 
 ## <a id="R">R</a>
 
+- **RLAAC**：无状态地址自动配置（一种节点能够自主地配置其 IP 地址的机制；通常应用于 IPv6 节点）
 - **RAS**：Remote Access Server，远程访问服务器（一台服务器，用于处理远程用户的身份认证、访问控制等）
 - **RSTP**：rapid spanning tree protocol，快速生成树协议（STP 的较少延迟版本）
 - **RSN**：Robust Security Network，强健网络安全（针对 IEEE 802.11i/WPA 的安全改进；已包含于 802.11 标准中）
@@ -176,14 +187,18 @@
 - **RH**：Router Header，路由头部（IPv6 用于改变流量传输途径的拓展头部）
 - **RO**：路由优化
 - **RRP**：返回路由程序
+- **RTP**：Real-Time Protocol，实时协议
 
 ## <a id="S">S</a>
 
 - **SAP**：session announcement protocol，会话通告协议；携带实验性的组播会话通告
 - **SDLC**：Synchronous Data Link Control，同步数据链路控制（HDLC 协议的前身，SNA 的链路层）
+- **SEND**：安全邻居发现（一个使用 CGA 的邻居发现的安全变种）
 - **SNA**：Systems Network Architecture，系统网格体系结构（IBM 公司的网络体系结构）
 - **STP**：spainning tree protocol，生成树协议
 - **STA**：Station，站点（一个接入点或相关无线主机的 IEEE 802.11 术语）
+- **SCTP**：Stream Control Transmission Protocol，流控制传输协议
+- **SPNAT**：Service Provider NAT，服务提供者 NAT
 
 ## <a id="T">T</a>
 
@@ -201,6 +216,7 @@
 - **UDP**：User Datagram Protocol，用户数据报协议（一种尽力而为的消息协议，带有消息边界，不支持拥塞或流量控制）
 - **UP**：user priorities，用户优先级（802.11 优先级；基于来自 802.1d 的相同术语）
 - **UEQM**：Unequal Modulation，不平等调制（对不同的数据流同时使用不同的调制方案）
+- **ULA**：Unique Local IPv6 Unicast Addresses，IPv6 单播地址
 
 ## <a id="V">V</a>
 
