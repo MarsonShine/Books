@@ -1,13 +1,15 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 15
-VisualStudioVersion = 15.0.26124.0
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.31205.134
 MinimumVisualStudioVersion = 15.0.26124.0
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Chapter_3_Generic", "Chapter_3_Generic\Chapter_3_Generic.csproj", "{D93BE221-93FC-4290-81DC-B1063DA7099C}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Chapter_3_Generic", "Chapter_3_Generic\Chapter_3_Generic.csproj", "{D93BE221-93FC-4290-81DC-B1063DA7099C}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Chapter06", "Chapter06\Chapter06.csproj", "{27628ED5-0B2B-43AE-B193-954FCA648B1C}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Chapter06", "Chapter06\Chapter06.csproj", "{27628ED5-0B2B-43AE-B193-954FCA648B1C}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Chapter10_Extension", "Chapter10_Extension\Chapter10_Extension.csproj", "{36165977-97D2-4206-9A1D-635EE75BB53E}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Chapter10_Extension", "Chapter10_Extension\Chapter10_Extension.csproj", "{36165977-97D2-4206-9A1D-635EE75BB53E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Chapter12_Deconstruction_PatnerMatching", "Chapter12_Deconstruction_PatnerMatching\Chapter12_Deconstruction_PatnerMatching.csproj", "{73EE5B00-84A0-45EA-AFDC-FC0BCB3451EF}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -17,9 +19,6 @@ Global
 		Release|Any CPU = Release|Any CPU
 		Release|x64 = Release|x64
 		Release|x86 = Release|x86
-	EndGlobalSection
-	GlobalSection(SolutionProperties) = preSolution
-		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
 		{D93BE221-93FC-4290-81DC-B1063DA7099C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
@@ -58,5 +57,23 @@ Global
 		{36165977-97D2-4206-9A1D-635EE75BB53E}.Release|x64.Build.0 = Release|Any CPU
 		{36165977-97D2-4206-9A1D-635EE75BB53E}.Release|x86.ActiveCfg = Release|Any CPU
 		{36165977-97D2-4206-9A1D-635EE75BB53E}.Release|x86.Build.0 = Release|Any CPU
+		{73EE5B00-84A0-45EA-AFDC-FC0BCB3451EF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{73EE5B00-84A0-45EA-AFDC-FC0BCB3451EF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{73EE5B00-84A0-45EA-AFDC-FC0BCB3451EF}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{73EE5B00-84A0-45EA-AFDC-FC0BCB3451EF}.Debug|x64.Build.0 = Debug|Any CPU
+		{73EE5B00-84A0-45EA-AFDC-FC0BCB3451EF}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{73EE5B00-84A0-45EA-AFDC-FC0BCB3451EF}.Debug|x86.Build.0 = Debug|Any CPU
+		{73EE5B00-84A0-45EA-AFDC-FC0BCB3451EF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{73EE5B00-84A0-45EA-AFDC-FC0BCB3451EF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{73EE5B00-84A0-45EA-AFDC-FC0BCB3451EF}.Release|x64.ActiveCfg = Release|Any CPU
+		{73EE5B00-84A0-45EA-AFDC-FC0BCB3451EF}.Release|x64.Build.0 = Release|Any CPU
+		{73EE5B00-84A0-45EA-AFDC-FC0BCB3451EF}.Release|x86.ActiveCfg = Release|Any CPU
+		{73EE5B00-84A0-45EA-AFDC-FC0BCB3451EF}.Release|x86.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {36F6D4E5-8066-4ED2-8736-DE5F940EACDC}
 	EndGlobalSection
 EndGlobal
