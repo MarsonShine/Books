@@ -54,6 +54,16 @@ namespace Chapter13_HighPerformancePassByReference {
             ArrayHelper.Start();
 
             ReadOnlyArrayView<int>.Start();
+
+            InParameter.Start();
+
+            Console.ReadLine();
+
+            Vector3D vector = new Vector3D(1, 2, 3);
+            vector.Magnitude();
+            vector.Magnitude2();
+
+            SpanAndMemoryAccess.Start();
         }
         static(int even, int odd) CountEvenAndOdd(IEnumerable<int> values) {
             var result = (even: 0, odd: 0);
