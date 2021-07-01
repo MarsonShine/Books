@@ -13,6 +13,13 @@ namespace CSharpGuide.LanguageVersions._7._0
         {
             var (_, _, _, pop1, _, pop2) = QueryCityDataForYears("New York City", 1960, 2010);
             Console.WriteLine($"population change, 1960 to 2010: {pop2 - pop2:NO}");
+
+            _ = ReturnDiscard();
+
+            var s = ReturnDiscard();
+
+            var ss = ReturnDiscard();
+            Console.WriteLine(ss);
         }
         private static (string, double, int, int, int, int) QueryCityDataForYears(string name, int year1, int year2)
         {
@@ -33,5 +40,7 @@ namespace CSharpGuide.LanguageVersions._7._0
             }
             return ("", 0, 0, 0, 0, 0);
         }
+
+        private static string ReturnDiscard() => "as";
     }
 }
