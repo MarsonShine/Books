@@ -1,0 +1,15 @@
+package main
+
+import (
+	"fmt"
+	"godesignpattern/decorators"
+)
+
+func main() {
+	var b decorators.Beverager
+	b = decorators.NewDarkRoast()
+	b = decorators.NewMocha(b)
+	b = decorators.NewMocha(b)
+	b = decorators.NewWhip(b)
+	fmt.Printf("%d,%s", b.Cost(), b.GetDescription())
+}
