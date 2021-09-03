@@ -1,4 +1,4 @@
-﻿################################################################################
+################################################################################
 # 此 .gitignore 文件已由 Microsoft(R) Visual Studio 自动创建。
 ################################################################################
 
@@ -25,3 +25,5 @@
 /CSharpInDepth/Chapter06/obj
 /CSharpInDepth/Chapter_3_Generic/obj
 /CSharpInDepth/Chapter10_Extension/obj
+
+DesignPattern/DesignPatternGo/workspace/workspace.code-workspace
