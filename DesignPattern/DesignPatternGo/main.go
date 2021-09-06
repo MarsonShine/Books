@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"godesignpattern/decorators"
+	"godesignpattern/strategys"
 )
 
 func main() {
@@ -22,4 +23,6 @@ func main() {
 	// trouser := decorators.NewBigTrouser(p)
 	// tthirts := decorators.NewTThirts(trouser)
 	// println(tthirts.Show())
+
+	strategys.Start()
 }
