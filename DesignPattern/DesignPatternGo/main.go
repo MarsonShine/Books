@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"godesignpattern/decorators"
+	"godesignpattern/propertys"
 	"godesignpattern/strategys"
 )
 
@@ -25,4 +26,5 @@ func main() {
 	// println(tthirts.Show())
 
 	strategys.Start()
+	propertys.Start()
 }
