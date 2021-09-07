@@ -5,6 +5,7 @@ import (
 	"godesignpattern/decorators"
 	"godesignpattern/mememtos"
 	"godesignpattern/propertys"
+	"godesignpattern/singletons"
 	"godesignpattern/strategys"
 )
 
@@ -29,4 +30,5 @@ func main() {
 	strategys.Start()
 	propertys.Start()
 	mememtos.Start()
+	singletons.StartByLock()
 }
