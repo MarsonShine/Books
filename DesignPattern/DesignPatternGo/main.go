@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"godesignpattern/decorators"
+	"godesignpattern/mememtos"
 	"godesignpattern/propertys"
 	"godesignpattern/strategys"
 )
@@ -27,4 +28,5 @@ func main() {
 
 	strategys.Start()
 	propertys.Start()
+	mememtos.Start()
 }
