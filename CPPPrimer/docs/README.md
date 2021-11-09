@@ -7,3 +7,6 @@
 ## 引用对象的方法
 
 `std::cout` 以及 `std::cin`：前缀 std::name 表示 cout 是在命名空间为 std 中的。这样就可以防止同样的函数名字一样的冲突问题。
+
+# ASCII 码表
+https://www.asciitable.com/
