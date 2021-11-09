@@ -1,25 +1,31 @@
 #include <istream>
 #include <string>
 
+#ifndef SALESITEM_H
+// we're here only if SALESITEM_H has not yet been defined 
+#define SALESITEM_H
 class Sales_item
 {
-friend std::istream& operator>>(std::istream&,Sales_item&); //用输入运算符读Sales_Item对象
-friend std::ostream& operator>>(std::ostream&,const Sales_item&); //输出运算符写Sales_Item对象
+friend std::istream& operator>>(std::istream&, Sales_item&); //用输入运算符读Sales_Item对象
+friend std::ostream& operator<<(std::ostream&, const Sales_item&); //输出运算符写Sales_Item对象
 friend bool operator<(const Sales_item&, const Sales_item&); //申明运算符，比较两个Sales_Item对象的大小
-friend bool operator==(const Sales_item&, const Sales_item&);//申明==运算符，比较两个Sales_Item对象是否相等
+friend bool 
+operator==(const Sales_item&, const Sales_item&);//申明==运算符，比较两个Sales_Item对象是否相等
+public:
+    //申明构造函数
+    Sales_item() = default;
+    Sales_item(const std::string &book): bookNo(book) { }
+    Sales_item(std::istream &is) { is >> *this;}
+public:
+    Sales_item& operator+=(const Sales_item&);
+    // 调用isbn函数从一个Sales_Item对象提取bookNo
+    std::string isbn() const { return bookNo; } 
+    double avg_price() const;
+// private members as before
 private:
     std::string bookNo; // 显式初始化一个空的字符串
     unsigned units_sold = 0;
     double revenue = 0.0;
-public:
-    //申明构造函数
-    Sales_item() = default;
-    Sales_item(const std::string &book): bookNo(book) {}
-    Sales_item(std::istream &is) { is >> *this;}
-public:
-    Sales_item& operator+=(const Sales_item&);
-    std::string isbn() const { return bookNo; } //调用isbn函数从一个Sales_Item对象提取bookNo
-    double avg_price() const;
 };
 
 inline
@@ -89,3 +95,4 @@ double Sales_item::avg_price() const
     else 
         return 0;
 }
+#endif
