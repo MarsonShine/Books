@@ -1,21 +1,23 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 15
-VisualStudioVersion = 15.0.26124.0
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 15.0.26124.0
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AsyncPatternInNet", "AsyncPatternInNet\AsyncPatternInNet.csproj", "{2E0EBB93-1FA8-4B4F-A0D0-0C09473A2334}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "AsyncPatternInNet", "AsyncPatternInNet\AsyncPatternInNet.csproj", "{2E0EBB93-1FA8-4B4F-A0D0-0C09473A2334}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AwaitWhatActuallyToDo", "AwaitWhatActuallyToDo\AwaitWhatActuallyToDo.csproj", "{1042307E-2CDD-4DAD-A35F-086D3B8DE7D7}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "AwaitWhatActuallyToDo", "AwaitWhatActuallyToDo\AwaitWhatActuallyToDo.csproj", "{1042307E-2CDD-4DAD-A35F-086D3B8DE7D7}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TAPs", "TAPs\TAPs.csproj", "{3D7CD8A5-2DAC-4970-BFF9-735B7D6EE724}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TAPs", "TAPs\TAPs.csproj", "{3D7CD8A5-2DAC-4970-BFF9-735B7D6EE724}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UtilitiesForTAP", "UtilitiesForTAP\UtilitiesForTAP.csproj", "{23B8234F-BAF4-4DCE-9872-E46488D79BD8}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "UtilitiesForTAP", "UtilitiesForTAP\UtilitiesForTAP.csproj", "{23B8234F-BAF4-4DCE-9872-E46488D79BD8}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WitchThreadRunCode", "WitchThreadRunCode\WitchThreadRunCode.csproj", "{B7F475B9-AFF1-45B2-B302-510F888ED3C7}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "WitchThreadRunCode", "WitchThreadRunCode\WitchThreadRunCode.csproj", "{B7F475B9-AFF1-45B2-B302-510F888ED3C7}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ExceptionInAsync", "ExceptionInAsync\ExceptionInAsync.csproj", "{A7079FAB-7B36-4987-859C-DF5BDA550767}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ExceptionInAsync", "ExceptionInAsync\ExceptionInAsync.csproj", "{A7079FAB-7B36-4987-859C-DF5BDA550767}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ParallelSlimInAsync", "ParallelSlimInAsync\ParallelSlimInAsync.csproj", "{ECA20CF2-4869-4240-B6F5-B3E16CE05C2A}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ParallelSlimInAsync", "ParallelSlimInAsync\ParallelSlimInAsync.csproj", "{ECA20CF2-4869-4240-B6F5-B3E16CE05C2A}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Net6WebDemo", "..\CSharpGuide\Net6WebDemo\Net6WebDemo.csproj", "{BB015AEA-2081-448C-B3AC-7F4DAFA74E4E}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -25,9 +27,6 @@ Global
 		Release|Any CPU = Release|Any CPU
 		Release|x64 = Release|x64
 		Release|x86 = Release|x86
-	EndGlobalSection
-	GlobalSection(SolutionProperties) = preSolution
-		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
 		{2E0EBB93-1FA8-4B4F-A0D0-0C09473A2334}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
@@ -114,5 +113,23 @@ Global
 		{ECA20CF2-4869-4240-B6F5-B3E16CE05C2A}.Release|x64.Build.0 = Release|Any CPU
 		{ECA20CF2-4869-4240-B6F5-B3E16CE05C2A}.Release|x86.ActiveCfg = Release|Any CPU
 		{ECA20CF2-4869-4240-B6F5-B3E16CE05C2A}.Release|x86.Build.0 = Release|Any CPU
+		{BB015AEA-2081-448C-B3AC-7F4DAFA74E4E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BB015AEA-2081-448C-B3AC-7F4DAFA74E4E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BB015AEA-2081-448C-B3AC-7F4DAFA74E4E}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{BB015AEA-2081-448C-B3AC-7F4DAFA74E4E}.Debug|x64.Build.0 = Debug|Any CPU
+		{BB015AEA-2081-448C-B3AC-7F4DAFA74E4E}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{BB015AEA-2081-448C-B3AC-7F4DAFA74E4E}.Debug|x86.Build.0 = Debug|Any CPU
+		{BB015AEA-2081-448C-B3AC-7F4DAFA74E4E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BB015AEA-2081-448C-B3AC-7F4DAFA74E4E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{BB015AEA-2081-448C-B3AC-7F4DAFA74E4E}.Release|x64.ActiveCfg = Release|Any CPU
+		{BB015AEA-2081-448C-B3AC-7F4DAFA74E4E}.Release|x64.Build.0 = Release|Any CPU
+		{BB015AEA-2081-448C-B3AC-7F4DAFA74E4E}.Release|x86.ActiveCfg = Release|Any CPU
+		{BB015AEA-2081-448C-B3AC-7F4DAFA74E4E}.Release|x86.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {42E00A21-85F1-47FB-A319-FE0C6BBCA841}
 	EndGlobalSection
 EndGlobal
