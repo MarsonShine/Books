@@ -13,5 +13,15 @@ int main() {
     // 分多行书写的字符串字面值
     std::cout << "a really, really long string literal "
                 "that spans two lines" << std::endl;
+
+    // 指针的指针
+    int ival = 1024;
+    int* pi = &ival;
+    int** ppi = &pi; //指向指针的指针
+    std::cout << "The value of ival\n"
+              << "direct value: " << ival << "\n"
+              << "indirect value: " << *pi << "\n"
+              << "doubly indirect value: " << **ppi
+              << std::endl;
     return 0;
 }
