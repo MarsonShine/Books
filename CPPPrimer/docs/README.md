@@ -10,3 +10,20 @@
 
 # ASCII 码表
 https://www.asciitable.com/
+
+# VSCode 使用 C++11 编译选项
+
+点击已安装的 VSCode C/C++ 拓展项，鼠标右键点击”拓展设置“，找到配置项`C_Cpp.default.compilerArgs`添加如下选项：
+
+```json
+{
+	"C_Cpp.default.compilerArgs": [
+        "-g",
+        "${file}",
+        "-std=c++11",
+        "-o",
+        "${fileDirname}/${fileBasenameNoExtension}"
+   ]
+}
+```
+
