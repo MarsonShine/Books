@@ -1,7 +1,5 @@
 ﻿using Microsoft.CodeAnalysis;
 using System;
-using System.Collections.Generic;
-using System.Text;
 
 namespace MySourceGenerator
 {
@@ -10,14 +8,14 @@ namespace MySourceGenerator
     {
         public void Execute(GeneratorExecutionContext context)
         {
-            // 代码生成在这里执行
-            // 查找入口方法
+            // Find the main method
             var mainMethod = context.Compilation.GetEntryPoint(context.CancellationToken)!;
 
-            // 生成的具体内容
-            string source = $@"// 自动生成代码，此文件无法编辑
+            // Build up the source code
+            string source = $@" // Auto-generated code
 using System;
-namespce {mainMethod.ContainingNamespace.ToDisplayString()}
+
+namespace {mainMethod.ContainingNamespace.ToDisplayString()}
 {{
     public static partial class {mainMethod.ContainingType.Name}
     {{
@@ -27,14 +25,15 @@ namespce {mainMethod.ContainingNamespace.ToDisplayString()}
 }}
 ";
             var typeName = mainMethod.ContainingType.Name;
-            // 添加资源编译
+
+            // Add the source code to the compilation
             context.AddSource($"{typeName}.g.cs", source);
         }
 
+
         public void Initialize(GeneratorInitializationContext context)
         {
-            // 这个不需要初始化
-            System.Diagnostics.Debugger.Launch();
+            
         }
     }
 }

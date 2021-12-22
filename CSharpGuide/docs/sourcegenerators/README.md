@@ -81,6 +81,10 @@ Source Generator 可以提供的另一个功能是避免使用一些“严格类
    </Project>
    ```
 
+   > 注意：
+   >
+   > 创建 Source Generator 项目只能是 .NET Standard2.0 项目，否则生成器是无法正常工作的
+
 5. 创建一个名为 HelloSourceGenerator.cs 的新 c# 文件，指定你自己的 SourceGenerator，如下所示：
 
    ```c#
