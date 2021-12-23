@@ -448,4 +448,597 @@ namespace GeneratedNamespace
 
 ### 访问分析器配置属性
 
-TODO
+**实现状态：**VS 16.7 preview3 及以上可用
+
+**用户场景：**
+
+- 作为生成器作者，我希望访问语法树或其他文件的分析器配置属性。
+- 作为生成器作者，我希望访问自定义生成器输出的键值对。
+- 作为一个生成器的用户，我希望能够自定义生成的代码和覆盖默认值。
+
+**解决方案：**生成器可以通过 `GeneratorExecutionContext` 的 `AnalyzerConfigOptions` 属性访问分析器的配置值。分析器配置值可以在 `SyntaxTree`、`AdditionalFile` 的上下文中访问，也可以通过 `GlobalOptions` 全局访问。全局选项是“外界的（ambient）”，因为它们不适用于任何特定的上下文，但将包括在一个特定的上下文请求选项。
+
+生成器可以自由地使用全局选项来定制其输出。例如，考虑一个可以选择性地发出日志记录的生成器。作者可以选择检查全局分析器配置值的值，以控制是否发出日志代码。然后用户可以通过 `.editorconfig` 文件启用每个项目的设置：
+
+```
+mygenerator_emit_logging = true
+```
+
+```c#
+[Generator]
+public class MyGenerator : ISourceGenerator
+{
+    public void Execute(GeneratorExecutionContext context)
+    {
+        // control logging via analyzerconfig
+        bool emitLogging = false;
+        if (context.AnalyzerConfigOptions.GlobalOptions.TryGetValue("mygenerator_emit_logging", out var emitLoggingSwitch))
+        {
+            emitLogging = emitLoggingSwitch.Equals("true", StringComparison.OrdinalIgnoreCase);
+        }
+
+        // add the source with or without logging...
+    }
+
+    public void Initialize(GeneratorInitializationContext context)
+    {
+    }
+}
+```
+
+### 使用 MSBuild 属性和元数据
+
+**实现状态：**VS 16.7 preview3 及以上可用
+
+**用户场景：**
+
+- 作为一个生成器作者，我希望根据项目文件中包含的值做出决策
+- 作为一个生成器的用户，我希望能够自定义生成的代码和覆盖默认值。
+
+**解决方案：**MSBuild 将自动将指定的属性和元数据转换为一个全局分析器配置，生成器可以读取该配置。生成器作者通过向 `CompilerVisibleProperty` 和 `CompilerVisibleItemMetadata` 条目组（item group）添加条目来指定它们想要提供的属性和元数据。当将生成器打包为 NuGet 包时，这些可以通过那些属性或目标文件添加。
+
+例如，考虑一个基于附加文件创建源的生成器，并希望允许用户通过项目文件启用或禁用日志记录。作者会在他们的 props 文件中指定他们想让指定的 MSBuild 对编译器可见的属性：
+
+```xml
+<ItemGroup>
+    <CompilerVisibleProperty Include="MyGenerator_EnableLogging" />
+</ItemGroup>
+```
+
+在构建之前，属性 `MyGenerator_EnableLogging` 的值将被发送到生成的分析器配置文件中，其名称为 `build_property.MyGenerator_EnableLogging`。生成器可以通过 `GeneratorExecutionContext` 的 `AnalyzerConfigOptions` 属性读取这个属性：
+
+```c#
+context.AnalyzerConfigOptions.GlobalOptions.TryGetValue("build_property.MyGenerator_EnableLogging", out var emitLoggingSwitch);
+```
+
+因此，用户可以通过在项目文件中设置属性来启用或禁用日志记录。
+
+现在，考虑到生成器作者希望有选择地允许在每个附加文件的基础上选择进入/退出日志。作者可以通过添加到 `CompilerVisibleItemMetadata` 条目组，请求 MSBuild 发出指定文件的元数据值。作者指定了他们想要从其中读取元数据的 `MSBuild` 条目类型（itemType）(在本例中为 `AdditionalFiles`)，以及他们想要为他们检索的元数据的名称。
+
+```xml
+<ItemGroup>
+    <CompilerVisibleItemMetadata Include="AdditionalFiles" MetadataName="MyGenerator_EnableLogging" />
+</ItemGroup>
+```
+
+对于编译中的每个附加文件，`MyGenerator_EnableLogging` 的值将被发送到生成的分析器配置文件中，并带有一个名为 `build_metadata.AdditionalFiles.MyGenerator_EnableLogging` 的项。生成器可以在每个附加文件的上下文中读取这个值：
+
+```c#
+foreach (var file in context.AdditionalFiles)
+{
+    context.AnalyzerConfigOptions.GetOptions(file).TryGetValue("build_metadata.AdditionalFiles.MyGenerator_EnableLogging", out var perFileLoggingSwitch);
+}
+```
+
+在用户项目文件中，用户现在可以注释单独的附加文件，以说明他们是否希望启用日志记录：
+
+```xml
+<ItemGroup>
+    <AdditionalFiles Include="file1.txt" />  <!-- logging will be controlled by default, or global value -->
+    <AdditionalFiles Include="file2.txt" MyGenerator_EnableLogging="true" />  <!-- always enable logging for this file -->
+    <AdditionalFiles Include="file3.txt" MyGenerator_EnableLogging="false" /> <!-- never enable logging for this file -->
+</ItemGroup>
+```
+
+**完整的例子：**
+
+MyGenerator.props:
+
+```xml
+<Project>
+    <ItemGroup>
+        <CompilerVisibleProperty Include="MyGenerator_EnableLogging" />
+        <CompilerVisibleItemMetadata Include="AdditionalFiles" MetadataName="MyGenerator_EnableLogging" />
+    </ItemGroup>
+</Project>
+```
+
+MyGenerator.csproj:
+
+```xml
+<Project>
+  <PropertyGroup>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild> <!-- Generates a package at build -->
+    <IncludeBuildOutput>false</IncludeBuildOutput> <!-- Do not include the generator as a lib dependency -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Package the generator in the analyzer directory of the nuget package -->
+    <None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+
+    <!-- Package the props file -->
+    <None Include="MyGenerator.props" Pack="true" PackagePath="build" Visible="false" />
+  </ItemGroup>
+</Project>
+```
+
+MyGenerator.cs:
+
+```c#
+[Generator]
+public class MyGenerator : ISourceGenerator
+{
+    public void Execute(GeneratorExecutionContext context)
+    {
+        // global logging from project file
+        bool emitLoggingGlobal = false;
+        if(context.AnalyzerConfigOptions.GlobalOptions.TryGetValue("build_property.MyGenerator_EnableLogging", out var emitLoggingSwitch))
+        {
+            emitLoggingGlobal = emitLoggingSwitch.Equals("true", StringComparison.OrdinalIgnoreCase);
+        }
+
+        foreach (var file in context.AdditionalFiles)
+        {
+            // allow the user to override the global logging on a per-file basis
+            bool emitLogging = emitLoggingGlobal;
+            if (context.AnalyzerConfigOptions.GetOptions(file).TryGetValue("build_metadata.AdditionalFiles.MyGenerator_EnableLogging", out var perFileLoggingSwitch))
+            {
+                emitLogging = perFileLoggingSwitch.Equals("true", StringComparison.OrdinalIgnoreCase);
+            }
+
+            // add the source with or without logging...
+        }
+    }
+
+    public void Initialize(GeneratorInitializationContext context)
+    {
+    }
+}
+```
+
+### 生成器的单元测试
+
+**用户场景：**作为生成器作者，我希望能够对生成器进行单元测试，以简化开发并确保正确性。
+
+**解决方案A：**
+
+推荐的方式就是使用 [Microsoft.CodeAnalysis.Testing](https://github.com/dotnet/roslyn-sdk/tree/main/src/Microsoft.CodeAnalysis.Testing#microsoftcodeanalysistesting) 包：
+
+- `Microsoft.CodeAnalysis.CSharp.SourceGenerators.Testing.MSTest`
+- `Microsoft.CodeAnalysis.VisualBasic.SourceGenerators.Testing.MSTest`
+- `Microsoft.CodeAnalysis.CSharp.SourceGenerators.Testing.NUnit`
+- `Microsoft.CodeAnalysis.VisualBasic.SourceGenerators.Testing.NUnit`
+- `Microsoft.CodeAnalysis.CSharp.SourceGenerators.Testing.XUnit`
+- `Microsoft.CodeAnalysis.VisualBasic.SourceGenerators.Testing.XUnit`
+
+这与分析程序和代码修复程序测试的工作方式相同。你可以像下面这样添加一个类：
+
+```c#
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Testing;
+using Microsoft.CodeAnalysis.Testing.Verifiers;
+
+public static class CSharpSourceGeneratorVerifier<TSourceGenerator>
+    where TSourceGenerator : ISourceGenerator, new()
+{
+    public class Test : CSharpSourceGeneratorTest<TSourceGenerator, XUnitVerifier>
+    {
+        public Test()
+        {
+        }
+
+        protected override CompilationOptions CreateCompilationOptions()
+        {
+           var compilationOptions = base.CreateCompilationOptions();
+           return compilationOptions.WithSpecificDiagnosticOptions(
+                compilationOptions.SpecificDiagnosticOptions.SetItems(GetNullableWarningsFromCompiler()));
+        }
+
+        public LanguageVersion LanguageVersion { get; set; } = LanguageVersion.Default;
+
+        private static ImmutableDictionary<string, ReportDiagnostic> GetNullableWarningsFromCompiler()
+        {
+            string[] args = { "/warnaserror:nullable" };
+            var commandLineArguments = CSharpCommandLineParser.Default.Parse(args, baseDirectory: Environment.CurrentDirectory, sdkDirectory: Environment.CurrentDirectory);
+            var nullableWarnings = commandLineArguments.CompilationOptions.SpecificDiagnosticOptions;
+
+            return nullableWarnings;
+        }
+
+        protected override ParseOptions CreateParseOptions()
+        {
+            return ((CSharpParseOptions)base.CreateParseOptions()).WithLanguageVersion(LanguageVersion);
+        }
+    }
+}
+```
+
+然后，在你的测试文件中：
+
+```c#
+using VerifyCS = CSharpSourceGeneratorVerifier<YourGenerator>;
+```
+
+接着在测试文件中使用下面的代码：
+
+```c#
+var code = "initial code"
+var generated = "expected generated code";
+await new VerifyCS.Test
+{
+    TestState = 
+    {
+        Sources = { code },
+        GeneratedSources =
+        {
+            (typeof(YourGenerator), "GeneratedFileName", SourceText.From(generated, Encoding.UTF8, SourceHashAlgorithm.Sha256)),
+        },
+    },
+}.RunAsync();
+```
+
+**解决方案B：**
+
+另一种方法是不使用测试库，用户可以直接在单元测试中托管 `GeneratorDriver`，这使得代码的生成器部分相对容易进行单元测试。用户需要为生成器提供一个编译来进行操作，然后可以探测结果编译，或者驱动程序的 `GeneratorDriverRunResult`，以查看由生成器添加的各个项。
+
+从添加一个源文件的基本生成器开始：
+
+```c#
+[Generator]
+public class CustomGenerator : ISourceGenerator
+{
+    public void Initialize(GeneratorInitializationContext context) {}
+
+    public void Execute(GeneratorExecutionContext context)
+    {
+        context.AddSource("myGeneratedFile.cs", SourceText.From(@"
+namespace GeneratedNamespace
+{
+    public class GeneratedClass
+    {
+        public static void GeneratedMethod()
+        {
+            // generated code
+        }
+    }
+}", Encoding.UTF8));
+    }
+}
+```
+
+作为用户，我们可以在单元测试中寄宿（host）它，像下面这样：
+
+```c#
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
+using System.Diagnostics;
+using System.Linq;
+using System.Reflection;
+
+namespace GeneratorTests.Tests
+{
+    [TestClass]
+    public class GeneratorTests
+    {
+        [TestMethod]
+        public void SimpleGeneratorTest()
+        {
+            // Create the 'input' compilation that the generator will act on
+            Compilation inputCompilation = CreateCompilation(@"
+namespace MyCode
+{
+    public class Program
+    {
+        public static void Main(string[] args)
+        {
+        }
+    }
+}
+");
+
+            // directly create an instance of the generator
+            // (Note: in the compiler this is loaded from an assembly, and created via reflection at runtime)
+            CustomGenerator generator = new CustomGenerator();
+
+            // Create the driver that will control the generation, passing in our generator
+            GeneratorDriver driver = CSharpGeneratorDriver.Create(generator);
+
+            // Run the generation pass
+            // (Note: the generator driver itself is immutable, and all calls return an updated version of the driver that you should use for subsequent calls)
+            driver = driver.RunGeneratorsAndUpdateCompilation(inputCompilation, out var outputCompilation, out var diagnostics);
+
+            // We can now assert things about the resulting compilation:
+            Debug.Assert(diagnostics.IsEmpty); // there were no diagnostics created by the generators
+            Debug.Assert(outputCompilation.SyntaxTrees.Count() == 2); // we have two syntax trees, the original 'user' provided one, and the one added by the generator
+            Debug.Assert(outputCompilation.GetDiagnostics().IsEmpty); // verify the compilation with the added source has no diagnostics
+
+            // Or we can look at the results directly:
+            GeneratorDriverRunResult runResult = driver.GetRunResult();
+
+            // The runResult contains the combined results of all generators passed to the driver
+            Debug.Assert(runResult.GeneratedTrees.Length == 1);
+            Debug.Assert(runResult.Diagnostics.IsEmpty);
+
+            // Or you can access the individual results on a by-generator basis
+            GeneratorRunResult generatorResult = runResult.Results[0];
+            Debug.Assert(generatorResult.Generator == generator);
+            Debug.Assert(generatorResult.Diagnostics.IsEmpty);
+            Debug.Assert(generatorResult.GeneratedSources.Length == 1);
+            Debug.Assert(generatorResult.Exception is null);
+        }
+
+        private static Compilation CreateCompilation(string source)
+            => CSharpCompilation.Create("compilation",
+                new[] { CSharpSyntaxTree.ParseText(source) },
+                new[] { MetadataReference.CreateFromFile(typeof(Binder).GetTypeInfo().Assembly.Location) },
+                new CSharpCompilationOptions(OutputKind.ConsoleApplication));
+    }
+}
+```
+
+注意:上面的例子使用了 MSTest，但是测试的内容很容易适应其他框架，比如 XUnit。
+
+### 参与 IDE 体验
+
+**实现状态：**没有实现
+
+**用户场景：**作为一个生成器作者，我希望能够在用户编辑文件时交互式地重新生成代码。
+
+**解决方案：**我们希望能够实现一组交互式回调，以允许越来越复杂的生成策略。预计将会有一种机制来**提供符号映射（symbol mapping）**来点亮如“查找所有引用”这样的特性。
+
+```c#
+[Generator]
+public class InteractiveGenerator : ISourceGenerator
+{
+    public void Initialize(GeneratorInitializationContext context)
+    {
+        // Register for additional file callbacks
+        context.RegisterForAdditionalFileChanges(OnAdditionalFilesChanged);
+    }
+
+    public void Execute(GeneratorExecutionContext context)
+    {
+        // generators must always support a total generation pass
+    }
+
+    public void OnAdditionalFilesChanged(AdditionalFilesChangedContext context)
+    {
+        // determine which file changed, and if it affects this generator
+        // regenerate only the parts that are affected by this change.
+    }
+}
+```
+
+注意：在这些接口可用之前，生成器作者不应该尝试模拟缓存到磁盘和自定义最新检查的“增量”。编译器目前没有为生成器提供可靠的方法来检测它是否适合使用以前的运行，任何尝试这样做的尝试都可能导致用户很难诊断错误。生成器作者应该总是假设这是第一次发生的“完整”生成。
+
+### 序列化
+
+**用户场景**
+
+序列化通常使用动态分析（dynamic analysis）来实现，即序列化器通常使用反射来检查给定类型的运行时状态并生成序列化逻辑。这可能既昂贵又脆弱。如果编译时类型和运行时类型相似，那么将大部分成本转移到编译时而不是运行时，这是有用的。
+
+source generator 提供了一种方法来做到这一点。由于 source generator 可以像分析器一样通过 NuGet 交付，我们预计这将是一个 source generator 库的用例，而不是每个人都构建自己的源代码生成器库。
+
+**解决方案**
+
+首先，生成器需要一些方法来发现哪些类型应该是可序列化的。这个指标可以是一个属性，例如。
+
+```c#
+[GeneratorSerializable]
+partial class MyRecord
+{
+    public string Item1 { get; }
+    public int Item2 { get; }
+}
+```
+
+当该特性的全部范围都被设计好时，这个属性也可以用于[参与IDE体验](#参与 IDE 体验)。在这种情况下，不是让生成器找到每个用给定属性标记的类型，而是由编译器通知生成器每个用给定属性标记的类型。现在，我们假设这些类型是提供给我们的。
+
+第一个任务是决定我们想要序列化返回什么。假设我们做了一个简单的 JSON 序列化，它生成如下所示的字符串：
+
+```json
+{
+    "Item1": "abc",
+    "Item2": 11,
+}
+```
+
+为此，我们可以像下面这样为记录类型添加一个 `Serialize` 方法：
+
+```c#
+public string Serialize()
+{
+    var sb = new StringBuilder();
+    sb.AppendLine("{");
+    int indent = 8;
+
+    // Body
+    addWithIndent($"\"Item1\": \"{this.Item1.ToString()}\",");
+    addWithIndent($"\"Item2\": {this.Item2.ToString()},");
+
+    sb.AppendLine("}");
+
+    return sb.ToString();
+
+    void addWithIndent(string s)
+    {
+        sb.Append(' ', indent);
+        sb.AppendLine(s);
+    }
+}
+```
+
+显然，这是非常简单的 —— 这个示例只正确地处理字符串和 int 类型，在 json 输出中添加一个末尾逗号，并且没有错误恢复，但它应该用来演示源代码生成器可以添加到编译中的代码类型。
+
+我们下一个任务就是生成器生成上面的代码，因为上面的代码是根据类的实际属性在 `// Body` 部分中自定义的。换句话说，我们需要生成将生成 JSON 格式的代码。这是一个生成器生成的。
+
+让我们从一个基本的模板开始。我们添加了一个完整的 source generator，因此我们需要生成一个与输入类同名的类，它有一个名为 `Serialize` 的公共方法，还有一个填充区，在这里我们可以写出属性。
+
+```c#
+string template = @"
+using System.Text;
+partial class {0}
+{{
+    public string Serialize()
+    {{
+        var sb = new StringBuilder();
+        sb.AppendLine(""{{"");
+        int indent = 8;
+
+        // Body
+{1}
+
+        sb.AppendLine(""}}"");
+
+        return sb.ToString();
+
+        void addWithIndent(string s)
+        {{
+            sb.Append(' ', indent);
+            sb.AppendLine(s);
+        }}
+    }}
+}}";
+```
+
+现在我们已经知道了代码的一般结构，我们需要检查输入类型并找到要填写的所有正确信息。这些信息在我们示例中的 c# SyntaxTree 中都是可用的。假设我们得到了一个 `ClassDeclarationSyntax`，它被确认附加了一个 generation 属性。然后我们可以获取类的名称和它的属性名称，如下所示：
+
+```c#
+private static string Generate(ClassDeclarationSyntax c)
+{
+    var className = c.Identifier.ToString();
+    var propertyNames = new List<string>();
+    foreach (var member in c.Members)
+    {
+        if (member is PropertyDeclarationSyntax p)
+        {
+            propertyNames.Add(p.Identifier.ToString());
+        }
+    }
+}
+```
+
+这就是我们所需要的。如果属性的序列化值是它们的字符串值，生成的代码只需要对它们调用 `ToString()`。剩下的唯一问题是在文件的顶部放置 `using` 。因为我们的模板使用了字符串构建器，所以我们需要 `System.Text`，但所有其他类型看起来都是基元类型，所以这就是我们需要的。把它们放在一起：
+
+```c#
+private static string Generate(ClassDeclarationSyntax c)
+{
+    var sb = new StringBuilder();
+    int indent = 8;
+    foreach (var member in c.Members)
+    {
+        if (member is PropertyDeclarationSyntax p)
+        {
+            var name = p.Identifier.ToString();
+            appendWithIndent($"addWithIndent($\"\\\"{name}\\\": ");
+            if (p.Type.ToString() != "int")
+            {
+                sb.Append("\\\"");
+            }
+            sb.Append($"{{this.{name}.ToString()}}");
+            if (p.Type.ToString() != "int")
+            {
+                sb.Append("\\\"");
+            }
+            sb.AppendLine(",\");");
+            break;
+        }
+    }
+
+    return $@"
+using System.Text;
+partial class {c.Identifier.ToString()}
+{{
+    public string Serialize()
+    {{
+        var sb = new StringBuilder();
+        sb.AppendLine(""{{"");
+        int indent = 8;
+
+        // Body
+{sb.ToString()}
+
+        sb.AppendLine(""}}"");
+
+        return sb.ToString();
+
+        void addWithIndent(string s)
+        {{
+            sb.Append(' ', indent);
+            sb.AppendLine(s);
+        }}
+    }}
+}}";
+    void appendWithIndent(string s)
+    {
+        sb.Append(' ', indent);
+        sb.Append(s);
+    }
+}
+```
+
+这与其他序列化示例清晰地联系在一起。通过在编译的 SyntaxTrees 中找到所有合适的类声明，并将它们传递给上面的 Generate 方法，我们可以为选择生成序列化的每种类型构建新的分部类。与其他技术不同的是，这种序列化机制完全发生在编译时，可以专门针对在用户类中编写的内容。
+
+### 自动接口实现
+
+TODO：
+
+## 破坏性变更
+
+**实现状态：**Visual Studio 16.8 preview 3 / roslyn 3.8.0-3.final 实现
+
+在预览和发布之间，引入了以下破坏性变更：
+
+**`SourceGeneratorContext`** 重命名为 **`GeneratorExecutionContext`**
+
+**`IntializationContext`** 重命名为 **`GeneratorInitializationContext`**
+
+这将影响到用户创建的生成器，因为这意味着基本界面将变成：
+
+```c#
+public interface ISourceGenerator
+{
+    void Initialize(GeneratorInitializationContext context);
+    void Execute(GeneratorExecutionContext context);
+}
+```
+
+用户试图使用针对 Roslyn 的更新版本的预览 api 的生成器，将会看到类似的异常：
+
+```bash
+CSC : warning CS8032: An instance of analyzer Generator.HelloWorldGenerator cannot be created from Generator.dll : Method 'Initialize' in type 'Generator.HelloWorldGenerator' from assembly 'Generator, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null' does not have an implementation. [Consumer.csproj]
+```
+
+用户需要执行的操作是重命名 Initialize 和 Execute 方法的参数类型得以匹配。
+
+**`RunFullGeneration`** 重命名为 **`RunGeneratorsAndUpdateCompilation`**
+
+**`CSharpGeneratorDriver`** 增加静态方法 **`Create()`** 以及过时的构造函数。
+
+这将影响所有使用 `CSharpGeneratorDriver` 编写单元测试的生成器作者。要创建一个新的生成器驱动实例，用户不应该再调用 new，而是使用`CSharpGeneratorDriver.Create()` 重载。用户应该不再使用 `RunFullGeneration` 方法，而是使用相同的参数调用 `RunGeneratorsAndUpdateCompilation`。
+
+## 已知问题
+
+本节跟踪其他杂项 TODO 项：
+
+**目标框架**如果我们对生成器有框架要求，可能需要提一下，例如，它们必须以 `netstandard2.0` 或类似的标准为目标。
+
+**约定：**（查看上面的[约定](#约定)小节）。我们向用户建议什么标准约定？
+
+**部分方法：**我们是否应该提供一个包含部分方法的场景？理由：
+
+- 命名控制。开发人员可以控制成员的名称
+- 生成是可选的/依赖于其他状态。根据其他信息，生成器可能决定不需要该方法。
+
+**特性检测**：演示如何创建依赖于特定目标框架特性的生成器，而不依赖于 TargetFramework 属性。
