@@ -2,6 +2,7 @@
 #define SALES_DATA_H
 #include <istream>
 #include <string>
+using std::istream; std::ostream;
 
 // Sales_data 接口应该包含以下操作：
 // 一个 isbn 成员函数
@@ -32,11 +33,31 @@ Sales_data add(const Sales_data&,const Sales_data&);
 std::ostream &print(std::ostream&, const Sales_data&);
 std::istream &read(std::istream&, Sales_data&);
 
+// 在类的外部定义成员函数必须与类内的函数申明一致
 double Sales_data::avg_price() const {
     if (units_sold) 
         return revenue/units_sold;
     else 
         return 0;
+}
+Sales_data& Sales_data::combie(const Sales_data &rhs) {
+    units_sold += rhs.units_sold;
+    revenue += rhs.revenue;
+    return *this;   // 返回函数对象的引用
+}
+istream &read(istream &is, Sales_data &item)
+{
+    double price = 0;
+    is >> item.bookNo >> item.units_sold >> price;// 非成员函数，所以不可访问类成员信息
+    item.revenue = price * item.units_sold;
+    return is;
+
+}
+Sales_data add(const Sales_data &lhs,const Sales_data &rhs)
+{
+    Sales_data sum = lhs;   //lhs拷贝至新的变量sum
+    sum.combie(rhs);
+    return sum;
 }
 #endif
 
