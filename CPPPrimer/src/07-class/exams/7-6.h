@@ -23,6 +23,8 @@ Sales_data& Sales_data::combie(const Sales_data& rhs)
 }
 
 // 非成员函数
+// q: read 为什么将参数定义成普通的引用？而 print 函数参数定义成常熟引用
+// a: 因为定义普通的引用目的是要更改对象的 revenue 值，而 print 函数内部对象是不变的。
 std::istream &read(std::istream &is, Sales_data &item)
 {
     double price = 0;
