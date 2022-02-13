@@ -17,6 +17,7 @@ using std::istream; std::ostream;
 // 定义在内部的函数都是隐式内联的
 struct Sales_data
 {
+friend std::istream &read(std::istream&, Sales_data&);
 public:
     std::string isbn() const { return bookNo;}
     std::string isbn2() const { return this->bookNo;}  // 等价上面
