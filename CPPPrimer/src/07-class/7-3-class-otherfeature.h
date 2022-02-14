@@ -16,12 +16,19 @@ public:
     inline char get(pos ht, pos wd) const;  // 显式内联
     Screen &move(pos r, pos c); // 之后可以手动设为内联
     void some_member() const;
+    Screen &set(char);
+    Screen &set(pos, pos, char);
+
+    // 显示
+    Screen &display(std::ostream &os) { do_display(os); return *this;}
+    const Screen &display(std::ostream &os) const { do_display(os); return *this;}
 private:
     pos cursor = 0;
     pos height = 0, width = 0;
     std::string contents;
     // 可变数据成员
     mutable size_t access_ctr;
+    Screen &do_display(std::ostream &os) const { os << contents; }
 };
 // 类外部可以定义内联函数
 inline
@@ -41,10 +48,20 @@ void Screen::some_member() const
 {
     ++access_ctr;
 }
+inline Screen &Screen::set(char c)
+{
+    contents[cursor] = c;
+    return *this;
+}
+inline Screen &Screen::set(pos row, pos col, char c)
+{
+    contents[row*width + col] = c;
+    return *this;
+}
 
-class Window_mgr {
-private:
-    // 默认情况下，一个 Window_mgr 包含一个标准尺寸的空白 Screen
-    std::vector<Screen> screens{Screen(24, 80, ' ')};
-};
+// class Window_mgr {
+// private:
+//     // 默认情况下，一个 Window_mgr 包含一个标准尺寸的空白 Screen
+//     std::vector<Screen> screens{Screen(24, 80, ' ')};
+// };
 #endif
