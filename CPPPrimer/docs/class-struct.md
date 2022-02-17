@@ -90,3 +90,41 @@ std::ostream &print(std::ostream&, const Sales_data&);
 - 丢失了封装带来的好处，降低了可维护性
 - 代码冗长，类内部和类外部都要声明
 
+## 类的最佳实践
+
+**建议通过构造函数给成员设置初始值**；这里有两方面的原因：
+
+1. 效率问题；前者初始化类的实例就已经对成员进行初始化，而通过赋值操作，是要先进行初始化再赋值。
+2. 避免因成员初始化顺序导致的意料之外的编译错误；因为时常会有引用那些需要的成员信息，但是却没有及时初始化。
+
+成员初始化的顺序是与成员在类中的摆放顺序有关的。第一个成员先被初始化，然后是第二个...。
+
+**如果类中定义了其它构造函数，那么最好跟着定义个默认的构造函数**
+
+## 委托构造函数
+
+相当于C#构造函数的
+
+```c#
+public class Far {
+	public Far() : this("empty", 28, "private address") { }
+	public Far(string name, int age, string address) {...}
+}
+```
+
+而c++的写法几乎一样
+
+```c++
+class Far {
+public:
+	// 非委托构造函数使用对应的实参初始化成员
+	Far(std::string s, unsigned cnt, double price):
+		bookNo(s), units_sold(cnt), revenue(cnt * price) { }
+	// 其余的构造函数都委托给另一个构造函数
+	Far(): Far("", 0, 0) {}
+	Far(std::string s): Far(s, 0, 0) {}
+	Far(std::istream &is): Far() { read(is, *this); }
+	...
+}
+```
+
