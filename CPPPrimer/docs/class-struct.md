@@ -128,3 +128,43 @@ public:
 }
 ```
 
+## 类型转换
+
+C++支持*一步转换*。即允许由类型A转向B，不允许A直接转向C，而是先通过A转换B类型，然后由B类型转C类型。
+
+如下转换方式
+
+```c++
+string null_book = "9-999-99999-9";
+item.combine(null_book);
+```
+
+上面这种方式是合法的，`null_book`对象会隐士转换成`Sales_data`类型对象，并将`bookNo`设置为"9-999-99999-9"，`units_sold`以及`revenue`都设置为默认值0。
+
+但是下面这种方式就是错误的：
+
+```c++
+item.combine("9-999-9999-9");
+```
+
+这种就不能由字符串直接转换成`Sales_data`对象了。而只能通过下面的方式转换：
+
+```c++
+item.combine(string("9-999-99999-9"));
+//或者
+item.combine(Sales_data("9-999-99999-9"));
+```
+
+> 这种隐式转换其实就是调用了对应参数类型的构造函数。
+>
+> 关于如何抑制这种隐式转换：给构造函数添加`explicit`：
+>
+> ```c++
+> explicit Sales_data(const std::string &s): bookNo(s) { }
+> explicit Sales_data(std::istream&);
+> ```
+>
+> 这样设置之后上面的`item.combine(string("9-999-99999-9"))`就会报错。
+>
+> ⚠️关键字`explicit`只对单个参数的构造函数有效。
+
