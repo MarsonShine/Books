@@ -168,3 +168,62 @@ item.combine(Sales_data("9-999-99999-9"));
 >
 > ⚠️关键字`explicit`只对单个参数的构造函数有效。
 
+### 判断字面量类型
+
+用内置函数`is_literal_type<className>`判断一个类是否是字面量类型：
+
+```c++
+struct Data {
+    int ival;
+    std::string s;
+};
+
+int main()
+{
+	std::cout << std::boolalpha;
+	std::cout << std::is_literal_type<Data>::value << std::endl;
+	return 0;
+}
+
+//output false
+```
+
+## 静态成员
+
+静态变量的用法与约束绝大部分与C#是一样的，来说点不一样的。
+
+c++在定义静态成员信息时，可以选择在类内部，也可以在类外部。但是在外部时需要注意，不能重复用关键字`static`定义，因为在类的内部已经用该关键字对其变量进行申明了。
+
+```c++
+class Account {
+public:
+	static void rate(double); // 申明
+...
+};
+
+// 外部定义
+void Account::rate(double newRate) {
+	interestRate = newRate;
+}
+```
+
+### 最佳实践
+
+即使一个常量静态数据成员在类内部被初始化了，通常情况下也要在类的外部定义一下该成员。
+
+```c++
+class Example
+{
+private:
+    /* data */
+public:
+    static constexpr double rate = 6.5;
+    static const int vecSize = 20;
+    // static std::vector<double> vec; // 不能在括号内指定类内初始化式
+    static std::vector<double> vec; 
+};
+
+constexpr double Example::rate;
+std::vector<double> Example::vec(Example::vecSize);
+```
+
