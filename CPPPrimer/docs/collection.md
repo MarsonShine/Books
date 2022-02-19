@@ -39,3 +39,54 @@ int main()
 }
 ```
 
+`begin`,`end`迭代器还有多个版本：
+
+- `cbegin`,`cend`表示常数迭代器，迭代的元素无法修改
+- `crbegin`,`crend`表示常数反转迭代器
+
+## 初始化容器
+
+有两种方式创建/初始化容器：
+
+1. 直接拷贝：初始化新容器时，传递已有的容器对象。这样方式必须要满足<font color="red">容器类型和元素类型一致</font>。
+2. 范围拷贝：初始化容器时，传递已有容器的迭代器（begin、end）。这种方式不需要容器类型和元素类型一致，只要能将<font color="red">拷贝的元素转换为目标容器元素类型</font>即可。
+
+看如下例子：
+
+```c++
+list<string> authors = { "marsonshine", "summerzhu", "happyxi" };
+vector<const char*> articles = { "a", "b", "c" };
+// 直接拷贝
+list<string> list2(authers); // 正确，容器类型和元素类型一致
+deque<string> authList(authers); // 错误，容器类型不一致
+vector<string> words(articles); // 错误，元素类型不一致
+// 范围拷贝
+forward_list<string> words(articles.begin(), articles.end()); // 正确，char*元素类型可以转换为目标容器元素类型string
+```
+
+容器还有一个构造函数重载，传递begin以及目标元素值，表明从第一个元素一直拷贝目标元素值（不包括）。
+
+```c++
+deque<string> authList(authors.begin(), it);	// 拷贝元素，直到（不包括）元素 it
+```
+
+## 交换元素swap
+
+容器之间可以进行元素交换（swap）：
+
+```c++
+vector<string> svec1(10);
+vector<string> svec2(24);
+swap(svec1, svec2); // 交换svec1和svec2之间的元素
+```
+
+> ⚠️swap作为交换容器内容的操作，叫交换过程中实际上不会对元素进行拷贝，而是直接将容器的内部数据结构进行交换。
+>
+> 所以swap操作元素本身不会交换，操作效率非常高。array除外，swap会交换元素，与array里的内容成线性比。
+
+## 容器的比较
+
+C++容器的比较都支持比较运算符，即`==,>,<,!=`。
+
+但我个人认为这种比较符出了`==`符合人类直觉，其他的都不符合，并且我也没想到有什么场景需要用到这些比较运算符。
+
