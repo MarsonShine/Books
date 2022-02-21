@@ -12,4 +12,10 @@ int main() {
     string s6(cp, 6);   // 从第六个位置开始直到字符串结束
     string s7(s1, 6, 20);   // 从第六个位置开始，拷贝20个字符，因为20已经超过目标字符串长度，所以效果等同于s6
     string s8(s1, 16);  // 超出了s1的最大范围，报out-of-range错误
+
+    // 数据类型转换
+    string ss = "pi = 3.14";
+    auto d = std::stod(ss.substr(ss.find_first_of("+-.0123456789"))); // string to double
+    
+    
 }
