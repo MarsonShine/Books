@@ -105,3 +105,64 @@ cout << s1.capacity() << endl << s1.size() << endl;
 ## 容器适配器
 
 C++标准库定义了三个容器适配器：`stack`,`queue`,`priority_queue`，它们都接收顺序容器来封装成三种容器适配器。
+
+## 泛型算法-插入迭代器
+
+在容器中写入元素，可以用`fill，fill_n`函数
+
+```c++
+fill(vec.begin(), vec.end(), 0); // 将每个元素重置为0
+fill(vec.begin(), vec.begin() + vec.size()/2, 10); // 指定vec指定的子序列重置为10
+fill_n(vec.begin(), vec.size(), 0);
+```
+
+要注意，在调用`fill_n`函数时，目标容器一定要初始化；即容器中要有元素，如下面的调用就会报错
+
+```c++
+vector<int> vec; // 空vector
+fill(vec.begin(), 10, 0); // 修改vec中的10个元素；报错，vec中不存在数据
+```
+
+### 插入迭代器——back_inserter
+
+```
+vector<int> vec; // 空vector
+auto it = back_inserter(vec);// 通过 it 的复制将值插入到容器vec中
+*it = 10; // vec插入了元素10
+
+// 添加10个元素
+fill_n(back_inserter(vec), 10, 0);
+```
+
+### 排序与去重
+
+给定一个程序，进行排序与去重
+
+```c++
+void elimDups(vector<string> &words)
+{
+    // 按字典排序
+    std::sort(words.begin(), words.end());
+    // 出现重复内容的
+    auto end_unique = std::unique(words.begin(), words.end());
+    // 删除重复元素
+    words.erase(end_unique, words.end());
+}
+
+int main()
+{
+    vector<string> vcs{"the","quick","red","fox","jumps","over","the","slow","red","turple"};
+    elimDups(vcs);
+    return 0;
+}
+```
+
+1. 首先生成原始序列：`"the","quick","red","fox","jumps","over","the","slow","red","turple"`
+
+2. 经过调用排序函数，序列变成`"fox","jumps","over","quick","red","red","slow","the","the","turple"`
+
+3. 调用unique去重，序列变成"fox","jumps","over","quick","red","slow","the","turple",<font color="red">"the",""</font>;而此时，unique返回的迭代器指针就是指向`turple`后一个位置。
+
+   > 注意调用unique其实并没有删除重复的元素，只是覆盖相邻的值。所以我们能看到第三步标红的值的变化
+
+4. 调用erase真正的删除元素，可以发现容器集合size变小了
