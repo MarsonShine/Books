@@ -166,3 +166,23 @@ int main()
    > 注意调用unique其实并没有删除重复的元素，只是覆盖相邻的值。所以我们能看到第三步标红的值的变化
 
 4. 调用erase真正的删除元素，可以发现容器集合size变小了
+
+### 定制函数——自定义排序
+
+c++内置的排序默认是使用元素类型的`<`运算符。如果我们需要其他排序方式（如按照`>`或未定义类型`<`运算符）呢。
+
+我们可以通过传递一个**排序函数**作为参数，如以上面的以字符的字典排序的例子，现在我们改为以字符串长度排序，首先定一个比较函数：
+
+```c++
+bool isShorter(const string &s1, const string &s2)
+{
+		return s1.size() < s2.size();
+}
+// 调用
+std::sort(words.begin(), words.end(), isShorter);
+```
+
+如果想保留多种排序规则，则需要用到稳定排序。
+
+> 关于排序算法是否稳定的概念，具体详见：[排序算法](https://github.com/MarsonShine/AlgorithmsLearningStudy/blob/master/docs/Sorts.md)
+
