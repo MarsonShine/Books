@@ -60,3 +60,21 @@ void ff_refference()
     v1 = 0;
     cout << f() << endl; // 输出1
 }
+
+void lambda_returntype(vector<string> &words)
+{
+    std::transform(words.begin(), words.end(), words.begin(), [](int i) { return i < 0 ? -i : i; });
+}
+
+void lambda_returntype_error(vector<string> &words)
+{
+    std::transform(words.begin(), words.end(), words.begin(), [](int i)
+                                                                { if (i < 0) return -i; else return i; });
+
+    auto lambda1 = [](int i) {
+        if (i < 0)
+            return -i;
+         else
+            return i;
+    };
+}

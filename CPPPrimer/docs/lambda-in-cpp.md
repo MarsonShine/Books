@@ -86,10 +86,75 @@ void ff()
 }
 ```
 
+### 指定lambda返回类型
 
+前面提到的所有lambda表达式都没有指定返回返回值的，这是因为表达式隐式指定了返回值类型。<font color="orange">默认情况下，如果一个lambda表达式包含`return`之外的任何语句，则编译器就会当做返回`void`</font>。
+
+```c++
+transform(vi.begin(), vi.end(), vi.begin(), [](int i) { return i < 0 ? -i : i; });
+```
+
+上面这个例子就是隐式推测出返回的是`int`类型。~~但是如果是下面的例子就会提示编译错误~~：
+
+```c++
+transform(vi.begin(), vi.end(), vi.begin(), [](int i) { if (i < 0) return -i; else return i; });
+// 显式指定返回类型
+transform(vi.begin(), vi.end(), vi.begin(), [](int i) -> int { if (i < 0) return -i; else return i; });
+```
+
+> ⚠️
+>
+> 上述lambda表达式函数体在我自己的vscode编辑器里是可以编译通过的。
+>
+> 看样子应该是现代编译器解决了书中描述的这个问题。
+
+### 类Javascript的函数参数绑定bind
+
+```c++
+auto newCallable = bind(callable, arg_list);
+```
+
+简单的理解就是将函数`callable`以及函数参数列表`arg_list`绑定给新的`newCallable`函数变量。调用`newCallable`实际上就是调用的`callable`。
+
+```
+auto check6 = bind(check_size, _1, 6);
+string s = "hello";
+bool b1 = check6(s); // 等同于调用 check_size(s, 6);
+```
+
+上面的例子`_1`是一个占位符，表示`check6`的第一个参数。
+
+```c++
+auto wc = find_if(words.begin(), words.end(), [sz](const string &a) { ... });
+// bind版本
+auto wc = find_if(words.begin(), words.end(), bind(check_size, _1, sz));
+```
+
+bind占位符`_n`，这个表示参数的调用位置。如：
+
+```c++
+auto g = bind(f, a, b, _2, c, _1);
+```
+
+上述定义表示g这个可调用对象有两个参数，即`g(x, y)`。而x就表示占据`_1`的位置，y就表示占据`_2`的位置。等价于调用f函数的五个参数：`f(a, b, y, c, x)`。
+
+上面这事bind的使用都是针对值的，如果针对引用的话就不能这么写。需要借助`ref`函数，以调用之前的`print`函数为例：
+
+```c++
+ostream &print(ostream &os, const string &s, char c)
+{
+		return os << s << c;
+}
+
+// 以下调用是错误的
+for_each(words.begin(), words.end(), bind(print, os, _1, ' ')); //error,os是引用对象
+// 正确用法
+for_each(words.begin(), words.end(), bind(print, ref(os), _1, ' '));
+```
 
 ## 深入理解Lambda
 
 当定一个lambda表达式时，编译器会自动生成一个与lambda对应新的类类型，该类型还有一些对象：就是定义lambda是那些参数。
 
 //TODO
+
