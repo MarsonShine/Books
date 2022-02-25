@@ -16,7 +16,7 @@ int main()
         std::cout << e << " ";
     }
     std::cout << std::endl;
-    
+
 
     // list 自定义排序
     ls.sort([](const std::string& a, const std::string& b) { return a.size() <= b.size(); });
