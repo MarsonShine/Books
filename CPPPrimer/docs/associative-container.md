@@ -94,3 +94,55 @@ std::cout << "第一个参数：first = " << p.first << std::endl;
 std::cout << "第二个参数：second = " << p.second << std::endl;
 ```
 
+跟c#的Tuple<T>是不是很相似
+
+------
+
+给map添加值的时候，主要注意，插入的值实际上是`pair`对象:
+
+```c++
+// 插入map
+maps.insert({"summer zhu", 26});
+maps.insert(pair<string, int>("marsonshine", 28));
+maps.insert(std::make_pair("happy xi", 1));
+maps.insert(map<string, int>::value_type("family", 4));
+```
+
+> ⚠️
+>
+> 值得注意并且有趣的是，map的下标访问和遍历解引用得到的值类型是不一样的。map下标访问得到的是value_type类型，而迭代解引用得到的是pair类型。
+>
+> 以map<string, int>为例，下标访问返回的是int类型，迭代解引用返回的是`pair<string, int>`类型；
+
+## 一个map示例
+
+给定一个string，将其转换为另一个string。程序输入两个文件，第一个文件是转换规则，第二个文件是转换内容。每次转换内容时都要应用这个规则。如单词转换文件内容是：
+
+```
+// 规则
+brb be right back
+k okay?
+y way
+r are
+u you
+pic picture
+thk thanks,
+18r later
+```
+
+转换的内容：
+
+```
+where r u
+y dont u send me a pic
+k thk 18r
+```
+
+程序输出：
+
+```
+where are you
+why dont you send me a picture
+okay? thanks later
+```
+

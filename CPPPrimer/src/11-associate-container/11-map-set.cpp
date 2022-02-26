@@ -53,5 +53,34 @@ int main()
                     << map_it->second << " times " << std::endl;
         ++map_it;
     }
+
+    // 插入map
+    auto is = maps.insert(pair<string, int>("marsonshine", 28));
+    maps.insert({"summer zhu", 26});
+    maps.insert(std::make_pair("happy xi", 1));
+    maps.insert(map<string, int>::value_type("family", 4));
+
+    std::multimap<string, int> multip;
+    multip.insert({"marsonshine", 28});
+    multip.insert({"marsonshine", 29}); // ok
+
+    // 删除
+    map<string, int> names = {
+        {"marson", 28},
+        {"marson", 29},
+        {"summer", 27},
+        {"marsonshine", 20}
+    };
+    auto cnt = names.erase("marson");
+    assert(cnt == 2);
+    auto cnt2 = names.erase("summer");
+    assert(cnt2 == 1);
+
+    for (auto &i : names) // 遍历解引用，得到是pair类型
+    {
+        
+    }
+    auto n = names[0]; // 下表索引访问，得到的是value_type类型，即int
+    
     
 }
