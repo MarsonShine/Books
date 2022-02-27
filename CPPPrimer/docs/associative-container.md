@@ -146,3 +146,34 @@ why dont you send me a picture
 okay? thanks later
 ```
 
+## 无序关联容器
+
+无序关联容器总共有四种类型，分别对应`map`,`set`,`multimap`,`multiset`。之所以是无序是因为`key_type`是通过哈希算法映射而来的。同C#的Dictionary<TKey, TEntity>一样，内部维护一个buckt桶。每个桶存储一个或多个元素，通过对key进行哈希计算得到的值就是对应的哪个桶，然后在桶中返回对应的数据。当数据越来越多时，在C#中会根据已经写好的算法对这些数据进行rehash。在绝大数多场景是足够用的，不需要我们认为进行管理。而c++不同，它通过暴露的几个api提供用户自己去做这些事情。
+
+```
+unorderedmap.load_factor()	// 负载因子，每个桶的平均元素数量
+unorderedmap.max_load_factor() // 最大的负载因子，通过这个阈值来平衡负载因子
+unorderedmap.rehash(n) // 重组存储，bucket_count >= n
+unorderedmap.reserve(n) // 重组存储，使得unorderedmap可以保存n个元素而不必rehash
+```
+
+无序关联容器对插入的`key_type`还有要求：要求`key_type`要实现`==`运算符，还要通过内置的`hash<key_type>`对象类生成每个元素的哈希值。但是我们开发者不能直接引用`hash<key_type>`，所以要我们自定义hash模板：
+
+```c++
+size_t hasher(const Person &p)
+{
+		return hash<string>()(p.Idcard);
+}
+bool eqOp(const Person &a, const Person &b)
+{
+		return a.IdCard == b.IdCard;
+}
+```
+
+这样我们可以使用无序容器了：
+
+```c++
+using SD_multipset = unordered_multipset<Person, decltype(hasher)*, decltype=(eqOp)*>;
+SD_multipset person(bucket:42, hasher, eqOp);
+```
+
