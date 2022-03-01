@@ -3,10 +3,15 @@
 #include <initializer_list>
 #include <memory>
 #include <exception>
-#include "weakstrblob.h"
 
 using std::string; using std::vector;
+class WeakStrBlob;
+
 class StrBlob {
+    friend class WeakStrBlob;
+    WeakStrBlob begin();
+    WeakStrBlob end();
+    
 public:
     typedef vector<string>::size_type size_type;
     StrBlob():data(std::make_shared<vector<string>>()) { }
@@ -40,4 +45,44 @@ string& StrBlob::front() {
 string& StrBlob::back() {
     check(0, "空对象");
     return data->back();
+}
+
+class WeakStrBlob {
+public:
+    WeakStrBlob(): curr(0) { }
+    WeakStrBlob(StrBlob&a, size_t sz = 0): wptr(a.data), curr(sz) { }
+    string deref() const;
+    WeakStrBlob& incr(); // 前缀递增
+private:
+    std::shared_ptr<vector<string>> check(std::size_t, const string&) const;
+    // 检查data是否有数据
+    std::weak_ptr<vector<string>> wptr;
+    std::size_t curr;
+};
+
+std::shared_ptr<vector<string>> WeakStrBlob::check(size_t i, const string &s) const {
+    auto ret = wptr.lock();
+    if (!ret)
+    {
+        throw std::runtime_error("unbound StrBlobPtr");
+    }
+    if (i >= ret->size())
+    {
+        throw std::out_of_range(s);
+    }
+    return ret;
+}
+
+string WeakStrBlob::deref() const
+{
+    auto p = check(curr, "dereference past end");
+    auto ptr = *p; //vector
+    return (*p)[curr];
+}
+
+WeakStrBlob& WeakStrBlob::incr()
+{
+    check(curr, "increment past end of WeakStrBlob");
+    ++curr;
+    return *this;
 }
