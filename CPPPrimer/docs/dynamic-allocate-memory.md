@@ -176,3 +176,72 @@ int foo = *p;
 
 
 
+## 动态数组
+
+动态分配一个数组，内存也是动态分配的
+
+```c++
+// 定义数组
+int *arry = new int[10];
+```
+
+因为也动态内存分配，所以也要手动释放内存
+
+```
+// 释放动态数据
+delete [] arry; // [] 是必须的
+```
+
+**注意，`[]`方括号是必须的。**要切记最佳实践是将智能指针和动态数组结合起来。
+
+```c++
+// 智能指针+动态数组
+std::unique_ptr<int[]> arrayPtr(new int[10]);
+// 自动销毁
+arrayPtr.release(); // 调用release方法就会自动用delete [] 销毁指针
+// 直接下标访问
+auto ele = arrayPtr[0];
+```
+
+## allocator
+
+`allocator`类也是用来动态分配内存对象的。那么与`new`有什么区别呢？又有什么优势呢？
+
+`new`是将内存和对象初始化组合分配的，当我们分配固定容量数组的时候，有时候场景无需用到这么多容量的数组。这个时候就是对内存的一种浪费。而`allocator`就可以实现**按需的动态分配**，是可以将内存和对象分别（独立）分配的。**这意味我们可以自主分配一大块内存，只有在真正需要对象的时候才进行初始化操作。**
+
+另外new只能分配提供默认构造函数的对象。
+
+**当申明一个类型是用`allocator`分配的时候，就表示会根据给定的类型来确定要分配的内存大小和对应的位置。**
+
+```c++
+std::allocator<std::string> alloc_string;
+int n = 100;
+auto const p = alloc_string.allocate(n); // 分配n个未初始化的string
+// 按需分配(初始化)对象
+auto q = p; // q指向最后构造的元素之后的位置
+alloc_string.construct(q++, 10, 'a'); // 初始化对象并自增指针位置
+alloc_string.construct(q++, "bbb");
+
+std::cout << *p << std::endl;
+std::cout << *q << std::endl; // 
+```
+
+注意最后一行代码，q由于指针自增，指向的是一个未初始化的地址。虽然程序不会报错，但一定不要这么操作。
+
+接下来是销毁元素操作，调用`allocator.destroy()`就会调用类型对象的析构函数进行释放操作。
+
+```c++
+// 释放
+while (p != q)
+{
+    alloc_string.destroy(q--);
+}
+```
+
+注意此操作只是释放元素对象，但是并没有释放地址空间。释放内存地址空间为
+
+```c++
+// 释放内存地址
+alloc_string.deallocate(p, n);
+```
+
