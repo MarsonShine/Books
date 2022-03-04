@@ -49,6 +49,15 @@ string& StrBlob::back() {
 
 class WeakStrBlob {
 public:
+    // 成员访问运算符,解引用运算符
+    string& operator*() const { 
+        auto p = check(curr, "dereference past end");
+        return (*p)[curr];
+    }
+    // 箭头运算符
+    string* operator->() const {
+        return &this->operator*();
+    }
     WeakStrBlob(): curr(0) { }
     WeakStrBlob(StrBlob&a, size_t sz = 0): wptr(a.data), curr(sz) { }
     string deref() const;

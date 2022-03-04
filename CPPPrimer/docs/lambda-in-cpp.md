@@ -156,5 +156,47 @@ for_each(words.begin(), words.end(), bind(print, ref(os), _1, ' '));
 
 当定一个lambda表达式时，编译器会自动生成一个与lambda对应新的类类型，该类型还有一些对象：就是定义lambda是那些参数。
 
-//TODO
+**lambda产生的类中会重载一个函数调用运算符**，以排序为例：
+
+```c++
+stable_sort(words.begin(), words.end(), [](const string &a, const string &b) { return a.size() < b.size(); });
+```
+
+编译器就会生成类似如下代码
+
+```c++
+class ShorterString {
+public:
+	bool operator()(const string &a, const string &b) const { return a.size() < b.size(); }
+}
+```
+
+如果定义的lambda申明了是可变的，那么上述生成类就只是返回没有`const`关键字。
+
+那么实际调用lambda就变成了下面形式
+
+```c++
+stable_sort(words.begin(), words.end(), ShorterString());
+```
+
+### 当捕捉参数
+
+上面的情况是没有参数的场景，如果lambda要捕捉参数呢？其实生成的内容是一样的，多了参数就会生成相应的构造函数存储这些参数变量。
+
+假设有这样一个lambda
+
+```c++
+auto wc = find_if(words.begin(), words.end(), [sz](const string &s) { return s.size() >= sz; });
+```
+
+那么生成的类是
+
+```c++
+class SizeCompare {
+	SizeCompare(size_t n): sz(n) { }
+	bool operator()(const string &a) const { return a.size() >= sz; }
+private:
+	size_t sz;	
+}
+```
 

@@ -17,8 +17,13 @@ using std::istream; std::ostream;
 // 定义在内部的函数都是隐式内联的
 struct Sales_data
 {
-friend std::istream &read(std::istream&, Sales_data&);
+    friend std::istream &read(std::istream&, Sales_data&);
+    friend std::ostream &operator<<(std::ostream&, const Sales_data&);
+    friend std::istream &operator>>(std::istream&, Sales_data&);
+    friend Sales_data operator+(const Sales_data&, const Sales_data &);
+    friend bool operator==(const Sales_data &lhs, const Sales_data &rhs);
 public:
+    Sales_data& operator+=(const Sales_data&);
     std::string isbn() const { return bookNo;}
     std::string isbn2() const { return this->bookNo;}  // 等价上面
     Sales_data& combie(const Sales_data&);
@@ -33,6 +38,9 @@ private:
 Sales_data add(const Sales_data&,const Sales_data&);
 std::ostream &print(std::ostream&, const Sales_data&);
 std::istream &read(std::istream&, Sales_data&);
+std::ostream &operator<<(std::ostream&, const Sales_data&);
+std::istream &operator>>(std::istream&, Sales_data&);
+Sales_data operator+(const Sales_data&, const Sales_data&);
 
 // 在类的外部定义成员函数必须与类内的函数申明一致
 double Sales_data::avg_price() const {
@@ -59,6 +67,49 @@ Sales_data add(const Sales_data &lhs,const Sales_data &rhs)
     Sales_data sum = lhs;   //lhs拷贝至新的变量sum
     sum.combie(rhs);
     return sum;
+}
+std::ostream& operator<<(std::ostream &cout, const Sales_data &rhs)
+{
+    cout << rhs.isbn() << " " << rhs.units_sold << " "
+        << rhs.revenue << " " << rhs.avg_price();
+    return cout;
+}
+std::istream &operator>>(std::istream &cin, Sales_data &item)
+{
+    double price;
+    cin >> item.bookNo >> item.units_sold >> price;
+    if (cin) { // 检查输入是否成功
+        item.revenue = price * item.units_sold;
+    } else
+        item = Sales_data(); // 失败就赋予默认对象
+    
+    return cin;
+}
+Sales_data& Sales_data::operator+=(const Sales_data &a)
+{
+    revenue += a.revenue;
+    units_sold += a.units_sold;
+    return *this;
+}
+Sales_data operator+(const Sales_data &a, const Sales_data &b)
+{
+    Sales_data sum = a;
+    sum += b;
+    return sum;
+}
+inline bool 
+operator==(const Sales_data &lhs, const Sales_data &rhs)
+{
+    // must be made a friend of Sales_data
+    return lhs.isbn() == rhs.isbn() &&
+           lhs.revenue == rhs.revenue &&
+           lhs.units_sold == rhs.units_sold;
+}
+
+inline bool 
+operator!=(const Sales_data &lhs, const Sales_data &rhs)
+{
+    return !(lhs == rhs); // != defined in terms of operator==
 }
 #endif
 

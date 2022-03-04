@@ -5,6 +5,9 @@
 class StrVec
 {
 private:
+    // 定义下标运算符
+    std::string& operator [](std::size_t n) { return elements[n]; }
+    const std::string& operator[](std::size_t n) const { return elements[n]; }
     static std::allocator<std::string> alloc;
     std::string *elements; // 数组头元素位置
     std::string *first_free; // 最后一个元素后的位置（即第一个空闲位置）
