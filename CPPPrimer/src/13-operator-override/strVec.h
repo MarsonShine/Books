@@ -15,6 +15,7 @@ private:
     void free();
     // 重新分配
     void reallocate();
+    void reallocate_move();
     // pair返回两个指针，分别表示新空间的开始位置和拷贝的尾后位置
     std::pair<std::string*, std::string*> alloc_n_copy(const std::string*, const std::string*);
 public:
@@ -82,5 +83,19 @@ void StrVec::reallocate()
     free();
     elements = new_data;
     first_free = new_first_free;
+    cap = elements + new_capacity;
+}
+// 通过移动迭代器的方式实现地址移动而非值拷贝
+void StrVec::reallocate_move()
+{
+    // 内存大小翻倍
+    auto new_capacity = size() ? 2 * size() : 1;
+    // 分配新内存
+    auto first = alloc.allocate(new_capacity);
+    // 移动元素
+    auto last = std::uninitialized_copy(std::make_move_iterator(begin()), std::make_move_iterator(end()), first);
+    free();
+    elements = first;
+    first_free = last;
     cap = elements + new_capacity;
 }

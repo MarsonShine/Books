@@ -7,8 +7,10 @@ public:
     // 隐式初始化空消息
     explicit Message(const std::string& msg = "")
         : content(msg) { }
-    Message(const std::string&); // 拷贝构造函数
+    Message(const Message&); // 拷贝构造函数
+    Message(Message&&); // 移动构造函数
     Message& operator=(const Message&); // 拷贝复制运算符
+    Message& operator=(Message &&); // 移动赋值运算符
     ~Message();
     void save(Folder&);
     void remove(Folder&);
@@ -35,6 +37,7 @@ private:
     std::set<Folder*> folders;
     void add_to_folder(const Message&);
     void remove_from_folders();
+    void move_Folders(Message*);
 };
 
 void Message::save(Folder &f) 
@@ -61,17 +64,32 @@ void Message::remove_from_folders()
         f->removeMessage(this);
     }
 }
-// 构造函数
+void Message::move_Folders(Message *m)
+{
+    folders = std::move(m->folders); // 使用set的移动构造函数运算符
+    for (auto f : folders) {
+        f->removeMessage(m);
+        f->addMessage(this);
+    }
+    m->folders.clear(); // 确保被移动的对象是安全的
+}
+
+// 拷贝复制构造函数
 Message::Message(const Message &m): content(m.content), folders(m.folders)
 {
     add_to_folder(m);
 }
-// 拷贝复制运算符
+// 移动构造函数
+Message::Message(Message &&m) : content(std::move(m.content))
+{
+    move_Folders(&m); // 移动folders并更新Folders指针
+}
 
 Message::~Message()
 {
     remove_from_folders();
 }
+// 拷贝赋值运算符
 Message& Message::operator=(const Message &m)
 {
     // 删除原来内容
@@ -79,6 +97,15 @@ Message& Message::operator=(const Message &m)
     content = m.content;
     folders = m.folders;
     add_to_folder(m);
+    return *this;
+}
+Message& Message::operator=(Message &&rm)
+{
+    if (&rm != this) {
+        remove_from_folders();
+        content = std::move(rm.content); // 移动赋值运算符
+        move_Folders(&rm); // 重置Folders重新指向rm
+    }
     return *this;
 }
 

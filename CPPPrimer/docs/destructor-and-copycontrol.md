@@ -125,6 +125,62 @@ int main() {
 
 ## 数据移动
 
-右值引用`&&`:必须绑定到右值的引用；
+右值引用`&&`:必须绑定到右值的引用，该对象比较即将被销毁；
 
 左值引用:非右值引用的常规引用；
+
+c++提供了移动构造函数，与复制构造函数几乎一样。就是参数由原来的引用类型变成现在的右值引用
+
+> 关于左值就是一个可持久化的存储点，可以被其它程序访问的。右值一般指临时开辟内存存放的值，表示即将要销毁的，不能被其它程序访问的值。
+>
+> 而右值引用就是提供一种方式能让其它程序访问。
+>
+> http://c.biancheng.net/view/1510.html 讲的比较浅显易懂
+
+```c++
+class Intptr {
+	Intptr(Intptr &&); // 参数为右值引用
+}
+```
+
+在定义移动构造函数时，有一点要保证，就是移动过程中对异常友好的。也就是说要保证移动构造函数内部不会报异常
+
+```c++
+StrVec::StrVec(StrVec &&s) noexcept // 移动构造函数不应该抛异常
+	: elements(s.elements), first_free(s.first_free), cap(s.cap)
+{
+	s.elements = s.first_free = s.cap = nullptr;
+}
+```
+
+关键字`noexcept`就是告诉编译器不要抛异常。注意：移动数据不会开辟新的内存空间，仅仅是转移数据。
+
+与此类型还有移动赋值构造函数
+
+```c++
+StrVec& StrVec::operator=(StrVec &&rsv) noexcept
+{
+	if (this != rsv) {
+		free();
+		elements = rhv.elements;
+		first_free = rhv.first_free;
+		cap = rhv.cap;
+		// 释放rsv
+		rsv.elements = rsv.first_free = rsv.cap = nullptr;
+	}
+    return *this;
+}
+```
+
+数据交换可以通过数据赋值（拷贝构造函数）和移动数据（移动构造函数）来实现。那么当一个类同时定义了拷贝构造函数和移动构造函数，在数据变换过程中是具体调用的拷贝构造函数还是移动构造函数？
+
+这与参数是否是右值引用关系
+
+```c++
+StrVec v1, v2;
+v1 = v2; 
+StrVec getVec(istream &);
+v2 = getVec(cin);
+```
+
+v1, v2 是左值，所以第一个赋值语句，不能使用移动赋值构造函数，调用的拷贝构造函数。`getVec`是一个表达式，返回的是右值，所以第二个表达式是将右值绑定到v2，所以这里都可以采用移动构造函数和拷贝构造函数。而拷贝构造函数的签名上是需要进行一次`const`转换，而移动构造函数签名能精确匹配，所以优先调用后者。
