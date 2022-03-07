@@ -5,9 +5,14 @@
 class Bulk_quote : public Quote {   // 继承自Quote
 public:
     Bulk_quote() = default;
+    Bulk_quote(const Bulk_quote&);
+    Bulk_quote(Bulk_quote&&);
     Bulk_quote(const std::string&, double, std::size_t, double);
     Bulk_quote(const std::string& bookNo, double p, std::size_t qty, double disc) : Quote(bookNo, p), min_qty(qty), discount(disc) {}
     double net_price(std::size_t) const;
+
+    Bulk_quote* clone() const & { return new Bulk_quote(*this); }
+    Bulk_quote* clone() && { return new Bulk_quote(std::move(*this)); }
 private:
     std::size_t min_qty = 0; // xian t
     double discount = 0.0;  // 折扣
