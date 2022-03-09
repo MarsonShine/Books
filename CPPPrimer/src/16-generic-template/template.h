@@ -4,6 +4,7 @@
 #include <memory>
 #include <exception>
 #include <map>
+#include <iostream>
 // 范型模版编程，定义和申明一般都写在同一个头文件中
 
 template <typename T>
@@ -121,3 +122,19 @@ template<class T> class Bar {
 }
 typedef char CType;
 template<typename CType> CType f5(CType a);
+
+// 成员模板
+class DebugDelete {
+public:
+    DebugDelete(std::ostream &os = std::cerr) : os(s) { }
+    template<typename T> void operator()(T *t) const {
+        os << "deleting unique_ptr" << std::endl; delete t;
+    }
+private:
+    std::ostream &os;
+}
+
+// 模板构造函数
+template<typename T>
+template<typename It> 
+Blob<T>::Blob(It b, It e): data(std::make_shared<std::vector<T>>(b, e)) { }
