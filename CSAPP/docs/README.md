@@ -46,3 +46,56 @@ linux> objdump -d prog
 linux> gcc -Og -S -masm=intel mstore.c
 ```
 
+# 一个程序的编译过程
+
+有两个代码，sum.h、main.cpp，分别如下：
+
+```c++
+// main.c
+#include "sum.h"
+
+int sum(int *a, int n);
+int array[2] = {1, 2};
+
+int main()
+{
+    int val = sum(array, 2);
+    return val;
+}
+
+// sum.h
+int sum(int *a, int n)
+{
+    int i, s = 0;
+    for (i = 0; i < n; i++)
+    {
+        s += a[i];
+    }
+    return s;  
+}
+```
+
+如何把它编译成可执行文件（Linux下的ELF，windows下的PE文件格式）呢
+
+首先执行如下命令
+
+```
+gcc -c .\main.cpp
+```
+
+会直接生成`.o`文件格式，该文件是**可重定位的目标文件（relocatable object file）**，后续是需要连接器将这些目标文件链接合并起来生成可执行文件的。
+
+在生成目标文件的时候，其实编译器还进行两个步骤，只是上述进行合并了。
+
+首先是编译器驱动程序会将目标代码文件生成文件格式为`.i`的中间代码文件，继而编译成汇编代码文件格式`.s`:
+
+```
+gcc -S .\main.cpp
+```
+
+再由汇编器将汇编代码文件生成目标文件`.o`:
+
+```
+gcc -c .\main.s
+```
+
