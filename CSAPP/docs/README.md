@@ -99,3 +99,9 @@ gcc -S .\main.cpp
 gcc -c .\main.s
 ```
 
+最后再由链接器将目标文件合并成最终的可执行文件：
+
+```
+gcc -o main main.o
+```
+
