@@ -17,7 +17,7 @@
 1. 高 4 位是代码部分。代码值为：0~0xB。
 2. 低 4 位是功能部分。只有一组相关指令公用一个代码时才有用
 
-![](/asserts/instruction-set.png)
+![](./asserts/instruction-set.png)
 
 ​														图引用自《深入理解计算机系统》
 
