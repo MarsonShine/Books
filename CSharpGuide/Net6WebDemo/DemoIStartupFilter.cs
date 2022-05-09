@@ -1,4 +1,7 @@
-﻿namespace Net6WebDemo
+﻿using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+
+namespace Net6WebDemo
 {
     public class DemoIStartupFilter : IStartupFilter
     {

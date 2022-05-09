@@ -24,7 +24,7 @@ namespace CSharpGuide.LanguageVersions._10._0
             LambdaExpression parseExpr = (string s) => int.Parse(s); // Expression<Func<string, int>>
             Expression parseExpr2 = (string s) => int.Parse(s);       // Expression<Func<string, int>>
 
-            var choose = (bool b) => b ? 1 : "two"; // ERROR: Can't infer return type
+            //var choose = (bool b) => b ? 1 : "two"; // ERROR: Can't infer return type
             // C#10可以显式申明返回类型
             var choose2 = object (bool b) => b ? -1 : "one";
 

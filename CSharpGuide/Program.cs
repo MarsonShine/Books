@@ -15,9 +15,12 @@ using CSharpGuide.performance;
 using CSharpGuide.random;
 using CSharpGuide.threads;
 
-namespace CSharpGuide {
-    public class Program {
-        static void Main(string[] args) {
+namespace CSharpGuide
+{
+    public class Program
+    {
+        static void Main(string[] args)
+        {
             //Console.WriteLine("*************************均匀分布************************");
             //var distribution = StandardContinuousUniform.Distribution.Histogram(0, 1);
             //Console.WriteLine(distribution);
@@ -102,18 +105,24 @@ namespace CSharpGuide {
 
             for (int i = 1; i >= 0; i--)
                 Console.WriteLine(ZeroingMemoryAllocatedByStackalloc.Test(i)); // Test is inlined
+
+            WriteLine("是否第一个周五:" + is_operator.IsOperatorInCsharp.IsFirstFridayOfOctober(new DateTime(2022, 5, 6)));
+
             Console.Read();
         }
 
-        public static void M1(MyClass mc) {
+        public static void M1(MyClass mc)
+        {
             mc.MyValue = null; //没有 AllowNull 标签会有警告
         }
 
-        public static void M2(MyClass mc) {
+        public static void M2(MyClass mc)
+        {
             Console.WriteLine(mc.MyValue.Length);
         }
 
-        public static void M(string[] testArray) {
+        public static void M(string[] testArray)
+        {
             //string value = MyArray.Find<string>(testArray, s => s == "Hello");
             string value = MyArray.Find<string>(testArray, s => s == "Hello!");
             Console.WriteLine(value.Length);
@@ -122,13 +131,16 @@ namespace CSharpGuide {
             Console.WriteLine(testArray.Length);
         }
 
-        public static void M3([DoesNotReturnIf(false)] bool b, string s) {
+        public static void M3([DoesNotReturnIf(false)] bool b, string s)
+        {
             if (!b) throw new Exception(s);
         }
-        static void Test_DoesNotReturnIf(string? s) {
+        static void Test_DoesNotReturnIf(string? s)
+        {
             M3(s != null, s.ToString());
         }
-        static void Test() {
+        static void Test()
+        {
             string? value = "not null";
             var flag = MyString.IsNullOrEmpty(value);
             string? input = "1.0.0.0";
@@ -139,15 +151,18 @@ namespace CSharpGuide {
             flag2 = queue.TryDequeue(out value);
         }
 
-        static void Test_MaybeNullWhen_NotNullWhen(string? s) {
-            if (MyString.IsNullOrEmpty(s)) {
+        static void Test_MaybeNullWhen_NotNullWhen(string? s)
+        {
+            if (MyString.IsNullOrEmpty(s))
+            {
                 //这会生成一个警告
                 //Console.WriteLine(s.Length);
                 return;
             }
             Console.WriteLine(s.Length); //安全
 
-            if (!MyVersion.TryParse(s, out var version)) {
+            if (!MyVersion.TryParse(s, out var version))
+            {
                 //这里有一个警告
                 //Console.WriteLine(version.Major);
                 return;
@@ -155,18 +170,21 @@ namespace CSharpGuide {
             Console.WriteLine(version.Major);
         }
 
-        static void Test_NotNullIfNotNull() {
+        static void Test_NotNullIfNotNull()
+        {
             var s = M5();
             s.ToString();
         }
 
         [
-            return :NotNullIfNotNull("p")
+            return: NotNullIfNotNull("p")
         ]
-        static string? M5(params string?[] ? p) => p?.ToString();
+        static string? M5(params string?[]? p) => p?.ToString();
 
-        static void QueueTest(MyQueue<string> q) {
-            if (!q.TryDequeue(out string s)) {
+        static void QueueTest(MyQueue<string> q)
+        {
+            if (!q.TryDequeue(out string s))
+            {
                 //警告
                 Console.WriteLine(value: s.Length);
                 return;
@@ -174,18 +192,21 @@ namespace CSharpGuide {
             Console.WriteLine(s.Length);
         }
 
-        static void PathTest(string? path) {
+        static void PathTest(string? path)
+        {
             var possiblyNullPath = MyPath.GetFileName(path);
             Console.WriteLine(possiblyNullPath.Length); // Warning: Dereference of a possibly null reference
 
-            if (!string.IsNullOrEmpty(path)) {
+            if (!string.IsNullOrEmpty(path))
+            {
                 var goodPath = MyPath.GetFileName(path);
                 Debug.Assert(goodPath != null); //添加断言则不会有警告
                 Console.WriteLine(goodPath.Length); // Safe!
             }
         }
 
-        static void TestThrowException(string? args) {
+        static void TestThrowException(string? args)
+        {
             ThrowHelper.ThrowArgumentNullException(args);
 
             MyAssertionLibrary.MyAssert(args != null);
