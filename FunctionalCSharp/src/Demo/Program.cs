@@ -1,7 +1,9 @@
 ﻿// See https://aka.ms/new-console-template for more information
+global using System; 
 using Demo.Magics;
 using Demo.NonFunctionals;
 using static System.Console;
+using static MarsonShine.Functional.F;
 
 Console.WriteLine("Hello, World!");
 
@@ -33,3 +35,6 @@ Enumerable.Zip(
 
 Demo.Functionals.ListFormatter.ParallelFormat(list)
     .ForEach(WriteLine);
+
+var firstName = Some("marsonshine");
+var middleName = None;
