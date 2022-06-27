@@ -1,4 +1,5 @@
-﻿namespace MarsonShine.Functional
+
+namespace MarsonShine.Functional
 {
     using System.Diagnostics.CodeAnalysis;
     using static F;

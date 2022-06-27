@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace MarsonShine.Functional
 {
-    public static class F
+    public static partial class F
     {
         public static TResult Using<TDisposable, TResult>(TDisposable disposable, Func<TDisposable, TResult> f) 
             where TDisposable : IDisposable
