@@ -1,8 +1,9 @@
+using System.Diagnostics.CodeAnalysis;
+using Unit = System.ValueTuple;
+using static MarsonShine.Functional.F;
 
 namespace MarsonShine.Functional
 {
-    using System.Diagnostics.CodeAnalysis;
-    using static F;
     public static partial class F
     {
         public static Option<T> Some<T>(T value) => new Option.Some<T>(value);
@@ -67,5 +68,17 @@ namespace MarsonShine.Functional
                 Value = value;
             }
         }
+    }
+
+    public static class OptioExt
+    {
+        public static Option<R> Map<T, R>(this Option.Some<T> some, Func<T, R> f) => Some(f(some.Value));
+        public static Option<R> Map<T, R>(this Option.None _, Func<T, R> f) => None;
+        public static Option<R> Map<T, R>(this Option<T> opt, Func<T, R> f) => opt.Match(() => None, (t) => Some(f(t)));
+        public static Option<Unit> ForEach<T>(this Option<T> opt, Action<T> action) => Map(opt, action.ToFunc());
+
+        public static Option<R> Bind<T, R>(this Option<T> opt, Func<T, Option<R>> f) => opt.Match(() => None, (t) => f(t));
+        public static IEnumerable<R> Bind<T, R>(this Option<T> opt, Func<T, IEnumerable<R>> func) => opt.AsEnumerable().Bind(func);
+        public static Option<T> Where<T>(this Option<T> opt, Func<T, bool> predicate) => opt.Match(() => None, (t) => predicate(t) ? opt : None);
     }
 }

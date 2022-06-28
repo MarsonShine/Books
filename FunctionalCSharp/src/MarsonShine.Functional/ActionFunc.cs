@@ -3,10 +3,6 @@ using Unit = System.ValueTuple; // 通过元祖来表示”无返回值“
 namespace MarsonShine.Functional
 {
     using static F;
-    public static partial class F
-    {
-        public static Unit Unit() => default(Unit);
-    }
 
     public static class ActionExt {
         public static Func<Unit> ToFunc(this Action action) => () => {action(); return Unit(); };

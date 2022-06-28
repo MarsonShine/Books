@@ -5,7 +5,7 @@ VisualStudioVersion = 17.2.32602.215
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Demo", "Demo.csproj", "{5E359E09-A991-43BB-934D-761D63819761}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MarsonShine.Functional", "..\MarsonShine.Functional\MarsonShine.Functional.csproj", "{E975D9A2-09D3-49F1-A795-7AFFF28BC31E}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MarsonShine.Functional", "..\MarsonShine.Functional\MarsonShine.Functional.csproj", "{E975D9A2-09D3-49F1-A795-7AFFF28BC31E}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

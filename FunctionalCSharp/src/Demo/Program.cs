@@ -2,6 +2,7 @@
 global using System; 
 using Demo.Magics;
 using Demo.NonFunctionals;
+using MarsonShine.Functional;
 using static System.Console;
 using static MarsonShine.Functional.F;
 
@@ -38,3 +39,9 @@ Demo.Functionals.ListFormatter.ParallelFormat(list)
 
 var firstName = Some("marsonshine");
 var middleName = None;
+
+Func<string, string> greet = name => $"hello, {name}";
+Option<string> _ = None;
+Option<string> optJohn = Some("John");
+_.Map(greet);
+optJohn.Map(greet);
