@@ -76,8 +76,11 @@ namespace MarsonShine.Functional
 
         public static Either<L, Unit> ForEach<L, R>(this Either<L, R> either, Action<R> action) => Map(either, action.ToFunc());
         public static Either<L, RR> Bind<L, R, RR>(this Either<L, R> either, Func<R, Either<L, RR>> f) => either.Match(
-            l=> Left(l),
+            l => Left(l),
             r => f(r)
             );
+        public static Either<LL, RR> Map<L, LL, R, RR>(this Either<L, R> either, Func<L, LL> left, Func<R, RR> right) => either.Match<Either<LL, RR>>(
+            Left: l => Left(left(l)),
+            Right: r => Right(right(r)));
     }
 }
