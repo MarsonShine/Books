@@ -7,6 +7,9 @@ namespace MarsonShine.Functional
     {
         public static Unit Unit() => default;
 
+        public static Func<T1, Func<T2, R>> Curry<T1, T2, R>(this Func<T1, T2, R> f) => t1 => t2 => f(t1, t2);
+        public static Func<T1, Func<T2, Func<T3, R>>> Curry<T1, T2, T3, R>(this Func<T1, T2, T3, R> f) => t1 => t2 => t3 => f(t1, t2, t3);
+
         public static TResult Using<TDisposable, TResult>(TDisposable disposable, Func<TDisposable, TResult> f) 
             where TDisposable : IDisposable
         {

@@ -11,5 +11,12 @@
           => list.Bind(t => func(t).AsEnumerable());
 
         public static IEnumerable<R> Map<T, R>(this IEnumerable<T> list, Func<T, R> func) => list.Select(func);
+        public static void ForEach<R>(this IEnumerable<R> list, Action<R> action)
+        {
+            foreach (var item in list)
+            {
+                action(item);
+            }
+        }
     }
 }
