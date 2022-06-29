@@ -16,11 +16,11 @@ namespace Demo.Examples._5
 
         public static void Main() {
             Func<Person, string> emailFor = p => AppendDomain(AbbreviateName(p));
-            var joe = new Person { LastName = "Marson", FirstName = "Shine"};
+            var joe = new Person("Marson","Shine");
             var email = emailFor(joe);
 
             // v2
-            var marsonShine = new Person{LastName = "Marson", FirstName = "Shine"};
+            var marsonShine = new Person("Marson","Shine");
             var email2 = joe.AbbreviateName().AppendDomain();
 
         }
