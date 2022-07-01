@@ -75,10 +75,20 @@ namespace MarsonShine.Functional
         public static Option<R> Map<T, R>(this Option.Some<T> some, Func<T, R> f) => Some(f(some.Value));
         public static Option<R> Map<T, R>(this Option.None _, Func<T, R> f) => None;
         public static Option<R> Map<T, R>(this Option<T> opt, Func<T, R> f) => opt.Match(() => None, (t) => Some(f(t)));
+        public static Option<Func<T2, R>> Map<T1, T2, R>(this Option<T1> opt, Func<T1, T2, R> f) => opt.Map(f.Curry());
+        public static Option<Func<T2, T3, R>> Map<T1, T2, T3, R>(this Option<T1> opt, Func<T1, T2, T3, R> f) => opt.Map(f.CurryFirst());
         public static Option<Unit> ForEach<T>(this Option<T> opt, Action<T> action) => Map(opt, action.ToFunc());
 
         public static Option<R> Bind<T, R>(this Option<T> opt, Func<T, Option<R>> f) => opt.Match(() => None, (t) => f(t));
         public static IEnumerable<R> Bind<T, R>(this Option<T> opt, Func<T, IEnumerable<R>> func) => opt.AsEnumerable().Bind(func);
         public static Option<T> Where<T>(this Option<T> opt, Func<T, bool> predicate) => opt.Match(() => None, (t) => predicate(t) ? opt : None);
+        public static Option<R> Apply<T, R>(this Option<Func<T, R>> optFunc, Option<T> opt) => optFunc.Match(
+            () => None,
+            (f) => opt.Match(
+                () => None,
+                (t) => Some(f(t))
+                )
+            );
+        public static Option<Func<T2, R>> Apply<T1, T2, R>(this Option<Func<T1, T2, R>> optFunc, Option<T1> opt) => Apply(optFunc.Map(F.Curry), opt);
     }
 }
