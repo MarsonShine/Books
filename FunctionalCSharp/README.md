@@ -2,7 +2,11 @@
 
 ## 函子-functor
 
+
+
 ## 单子-monad
+
+
 
 ## 偏函数应用-partial-function-application（PFA）
 
@@ -12,3 +16,8 @@
 
 详见[偏函数](https://en.wikipedia.org/wiki/Partial_application)
 
+## 应用函子-applicative functor
+
+在函数式编程语言里，是介于函子（functor）和单子（monad）之间的一种中间结构。应用函子允许函子计算是有序的(不像普通函子)，但不允许使用之前的计算结果在后续的定义(不像函子)。但不允许在后续计算的定义中使用先前计算的结果（不像单子）。应用函子是范畴论中具有张量强度的宽松的monoidal函子的编程等价物。
+
+详见：[应用函子](https://en.wikipedia.org/wiki/Applicative_functor)
