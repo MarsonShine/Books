@@ -18,5 +18,16 @@
                 action(item);
             }
         }
+
+        public static R Match<T, R>(this IEnumerable<T> list, Func<R> Empty, Func<T, IEnumerable<T>, R> Otherwise) => list.Head().Match(
+            None: Empty,
+            Some: head => Otherwise(head, list.Skip(1))
+        );
+
+        public static Option<T> Head<T>(this IEnumerable<T> list) {
+            if (list == null) return None;
+            var enumerator = list.GetEnumerator();
+            return enumerator.MoveNext() ? Some(enumerator.Current) : None;
+        }
     }
 }
