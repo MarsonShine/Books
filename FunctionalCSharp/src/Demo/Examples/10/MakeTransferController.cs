@@ -20,5 +20,11 @@ namespace Demo.Examples._10
 
     public class MakeTransfer {
         public Guid DebitedAccountId { get; }
+        public string Beneficiary { get; internal set; }
+        public string Bic { get; internal set; }
+        public decimal Amount { get; internal set; }
+        public string Iban { get; internal set; }
+        public string Reference { get; internal set; }
+        public DateTime Timestamp { get; internal set; }
     }
 }

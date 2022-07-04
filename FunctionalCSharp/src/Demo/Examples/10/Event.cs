@@ -2,7 +2,7 @@ namespace Demo.Examples._10
 {
     public class Event {
         public Guid EntityId { get; set; }
-        public DateTime Timestamp { get; }
+        public DateTime Timestamp { get; set; }
     }
 
     public sealed class CreatedAccount : Event {
