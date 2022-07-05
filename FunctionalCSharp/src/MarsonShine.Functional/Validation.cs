@@ -1,6 +1,7 @@
 ﻿namespace MarsonShine.Functional
 {
     using static F;
+    using Unit = ValueTuple;
     public static partial class F
     {
         public static Validation<T> Valid<T>(T value) => new(value);
@@ -44,6 +45,11 @@
         public static implicit operator Validation<T>(Validation.Invalid left)
            => new(left.Errors);
         public static implicit operator Validation<T>(T right) => Valid(right);
+        public TR Match<TR>(Func<IEnumerable<Error>, TR> Invalid, Func<T, TR> Valid)
+        => IsValid ? Valid(Value!) : Invalid(this.Errors);
+
+        public Unit Match(Action<IEnumerable<Error>> Invalid, Action<T> Valid)
+           => Match(Invalid.ToFunc(), Valid.ToFunc());
 
     }
 
@@ -54,5 +60,21 @@
             internal IEnumerable<Error> Errors;
             public Invalid(IEnumerable<Error> errors) { Errors = errors; }
         }
+
+        public static Validation<RR> Map<R, RR>(this Validation<R> @this, Func<R, RR> f) =>
+            @this.IsValid ? Valid(f(@this.Value!)) : Invalid(@this.Errors);
+
+        public static Validation<Unit> ForEach<R>(this Validation<R> @this, Action<R> act) => Map(@this, act.ToFunc());
+
+        public static Validation<T> Do<T>(this Validation<T> validation, Action<T> action)
+        {
+            validation.ForEach(action);
+            return validation;
+        }
+
+        public static Validation<R> Bind<T, R>(this Validation<T> val, Func<T, Validation<R>> f) => val.Match(
+            Invalid: (err) => Invalid(err),
+            Valid: (r) => f(r)
+            );
     }
 }

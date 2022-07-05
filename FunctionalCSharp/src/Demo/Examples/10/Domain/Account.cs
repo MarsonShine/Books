@@ -23,18 +23,17 @@ namespace Demo.Examples._10.Domain
                 )
             )
         );
-
-        public static (Event Event, AccountState NewState) Debit(this AccountState state, MakeTransfer transfer) {
-            Event evt = transfer.ToEvent();
-            AccountState newState = state.Apply(evt);   // 计算新状态
-            return (evt, newState);
-        }
-
-        public static Validation<(Event, AccountState)> Debit(this AccountState account, MakeTransfer transfer) {
+        // 添加验证，只有在账户当前状态允许的情况下接进行debit操作
+        public static Validation<(Event, AccountState)> DebitWithValidation(this AccountState account, MakeTransfer transfer) {
             if (account.Status != AccountStatus.Active)
                 return Errors.AccountNotActive;
             if (account.Balance - transfer.Amount < account.AllowedOverdraft)
                 return Errors.InsufficientBalance; 
+
+            var evt = transfer.ToEvent();
+            var newState = account.Apply(evt); // 计算新状态
+
+            return (evt, newState);
         }
     }
 }
