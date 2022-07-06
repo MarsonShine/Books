@@ -41,3 +41,23 @@ g: A -> (C, K)
 在函数式编程语言里，是介于函子（functor）和单子（monad）之间的一种中间结构。应用函子允许函子计算是有序的(不像普通函子)，但不允许使用之前的计算结果在后续的定义(不像函子)。但不允许在后续计算的定义中使用先前计算的结果（不像单子）。应用函子是范畴论中具有张量强度的宽松的monoidal函子的编程等价物。
 
 详见：[应用函子](https://en.wikipedia.org/wiki/Applicative_functor)
+
+## Traverse函数
+
+在函数式编程的概念里，该函数是用来处理数值列表的。
+
+var nums = '1,2,3,4,5,6,7'.Split(',')	// Array<string>
+
+​	.Map(String.Trim)	// IEnumerable<string>
+
+​	.Map(Double.Parse)   // IEnumerable<Option<double>>
+
+那么整个处理过程的是这样的：string -> Option<double> -> IEnumerable<Option<double>>
+
+但是实际上我们应该得到如下结果: Option<IEnumerable<double>>
+
+而Traverse函数就是为了实现这种目的的。
+
+Tr<T> -> (T -> A<R>) -> A<Tr<R>>
+
+即：IEnumerable<string> -> (T -> Option<R>) -> Option<IEnumerable<R>>
