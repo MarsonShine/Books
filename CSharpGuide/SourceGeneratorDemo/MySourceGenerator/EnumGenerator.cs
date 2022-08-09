@@ -16,10 +16,12 @@ namespace MySourceGenerator
         public const string EnumExtensionsAttribute = "MySourceGenerator.EnumExtensionsAttribute";
         public void Execute(GeneratorExecutionContext context)
         {
+#if DEBUG
             if (!Debugger.IsAttached)
             {
                 Debugger.Launch();
             }
+#endif
             context.AddSource("EnumExtensionsAttribute.g.cs", SourceText.From(GeneratorHelper.Attribute, Encoding.UTF8));
             var enumSyntaxReceiver = (EnumSyntaxReceiver)context.SyntaxContextReceiver!;
             if (enumSyntaxReceiver == null)
