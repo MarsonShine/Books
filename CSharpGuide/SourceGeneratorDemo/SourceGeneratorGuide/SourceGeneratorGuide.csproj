@@ -8,8 +8,12 @@
 
   <ItemGroup>
     <ProjectReference Include="..\MySourceGenerator\MySourceGenerator.csproj" 
-                      OutputItemType="Analyzer"
+                      OutputItemType="Analyzer" 
                       ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Properties\" />
   </ItemGroup>
 
 </Project>

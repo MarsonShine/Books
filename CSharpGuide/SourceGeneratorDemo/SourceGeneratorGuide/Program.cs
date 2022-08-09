@@ -1,4 +1,6 @@
 ﻿// See https://aka.ms/new-console-template for more information
+using System.ComponentModel;
+
 namespace MySourceGenerator;
 
 partial class Program
@@ -7,7 +9,25 @@ partial class Program
     {
         HelloFrom("Generated Code");
         Console.ReadLine();
+
+        Direction c = Direction.Down;
+        Console.WriteLine(c.ToStringFast());
+        Console.WriteLine(c.ToDescription());
     }
 
     static partial void HelloFrom(string name);
+
+    [EnumExtensions(ExtensionClassName = "DirectionExtensions")]
+    public enum Direction
+    {
+        [Description("左")]
+        Left,
+        [Description("右")]
+        Right,
+        [Description("上")]
+        Up,
+        [Description("下")]
+        Down,
+    }
+
 }
