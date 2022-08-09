@@ -13,6 +13,11 @@ partial class Program
         Direction c = Direction.Down;
         Console.WriteLine(c.ToStringFast());
         Console.WriteLine(c.ToDescription());
+
+        Color c2 = Color.Red;
+        Console.WriteLine(c2.ToStringFast());
+        Console.WriteLine(c2.ToDescription());
+        // Console.WriteLine()
     }
 
     static partial void HelloFrom(string name);
@@ -28,6 +33,19 @@ partial class Program
         Up,
         [Description("下")]
         Down,
+    }
+    [EnumExtensions]
+    public enum Color {
+        [Description("红")]
+        Red,
+        [Description("绿")]
+        Green,
+        [Description("黄")]
+        Yellow,
+        [Description("粉")]
+        Pink,
+        [Description("黑")]
+        Black,
     }
 
 }
