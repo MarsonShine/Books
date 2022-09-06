@@ -262,3 +262,6 @@ GarbageCollectGeneration()
 
 
 
+## 原文地址
+
+https://github.com/dotnet/runtime/blob/main/docs/design/coreclr/botr/garbage-collection.md
