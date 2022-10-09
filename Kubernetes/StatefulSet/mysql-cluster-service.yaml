@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql
+  labels:
+    app: mysql
+spec:
+  ports:
+  - name: mysql
+    port: 3306
+  # clusterIP=None 代表一个 Headless Service，通过为Pod分配DNS记录来固定它的拓扑状态
+  # 这里的例子就是 mysql-0.mysql,mysql-1.mysql 的 DNS
+  clusterIP: None
+  selector:
+    app: mysql
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql-read
+  labels:
+    app: mysql
+spec:
+  ports:
+  - name: mysql
+    port: 3306
+  selector:
+    app: mysql
