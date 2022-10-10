@@ -1,0 +1,17 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: pi
+spec:
+  # 控制并行作业
+  parallelism: 2 # 一个job在任意时间内最多同时运行几个（即同时启动多少个pod）
+  completions: 4 # 一个job至少要完成的几个任务（即完成的pod数）
+  template:
+    spec:
+      containers:
+      - name: pi
+        image: resouer/ubuntu-bc
+        command: ["sh", "-c", "echo 'scale=10000; 4*a(1)' | bc -l "]
+      restartPolicy: Never
+  backoffLimit: 4 # 该job发生失败重启的最大次数
+  activeDeadlineSeconds: 100 # job最长运行的时间 s
