@@ -40,3 +40,13 @@ spec:
 **而 CronJob 操作的对象是 Job 控制器。**
 
 关于Job的使用模式，详见：[Job patterns](https://kubernetes.io/docs/concepts/workloads/controllers/job/#job-patterns)
+
+## Operator工作原理
+
+实际上就是利用 Kubernetes 的自定义 API 资源（CRD），来描述我们想要部署的“有状态应用”；然后在自定义控制器里，根据自定义 API 对象的变化，来完成具体的部署和运维工作。
+
+也就是说编写自定义 Operator 其实跟写一个自定义的控制器差不多。
+
+## Volume 如何实现持久化的
+
+在 Kubernetes 中实际上是有专门的控制器来处理持久化存储的，叫 VolumeController
