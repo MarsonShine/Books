@@ -49,4 +49,16 @@ spec:
 
 ## Volume 如何实现持久化的
 
-在 Kubernetes 中实际上是有专门的控制器来处理持久化存储的，叫 VolumeController
+什么是 Volume？**其实就是将一个宿主机上的目录，跟一个容器里的目录绑定挂载在一起**。
+
+而持久化 Volume 就是将这个**宿主机上的目录的内容进行持久化**。而通常在 volume 节点配置的 `hostPath` 和 `emptyDir` 是不具有持久性的。所以要想持久化就需要依赖一个远程存储服务，比如：远程文件存储（NFS、FlusterFS）、远程块存储（例如 AWS 提供的存储服务等）。
+
+Kubernetes 就是使用这些远程服务来为容器准备一个具有持久化能力的宿主机目录。整个过程分为**两个阶段**
+
+1. Attach 阶段：挂载远程存储服务（远程磁盘）操作
+
+   > 如当一个 Pod 调度到一个节点上时，kubelet 就要负责为这个 Pod 创建它的 Volume 目录，这个时候 kubelet 就会知道此时你申明的 Volume 类型了，随机做对应的 attach 操作。
+
+2. Mount 阶段：有了存储的地方（attach）那么就要使用这个远程磁盘了；这个阶段就会格式化磁盘设备，然后将它挂载到宿主机上指定的目录上。
+
+在 Kubernetes 中实际上是有专门的控制器来处理持久化存储的，叫 VolumeController。在源码中是以 [startPersistentVolumeBinderController](https://github.com/kubernetes/kubernetes/blob/master/cmd/kube-controller-manager/app/core.go#L244) 体现的。是有 kube-manager-controller 负责维护。而具体的第二部则是依赖于各个节点的具体目录，所以必须是在 Pod 对应的宿主机上，这个控制循环的名字，叫作：[volume.attachdetach.reconciler](https://github.com/kubernetes/kubernetes/blob/master/pkg/controller/volume/attachdetach/reconciler/reconciler.go#L68)，它运行起来之后，是一个独立于 kubelet 主循环的 Goroutine。
