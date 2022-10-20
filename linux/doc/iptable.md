@@ -115,8 +115,113 @@ pkts bytes target     prot opt in out   source destination
 iptables --policy FORWARD DROP
 ```
 
+因此，iptables 将丢弃所有不在内核本地使用的数据包：
 
+```
+$ iptables -L -v
+ 
+Chain INPUT (policy ACCEPT 0 packets, 0 bytes)
+pkts bytes target     prot opt in out   source destination
+ 
+Chain FORWARD (policy DROP 0 packets, 0 bytes)
+pkts bytes target     prot opt in out   source destination
+ 
+Chain OUTPUT (policy ACCEPT 0 packets, 0 bytes)
+pkts bytes target     prot opt in out   source destination
+```
 
+### 通过表达式匹配过滤报文
 
+一般来说，机器不会公平的对待来自所有来源的连接或数据包。因此，适用于没有任何区别对待所有连接的默认链，有时是不够的。
+
+iptables 允许我们根据很多特性来过滤连接，如源 I P地址、源端口和协议：
+
+- 丢弃指定 IP 的所有数据包：
+
+  ```
+  iptables -A INPUT -s 10.1.2.3 -j DROP
+  ```
+
+  这将丢弃 IP 为 10.1.2.3 的机器的所有数据包。
+
+- 根据指定端口丢弃所有数据包：
+
+  ```
+  iptables -A INPUT -p tcp --dport 8080 -s 10.1.2.3 -j DROP
+  ```
+
+  这个命令将阻止所有从 IP 为 10.1.2.3 的机器发送到 8080 端口的数据包：
+
+  ```
+  Chain INPUT (policy ACCEPT 0 packets, 0 bytes)
+   pkts bytes target     prot opt in     out     source               destination
+      0     0 DROP       tcp  --  any    any     10.1.2.3             anywhere             tcp dpt:8080
+  
+  Chain FORWARD (policy ACCEPT 0 packets, 0 bytes)
+   pkts bytes target     prot opt in     out     source               destination
+  
+  Chain OUTPUT (policy ACCEPT 0 packets, 0 bytes)
+   pkts bytes target     prot opt in     out     source               destination
+  ```
+
+- 通过指定协议丢弃所有数据包：
+
+  ```
+  iptables -A INPUT -p tcp --dport 22 -j DROP
+  ```
+
+  这个命令会阻止所有从来自 TCP 的 22 端口的数据包。因此这就不允许 SSH 连接。
+
+### iptables Append 和 Delete 规则
+
+正如我们前面所讨论的，规则在 iptables 中被串联起来。当一个数据包到达时，内核会识别该链并浏览它，直到找到一个匹配的表达式。然后，它将在数据包上应用定义的目标，从而决定放弃（DROP）、接受（ACCEP）或拒绝（REJECT）该数据包。
+
+`iptables` 命令允许我们从这些链上添加或删除规则。例如，我们在上一节讨论的命令在 INPUT 链中添加了一条规则：
+
+```
+iptables -A INPUT -p tcp --dport 22 -j DROP
+```
+
+通过提供 `-A` 作为参数，我们向链中追加了一个新规则。当数据包到来时，内核将在接受所有连接的默认规则之前查找此规则。
+
+于此类似，我们可以从链中删除某个规则：
+
+```
+iptables -D INPUT -p tcp --dport 22 -j DROP
+```
+
+任何时候，我们都可以列出链中所有的规则：
+
+```
+iptables -L -v
+```
+
+这将按照规则在链中添加的顺序输出规则列表。
+
+## 保存 IP 表规则
+
+到目前为止，我们添加的规则只是临时的，如果 iptables 或机器重新启动，内核将删除这些规则。
+
+为了避免这种情况，我们必须在重启之前保存这些规则：
+
+```
+/sbin/iptables-save
+```
+
+这个命令一般工作在 Ubuntu 或基于 Debian 的发行版上。
+
+针对 Red Hat 或 Centos 我们可以这样做：
+
+```
+/sbin/service iptables save
+```
+
+这将永久地将规则保存在存储中，内核将在启动时将规则重新加载到 iptables 中
+
+## 总结
+
+在这篇文章中，我们讨论了如何将 iptables 作为 Linux 机器中的防火墙使用。我们首先在 Linux 机器上安装了 iptables，并解释了它是如何作为内核的查询表来决定是否接受或放弃数据包的。
+
+然后，我们使用 iptables 命令在防火墙中添加规则，根据 IP、端口和协议阻止或允许连接。
 
 原文链接：https://www.baeldung.com/linux/iptables-intro
