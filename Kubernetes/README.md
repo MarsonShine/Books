@@ -86,3 +86,6 @@ CSI 插件服务包含三大服务：
 https://github.com/container-storage-interface/spec/blob/master/spec.md
 
 https://github.com/kubernetes/design-proposals-archive/blob/main/storage/container-storage-interface.md
+
+## 如何在 Kubernetes 中让 Pod 尽可能地分布在不同的节点？
+
