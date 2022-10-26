@@ -89,3 +89,6 @@ https://github.com/kubernetes/design-proposals-archive/blob/main/storage/contain
 
 ## 如何在 Kubernetes 中让 Pod 尽可能地分布在不同的节点？
 
+1. 设置 [node 的亲和性（AntiAffinity）](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#affinity-and-anti-affinity)
+2. 可以通过[调度配置](https://kubernetes.io/docs/reference/scheduling/config/)实现
+
