@@ -242,7 +242,119 @@ QUIC 的 **0-RTT 快速连接设置实际上更像是一种微优化**，而不�
 
 ![](./asserts/hol-blocking-rr-sequential.png)
 
-​			图7: 数据包丢失的影响取决于所使用的多路复用器。(注意，我们假设每个数据流比之前的类似图像有更多的数据要发送。
+​			图7: 数据包丢失的影响取决于所使用的多路复用器。(注意，我们假设每个数据流比之前的类似图像有更多的数据要发送。)
+
+我们看可以看到有一个矛盾点：顺序多路复用（AAAABBBBCCCC）通常对网络性能更好，但它不允许我们利用 QUIC 的 Hol 阻塞消除功能。循环多路复用（ABCABCABC）对 Hol 阻塞更有力，但对网络性能更不利。因此，**一种最佳实践或优化项可能会破坏另一个**。
+
+更糟的是。到目前为止，我们一直认为单个数据包是一次丢失一个的。然而，这并不总是真实的，因为互联网上的数据包丢失往往是["突发的"](https://huitema.wordpress.com/2020/07/12/parsing-quic-logs-and-assessing-packet-losses/)，这意味着**多个数据包经常同时丢失。**
+
+[如上所述](#拥塞控制)，丢包的一个重要原因是，网络因数据过多而过载，不得不丢弃多余的数据包。这就是为什么拥塞控制器开始时发送速度很慢。然而，它随后不断增加其发送速率，直到...出现丢包现象。
+
+换句话说，旨在防止网络过载的机制实际上是使**网络过载**（尽管是以一种可控的方式）。在大多数网络中，当发送率增加到每个往返的数百个数据包时，这种情况就会发生。当这些数据包达到网络的极限时，通常会有几个数据包一起被丢弃，从而导致了突发性的丢失模式。
+
+> **你知道吗？**
+>
+> 这也是我们为什么要在 HTTP/2 中使用单个 TCP 连接，而不是 HTTP/1.1 的 6～30 个连接的原因之一。因为每个单独的连接都以相同的方式提高其发送率，HTTP/1.1 在开始时可以得到很好的加速，但是这些连接实际上可能会因网络过载，导致大量的数据包丢失。
+>
+> 当时，[Chromium 开发者推测](https://a77db9aa-a-7b23c8ea-s-sites.googlegroups.com/a/chromium.org/dev/spdy/An_Argument_For_Changing_TCP_Slow_Start.pdf)，这种行为造成了互联网上的大部分数据包丢失。这也是 BBR 成为经常使用的拥堵控制算法的原因之一，因为它使用观察到的 RTT 的波动，而不是数据包丢失，来评估可用带宽。
+
+> **你知道吗？**
+>
+> 丢包的其他原因可能导致较少或个别的数据包丢失（或无法使用），特别是在无线网络上。然而，在那里，损失往往是在较低的协议层检测到的，并在两个本地实体（例如，智能手机和 4G 蜂基站）之间解决，而不是通过客户端和服务器之间的重传。这些通常不会导致真正的端到端数据包损失，而是表现为**数据包延迟（或"抖动"）的变化**和数据包到达的重新排序。
+
+因此，假设我们使用每个包的循环多用复用器（ABCABCABCABCABCABCABCABC...）来获得 HoL 阻塞消除的最大效果，而我们得到的突发损失只有 4 个数据包。我们看到，这总是会影响到所有 3 个数据流（见图8，中间一行）！在这种情况下，QUIC 的 HoL 阻塞消除没有提供任何好处，**因为所有流都必须等待自己的重传**。
+
+![](./asserts/hol-blocking-bursty.png)
+
+​				图8: 根据所使用的多路复用器和数据包丢失模式，或多或少的流会受到影响
+
+为了降低多个数据流被丢失突发影响的风险，我们需要为每个数据流串联更多的数据。例如，AABBCCAABBCCAABBCCAABBCC...是一个小的改进，而AAAABBBBCCCCAAAABBBBCCCC...（见上图8的底排）甚至更好。你可以再次看到，一个更有顺序的方法是更好的，尽管这减少了我们有多个并发活动流的机会。
+
+最后，预测 QUIC 的 HoL 阻塞消除的实际影响是困难的，因为它取决于流的数量、丢失突发的大小和频率、流数据的实际使用方式等。然而，目前的[大多数结果](https://h3.edm.uhasselt.be/files/ResourceMultiplexing_H2andH3_Marx2020.pdf)表明，它对网页加载的使用情况**没有什么帮助**，因为在那里我们通常需要较少的并发流。
+
+如果你想了解这个话题的更多细节，或者只是一些具体的例子，请查看我关于 [HTTP HoL 阻塞的深度文章](https://calendar.perfplanet.com/2020/head-of-line-blocking-in-quic-and-http-3-the-details/)。
+
+> **你知道吗？**
+>
+> 与前几节一样，一些先进的技术在这里可以帮助我们。例如，现代拥堵控制器使用[数据包的步调](https://homes.cs.washington.edu/~tom/pubs/pacing.pdf)。这意味着他们不会在一次突发中发送例如 100 个数据包，而是将它们**分散**到整个 RTT 中。这在概念上降低了网络过载的几率，[QUIC 恢复 RFC 强烈建议使用它](https://www.rfc-editor.org/rfc/rfc9002.html#name-pacing)。作为补充，一些拥塞控制算法，如 [BBR](https://blog.apnic.net/2017/05/09/bbr-new-kid-tcp-block/)，不会一直增加其发送速率，直到导致数据包丢失，而是在这之前后退（back off）（例如，通过查看 RTT 的波动，因为当网络变得过载时，RTT 也会上升）。
+>
+> 虽然这些方法降低了丢包的总体几率，但它们不一定能降低其突发度。
+
+### 这有什么意义
+
+虽然 QUIC 的 HoL 阻塞去除意味着，在理论上，它（和 HTTP/3）应该在有损网络上表现得更好，但在实践中，这取决于很多的因素。因为网页加载的使用情况通常倾向于一个更连续的多路复用设置，并且因为数据包丢失是不可预测的，这个功能将再次**可能主要影响最慢的1%的用户**。然而，这仍然是一个非常活跃的研究领域，只有时间才能证明。
+
+不过，在一些情况下，可能会看到更多的改进。这些情况主要是在第一次完整页面加载的典型使用情况之外--例如，当资源不是渲染阻塞时，当它们可以被增量处理时，当流是完全独立时，或者当同时发送的数据较少时。
+
+这方面的例子包括对**重复访问已经缓存好的页面**，以及单页应用中的后台下载和 API 调用。例如，Facebook 在其本地应用中使用 HTTP/3 加载数据时，已经从 HoL 阻塞移除中看到一些好处。
+
+## UDP 和 TLS 性能
+
+QUIC 和 HTTP/3 的第五个性能方面是关于它们能够在网络上实际**创建和发送数据包**的效率和性能。我们将看到，QUIC 对 UDP 和重度加密的使用会使它比 TCP 慢很多（但情况正在改善）。
+
+首先，我们[已经讨论](https://www.smashingmagazine.com/2021/08/http3-core-concepts-part1/#why-do-we-need-http-3)过，QUIC 使用 UDP 更多是为了灵活性和可部署性，而不是为了性能。直到最近，通过 UDP 发送 QUIC 数据包通常比发送 TCP 数据包慢得多，这一事实更加证明了这一点。这部分是由于这些协议的典型实施地点和方式造成的（见下图9）。
+
+![](./asserts/kernel-user-space.png)
+
+​						图9: TCP 和 QUIC 的不同实现
+
+[如上所述](#用塞控制)，TCP 和 UDP 通常直接在操作系统的快速内核中实现。相比之下，TLS 和 QUIC 的实现大多在较慢的用户空间（注意，这对 QUIC 来说并不是真正需要的--这样做主要是因为它更灵活）。这使得 QUIC 已经比 TCP 慢了一些。
+
+此外，当从我们的用户空间软件（例如浏览器和网络服务器）发送数据时，我们需要**将这些数据传递给操作系统内核**，然后使用 TCP 或 UDP 将其实际放到网络上。传递这些数据是通过内核API（系统调用）完成的，这涉及到每个API调用的一定量的开销。对于 TCP 来说，这些开销要比 UDP 低得多。
+
+这主要是因为，从历史上看，TCP 的使用比 UDP 多得多。因此，随着时间的推移，许多优化被添加到 TCP 实现和内核API中，以将数据包的发送和接收开销降到最低。许多网络接口控制器（NIC）甚至为 TCP 内置了硬件卸载功能。然而，UDP 就没有那么幸运了，因为它的用途比较有限，不值得投资增加优化。在过去的五年里，这种情况幸运地发生了变化，**大多数操作系统也都为 UDP 增加了优化选项。**
+
+其次，QUIC 有很多开销，因为它对**每个数据包进行单独加密**。这比在 TCP 上使用 TLS 要慢，因为在那里你可以[分块加密数据包](https://blog.cloudflare.com/optimizing-tls-over-tcp-to-reduce-latency/)（最多16KB或一次11个数据包），这样效率更高。这是在 QUIC 中做出的有意识的权衡，因为批量加密会导致其[自身形式的 HoL 阻塞](https://www.igvita.com/2013/10/24/optimizing-tls-record-size-and-buffering-latency/)。
+
+与第一点不同的是，我们可以添加额外的 API 以使 UDP（从而使 QUIC）更快，在这里，QUIC 始终具有 TCP+TLS 固有的劣势。然而，这在实践中也是很好管理的，例如，[优化的加密库](https://github.com/h2o/picotls/pull/310)和允许 QUIC 数据包头被批量加密的巧妙方法。
+
+因此，虽然谷歌最早的 QUIC 版本仍然比 [TCP + TLS 慢两倍](https://rjshade.com/work/files/papers/pdf/langley_et_al_sigcomm2017_quic.pdf)，但后来情况肯定有所改善。例如，在最近的测试中，微软[重点优化的 QUIC 协议栈](https://github.com/microsoft/msquic)能够获得7.85Gbps的速度，而在同一系统上，TCP+TLS 的速度为11.85Gbps（所以在这里，QUIC 的速度约为 TCP+TLS 的66%）。
+
+这与最近的 Windows 更新有关，它使 UDP 更快（为了全面比较，该系统上的 UDP 吞吐量为19.5Gbps）。谷歌的 QUIC 协议栈的最优化版本目前比 TCP+TLS [慢20%左右](https://youtu.be/xxN4FfwaANk?t=3161)。Fastly 在一个不太先进的系统上进行的[早期测试](https://www.fastly.com/blog/measuring-quic-vs-tcp-computational-efficiency)，使用了一些技巧，甚至声称性能相当（约 450 Mbps），表明根据使用情况，QUIC 绝对可以与 TCP竞争。
+
+然而，即使 QUIC 的速度要比 TCP+TSL 慢两倍，它也不是那么糟糕。首先，QUIC 和 TCP+TLS 处理通常不是服务器上最重要的事情，因为其他逻辑（例如 HTTP、缓存、代理等）也需要执行。因此，**你实际上不需要两倍的服务器来运行 QUIC**（虽然有点不清楚它在真正的数据中心会有多大影响，因为没有一家大公司发布这方面的数据）。
+
+其次，未来仍有很多机会来优化 QUIC 的实施。例如，随着时间的推移，一些 QUIC 实现将（部分）转移到操作系统内核（很像 TCP）或绕过它（有些已经做到了，如[MsQuic](https://github.com/microsoft/msquic) 和 [Quant](https://github.com/NTAP/quant)）。我们还可以期待 [QUIC 特定的硬件](https://datatracker.ietf.org/meeting/104/materials/slides-104-quic-offloading-quic-00)变得可用。
+
+然而，可能会有一些使用情况，TCP+TLS 仍将是首选。例如，Netflix 已经表示，它可能不会很快转向 QUIC，因为它已经[大量投资于定制的 FreeBSD 设置](https://www.youtube.com/watch?v=8NSzkYSX5nY)，以通过 TCP+TLS 传输视频。
+
+同样，Facebook 表示，QUIC 可能主要用于**终端用户和 CDN 的边缘之间**，而不是数据中心之间或边缘节点和起源服务器之间，因为其开销较大。总的来说，非常高的带宽场景可能会继续支持 TCP+TLS，特别是在未来几年。
+
+> **你知道吗？**
+>
+> 优化网络堆栈是一个很深的、技术性很强的兔子洞，上面的内容只是触及了表面（而且错过了很多细微之处）。如果你足够勇敢，或者你想知道 `GRO/GSO`、`SO_TXTIME`、`内核旁路`、`sendmmsg()` 和 `recvmmsg()` 等术语的含义，我可以推荐 [Cloudflare](https://blog.cloudflare.com/accelerating-udp-packet-transmission-for-quic/) 和 [Fastly](https://www.fastly.com/blog/measuring-quic-vs-tcp-computational-efficiency) 的一些关于优化 QUIC 的优秀文章，以及[微软的大量的代码演练](https://www.youtube.com/watch?v=Icskyw17Dgw)和[思科](https://archive.fosdem.org/2020/schedule/event/fast_quic_sockets_for_cloud_networking/)的深入讲座。最后，谷歌的一位工程师做了一个非常有趣的主题演讲，介绍了[随着时间推移优化他们的 QUIC 实现](https://www.youtube.com/watch?v=xxN4FfwaANk)。
+
+### 这有什么意义？
+
+QUIC 对 UDP+TLS 协议的特殊使用在历史上使其比 TCP+TLS 慢得多。然而，随着时间的推移，已经进行了一些改进（并将继续实施），这在一定程度上缩小了差距。不过，在网页加载的典型使用情况下，你可能不会注意到这些差异，但如果你维护大型服务器群，它们可能会让你头疼。
+
+## HTTP3 特性
+
+到目前为止，我们主要讨论了 QUIC 与 TCP 的新性能特征。然而，HTTP/3 与 HTTP/2 的关系如何？正如[第一部分](https://www.smashingmagazine.com/2021/08/http3-core-concepts-part1/#why-do-we-need-http-3)所讨论的，**HTTP/3 实际上是 HTTP/2-over-QUIC**，因此，在新版本中没有引入真正的、大的新功能。这与从HTTP/1.1到HTTP/2的变化不同，后者规模更大，并引入了新的功能，如头压缩，流优先级，和服务器推送。这些功能都仍然在 HTTP/3 中，但在它们的实现方式上有一些重要的区别。
+
+这主要是因为 QUIC 消除了 HoL 阻塞的工作方式。正如我们所[讨论](#队头阻塞移除)的，流B的丢失不再意味着流A和流C必须等待B的重传，就像他们在 TCP 上一样。因此，如果 A、B 和 C 按照这个顺序各自发送一个 QUIC 数据包，他们的数据很可能以 A、C、B 的形式被传送到（并由）浏览器处理！换句话说，与 TCP 不同，**QUIC 在不同的数据流中不再是完全有序的!**
+
+这对 HTTP/2 来说是个问题，它在设计许多功能时确实依赖于 TCP 的严格排序，这些功能使用穿插在数据块中的特殊控制信息。在 QUIC 中，这些控制信息可能以任何顺序到达（并被应用），甚至可能使特性做与预期相反的事情!技术细节对本文来说也是不必要的，但[在这个论文的前半部分](https://h3.edm.uhasselt.be/files/HTTP3_Prioritization_extended_3jul2019.pdf)应该让你了解这可以变得多么愚蠢的复杂。
+
+因此，HTTP/3 的内部机制和功能的实现不得不改变。一个具体的例子是 **HTTP 头部压缩**，它降低了大量重复的 HTTP 头（例如，cookies 和 user-agent 字符串）的开销。在 HTTP/2 中，这是用 [HPACK](https://datatracker.ietf.org/doc/html/rfc7541) 设置完成的，而在 HTTP/3 中，这已经被重新设计为更复杂的 [QPACK](https://datatracker.ietf.org/doc/html/draft-ietf-quic-qpack)。这两个系统都提供了相同的功能（即头压缩），但以相当不同的方式。在 [Litespeed 博客](https://blog.litespeedtech.com/tag/quic-header-compression-design-team/)上可以找到一些关于这个主题的优秀的深入的技术讨论和图表。
+
+对于驱动流多路复用逻辑的优先级功能也是如此，我们在[上面简单讨论过](#队头阻塞移除)。在 HTTP/2 中，这是用一个复杂的"依赖树"实现的，它明确地试图对所有页面资源及其相互关系进行建模（更多信息见"[HTTP 资源优先级终极指南](https://www.youtube.com/watch?v=nH4iRpFnf1c)"讲座）。直接在 QUIC 上使用这个系统会导致一些潜在的非常错误的树形布局，因为将每个资源添加到树上将是一个单独的控制信息。
+
+此外，这种方法被证明是不必要的复杂，导致了[许多实施错误和低效率](https://blog.cloudflare.com/nginx-structural-enhancements-for-http-2-performance/)，以及在[许多服务器上的不合格性能](https://github.com/andydavies/http2-prioritization-issues)。这两个问题导致优先级系统以一种[更简单的方式为 HTTP/3 重新设计](https://blog.cloudflare.com/adopting-a-new-approach-to-http-prioritization/)。这种更直接的设置使得一些先进的方案难以实施或无法实施（例如，在单一连接上代理来自多个客户端的流量），但仍然能够为网页加载优化提供广泛的选择。
+
+虽然，这两种方法提供了相同的基本功能（引导流多路复用），但希望 HTTP/3 的简单设置将使实施的错误减少。
+
+最后，是**服务器推送（server push）**。这个功能允许服务器发送 HTTP 响应，而不需要先等待一个明确的请求。从理论上讲，这可以带来出色的性能提升。然而，在实践中，它被证明是[很难正确使用](https://calendar.perfplanet.com/2016/http2-push-the-details/)和[不一致的实现](https://jakearchibald.com/2017/h2-push-tougher-than-i-thought/)。因此，它甚至可能会被从[谷歌浏览器中删除](https://groups.google.com/a/chromium.org/g/blink-dev/c/K3rYLvmQUBY/m/vOWBKZGoAQAJ)。
+
+尽管如此，它仍然[被定义为 HTTP/3 的一个功能](https://datatracker.ietf.org/doc/html/draft-ietf-quic-http)（尽管很少有实现支持它）。虽然它的内部工作原理没有像前两个功能那样改变，但它也被调整为围绕 QUIC 的非确定性排序工作。遗憾的是，这对解决其长期存在的一些问题没有什么作用。
+
+### 这有什么意义？
+
+正如我们之前所说的，HTTP/3 的大部分潜力来自底层的 QUIC，而不是 HTTP/3 本身。虽然该协议的内部实现与 HTTP/2 有*很大的不同*，但其高级性能特性以及它们可以和应该如何使用保持不变。
+
+## 未来发展值得关注
+
+
 
 ## 原文地址
 
