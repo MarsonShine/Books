@@ -354,7 +354,63 @@ QUIC 对 UDP+TLS 协议的特殊使用在历史上使其比 TCP+TLS 慢得多。
 
 ## 未来发展值得关注
 
+在这个系列中，我经常强调，更快的进化和更高的灵活性是 QUIC（以及扩展到 HTTP/3）的核心方面。因此，人们已经在为协议的**新扩展**和应用而努力，这应该不足为奇。下面列出的是你可能会在某个地方遇到的主要协议：
 
+- [正向纠错(Forward errorcorrection)](https://tools.ietf.org/html/draft-swett-nwcrg-coding-for-quic)
+
+  这项技术的目的是，再次**提高 QUIC 对数据包丢失的恢复能力**。它通过发送数据的冗余副本来实现这一目的（尽管经过巧妙的编码和压缩，使它们不那么大）。然后，如果一个数据包丢失，但冗余数据到达，就不再需要重传了。
+
+  这原本是谷歌 QUIC 的一部分（也是人们说 QUIC 对丢包有好处的原因之一），但它没有包括在标准化的 QUIC 第一版中，因为它的性能影响还没有被证明。不过，研究人员现在正在用它进行积极的实验，你可以通过使用 [PQUIC-FEC 下载实验](https://play.google.com/store/apps/details?id=org.pquic.pquic_fec_android)应用来帮助他们。
+
+- [多路径 QUIC(Multipath QUIC)](https://tools.ietf.org/html/draft-liu-multipath-quic)
+
+  我们之前就讨论过连接迁移，以及如何给从 Wifi 转移到 移动电话提供帮助。但是这不意味着我们能**同时使用 Wifi 和移动电话**？同时使用这两个网络会给我们带来更多的可用带宽和更强的稳定性！这就是多路径的主要概念。
+
+  这也是谷歌实验过的东西，但由于其固有的复杂性，没有被纳入 QUIC 第一版。然而，研究人员[已经展示](https://multipath-quic.org/)了它的巨大潜力，它可能会被纳入 QUIC 第二版。请注意，[TCP 多路径](https://www.multipath-tcp.org/)也存在，但它花了近十年的时间才成为实际可用的。
+
+- [基于 QUIC](https://tools.ietf.org/html/draft-ietf-quic-datagram) 和 [HTTP/3 的不可靠数据](https://datatracker.ietf.org/doc/html/draft-ietf-masque-h3-datagram)
+
+  正如我们已经看到的，QUIC 是一个完全可靠的协议。然而，由于它在 UDP 上运行，而 UDP 是不可靠的，我们可以给 QUIC 增加一个功能，以便也能发送不可靠的数据。这在拟议的数据报扩展中有所概述。当然，你不会想用它来发送网页资源，但它对游戏和实时视频流等事情可能很方便。这样，用户将得到 UDP 的所有好处，但有 QUIC 级别的加密和（可选）拥堵控制。
+
+- [WebTransport](https://web.dev/webtransport/)
+
+  浏览器不会直接将 TCP 或 UDP 暴露给 JavaScript，这主要是出于安全考虑。相反，我们必须依靠 HTTP 级别的 API，如 Fetch 和更灵活的 [WebSocket](https://hpbn.co/websocket/) 和 [WebRTC](https://hpbn.co/webrtc/) 协议。这一系列选项中最新的一个叫做 WebTransport，它主要允许你以一种更低级的方式使用 HTTP/3（以及延伸的 QUIC）（尽管它也可以在需要时退回到 TCP 和 HTTP/2）。
+
+  最重要的是，它将包括通过 HTTP/3 使用不可靠的数据的能力（见前一点），这应该使诸如游戏等事情在浏览器中更容易实现。对于正常的（JSON）API 调用，你当然还是会使用 Fetch，它也会在可能的情况下自动采用 HTTP/3。目前，WebTransport 仍在激烈的讨论中，所以还不清楚它最终会是什么样子。在这些浏览器中，只有 Chromium 目前正在开发一个[公开的概念验证实现](https://groups.google.com/a/chromium.org/g/web-transport-dev/c/6PwPFy9fVfw)。
+
+- DASH 和 HLS 视频流
+
+  对于非实时视频（YouTube 和 Netflix），浏览器通常使用 HTTP 动态自适应流（Dynamic Adaptive Stream over HTTP，DASH）或 HTTP 实时流（HTTP Live Streaming，HLS）协议。这两种协议基本上意味着你将视频编码为较小的块（2至10秒）和不同的质量水平（720p、1080p、4K 等）。
+
+  在运行时，浏览器会估计你的网络可以处理的最高质量（或对特定的使用情况而言最理想的质量），并通过 HTTP 向服务器请求相关文件。由于浏览器不能直接访问 TCP 协议栈（因为这通常是在内核中实现的），它在这些估计中偶尔会犯一些错误，或者需要花一些时间来对变化的网络条件做出反应（导致视频停滞）。
+
+  由于 QUIC 是作为浏览器的一部分来实现的，通过让[流媒体评估器访问低级别的协议信息](https://dl.acm.org/doi/abs/10.1145/3386367.3431901)（如损失率、带宽估计等），这一点可以得到相当大的改善。其他研究人员也一直在试验将[可靠和不可靠的数据混合用于视频流](https://www.researchgate.net/profile/Mirko-Palmer/publication/327930175_The_QUIC_Fix_for_Optimal_Video_Streaming/links/5f60ea97299bf1d43c063075/The-QUIC-Fix-for-Optimal-Video-Streaming.pdf)，并取得了一些有希望的结果。
+
+- HTTP/3 以外的协议
+
+  由于 QUIC 是一个通用的传输协议，我们可以期待现在通过 TCP 运行的许多应用层协议也能在 QUIC 之上运行。一些正在进行的工作包括 [DNS-over-QUIC](https://datatracker.ietf.org/doc/html/draft-ietf-dprive-dnsoquic)、[SMB-over-QUIC](https://techcommunity.microsoft.com/t5/itops-talk-blog/smb-over-quic-files-without-the-vpn/ba-p/1183449)，甚至 [SSH-over-QUIC](https://datatracker.ietf.org/doc/html/draft-bider-ssh-quic-09)。因为这些协议的要求通常与 HTTP 和网页加载非常不同，我们所讨论的 QUIC 的性能改进可能对这些协议更有效。
+
+### 这有什么意义？
+
+QUIC 第一版本才**刚开始**。谷歌之前试验过的许多面向性能的高级特性都没有出现在第一次迭代中。然而，我们的目标是快速发展协议，高频率地引入新的扩展和功能。因此，随着时间的推移，QUIC（和 HTTP/3）应该变得比 TCP（和 HTTP/2）明显更快、更灵活。
+
+## 总结
+
+在这个系列的第二部分中，我们讨论了 **HTTP/3，特别是 QUIC 的许多不同的性能特征和方面**。我们看到，虽然这些功能中的大多数看起来非常有影响，但实际上，在我们一直在考虑的网页加载的使用案例中，它们可能对普通用户没有什么作用。
+
+例如，我们已经看到，QUIC 对 UDP 的使用并不意味着它可以突然比 TCP 使用更多的带宽，也不意味着它可以更快地下载你的资源。经常被称赞的 0-RTT 功能实际上是一种微观优化，它为你节省了一次往返，其中你可以发送大约 5KB（在最坏的情况下）。
+
+如果有**突发性的数据包丢失**，或者当你正在加载阻塞渲染的资源时，HoL 阻塞移除工作并不顺利。连接迁移是高度情景化的，HTTP/3 没有任何主要的新功能，可以使它比 HTTP/2 更快。
+
+因此，你可能希望我建议你跳过 HTTP/3 和 QUIC。何必呢，对吧？然而，我绝对不会做这样的事情 尽管这些新协议可能对快速（城市）网络的用户没有什么帮助，但这些新功能确实有可能对**高度移动的用户和慢速网络的人产生很大的影响**。
+
+即使在西方市场，如我自己在的比利时，我们一般都有快速的设备和高速蜂窝网络，这些情况也会影响你的用户群的 1% 甚至 10%，这取决于你的产品。一个例子是，有人在火车上拼命想在你的网站上查找一个关键信息，但不得不等待 45 秒才能加载。我当然知道我曾经遇到过这种情况，希望有人能部署 QUIC 来让我摆脱这种情况。
+
+然而，在其他国家和地区，情况要糟糕得多。在比利时，普通用户可能看起来更像最慢的 10%，而最慢的 1% 可能根本看不到加载的页面。在[世界的许多地方](https://infrequently.org/2021/03/the-performance-inequality-gap/)，网络性能是一个[可访问性和包容性的问题](https://hookedoncode.com/2020/07/performance-is-accessibility/)。
+
+这就是为什么我们不应该只在自己的硬件上测试我们的网页（但也要使用像 [Webpagetest](https://www.webpagetest.org/) 这样的服务），也是为什么你一定要**部署 QUIC 和 HTTP/3**。特别是如果你的用户经常在移动中，或者不太可能使用快速的蜂窝网络，这些新协议可能会带来巨大的变化，即使你在你的有线 MacBook Pro 上没有注意到什么。关于更多细节，我强烈推荐 [Fastly 关于这个问题的文章](https://www.fastly.com/blog/how-http3-and-quic-help-long-tail-connections)。
+
+如果这还不能完全说服你，那么考虑到 QUIC 和 HTTP/3 将继续发展，并在**未来几年内变得更快**。尽早获得一些协议的经验将在未来得到回报，使你能够尽快获得新功能的好处。此外，QUIC 在后台执行安全和隐私的最佳做法，这对所有用户都有好处。
 
 ## 原文地址
 
