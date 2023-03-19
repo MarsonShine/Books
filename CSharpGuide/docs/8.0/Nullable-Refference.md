@@ -563,5 +563,4 @@ public static class MyAssertionLibrary
 
 同步至：https://github.com/MarsonShine/Books/blob/master/CSharpGuide/docs/Write_Safe_And_Efficient_Code.md
 
-[使用可为空引用类型]: https://docs.microsoft.com/zh-cn/dotnet/csharp/tutorials/nullable-reference-types
-
+https://docs.microsoft.com/zh-cn/dotnet/csharp/tutorials/nullable-reference-types
