@@ -430,14 +430,14 @@ public class JsonUsingGenerator : ISourceGenerator
         var serializedContent = Newtonsoft.Json.JsonConvert.SerializeObject(new { a = "a", b = 4 });
         // 是为了避免Liquid模板引擎对双括号的报错的问题
         // Liquid模板引擎不支持双大括号内部的大括号，而在你的代码中，serializedContent变量的值包含了双大括号。可以通过在大括号前加上一个反斜杠来转义它们，以避免这个问题，例如：
-		var escapedContent = serializedContent.Replace("{", "{{").Replace("}", "}}");
-		
+		var escapedContent = serializedContent.Replace("{", "{{").Replace("}", "}}").Replace("{{", "{{\"{{\"}}").Replace("}}", "{{\"}}\"}}");
+
         context.AddSource("myGeneratedFile.cs", SourceText.From($@"
 namespace GeneratedNamespace
 {{
     public class GeneratedClass
     {{
-        public static const SerializedContent = ""{escapedContent}"";
+        public static const SerializedContent = @""{escapedContent}"";
     }}
 }}", Encoding.UTF8));
 
