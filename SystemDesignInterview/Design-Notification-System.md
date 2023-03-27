@@ -88,7 +88,7 @@ Android 也采用了类似的通知流程。不使用 APN，而是使用 [Fireba
 
 #### SMS 消息
 
-对于短信通知，像第三方 SMS 服务如 Twilio[1]，Nexmo[2] 以及其它商业服务。大多数他们的公共服务如下图所示：
+对于短信通知，像第三方 SMS 服务如 [Twilio](https://www.twilio.com/sms)，[Nexmo](https://www.nexmo.com/products/sms) 以及其它商业服务。大多数他们的公共服务如下图所示：
 
 ![](./asserts/10-4.jpg)
 
@@ -96,7 +96,7 @@ Android 也采用了类似的通知流程。不使用 APN，而是使用 [Fireba
 
 #### Email 消息
 
-虽然公司可以建立自己的电子邮件服务器，但许多公司选择了商业性的电子邮件服务。Sendgrid[3] 和 Mailchimp[4] 是最受欢迎的电子邮件服务之一、 它们提供了更好的发送率和数据分析。
+虽然公司可以建立自己的电子邮件服务器，但许多公司选择了商业性的电子邮件服务。[Sendgrid](https://sendgrid.com/) 和 [Mailchimp](https://mailchimp.com/) 是最受欢迎的电子邮件服务之一、 它们提供了更好的发送率和数据分析。
 
 ![](./asserts/10-5.jpg)
 
@@ -238,7 +238,7 @@ Request body
 
 答案是**不会**。尽管大多数时候通知都是准确地传递一次，但由于分布式的特点，可能会导致重复通知。分布式的性质可能会导致重复的通知。为了减少重复推送发生，我们引入了一个删除机制，并仔细处理每一个故障案例。下面是一个简单的重复计算逻辑：
 
-当一个通知事件第一次到达时，我们通过检查事件的 ID 来检查它是否以前被推送。如果它是重复信息，它就被丢弃。否则，我们将发送通知。对于感兴趣的有兴趣的读者可以参考参考资料[5]，了解为什么我们不能精确地发送一次消息。
+当一个通知事件第一次到达时，我们通过检查事件的 ID 来检查它是否以前被推送。如果它是重复信息，它就被丢弃。否则，我们将发送通知。对于感兴趣的有兴趣的读者可以参考[参考资料](https://bravenewgeek.com/you-cannot-have-exactly-once-delivery/)，了解为什么我们不能精确地发送一次消息。
 
 ### 额外的组件和注意事项
 
@@ -278,7 +278,7 @@ Order Now. Or, Save My [ITEM NAME]
 
 #### 安全推送
 
-对于 iOS 或安卓设备，appKey 和 appSecret 是用来确保安全的推送消息[6]。只有经过鉴权或验证的客户端才允许发送推送消息。有兴趣的查看参考资料[6]
+对于 iOS 或安卓设备，appKey 和 appSecret 是用来确保[安全的推送消息](https://cloud.ibm.com/docs/services/mobilepush?topic=mobile-pushnotification-security-in-push-notifications)。只有经过鉴权或验证的客户端才允许发送推送消息。有兴趣的查看[参考资料](https://cloud.ibm.com/docs/services/mobilepush?topic=mobile-pushnotification-security-in-push-notifications)
 
 #### 监控队列通知
 
