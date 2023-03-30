@@ -21,4 +21,4 @@ int main(void)
     else
         printf("%s\n", buf2);
     exit(0);
-}
+}                                                                
