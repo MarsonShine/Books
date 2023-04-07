@@ -368,3 +368,109 @@ fork 一般有两种用法：
 > **孤儿进程：一个父进程退出，而它的一个或多个子进程还在运行，那么那些子进程将成为孤儿进程。孤儿进程将被 init 进程所领养，并由 init 进程对它们完成状态收集工作。**具体表现为：init 进程会循环调用 `wait/waitpid`。这样当知道该进程的终止状态后就会进而处理后续的清理工作。
 >
 > **僵死进程：一个进程使用 fork 创建子进程，如果子进程退出，而父进程并没有调用 wait 或 waitpid 获取子进程的状态信息，那么子进程的进程描述符仍然保存在系统中。这种进程称之为僵死进程。**
+
+### waitid vs waitpid
+
+`waitid` 和 `waitpid` 都是等待子进程的状态改变。`waitpid` 可以控制它所等待的进程，而 `waitid` 提供了更精确的控制，**可以选择等待哪个子进程的状态改变**。`waitid` 可以通过 `idtype` 和 `id` 这两个参数选择要等待的子进程。例如，`idtype == P_PID` 表示等待进程 ID 与 id 匹配的子进程。
+
+> 关于 waitid 函数参数详解，可见：[Ubuntu Manpage: wait, waitpid, waitid - wait for process to change state](https://manpages.ubuntu.com/manpages/focal/en/man2/wait.2.html)
+
+### 多进程竞争
+
+如果一个进程希望等待一个子进程终止，则它必须调用 wait 函数中的一个。如果一个进程要等待其父进程终止，则可以使用如下代码：
+
+```c++
+while (gettpid() != 1)
+	sleep(1)
+```
+
+很显然，这种轮询的方式非常耗费 CPU 资源。为此，UNIX 提供一种**信号**发送和接收的方法避免这种情况。
+
+fork 在通常情况下，经常会遇到父子进程互相协作的场景。如父进程会用子进程 ID 更新日志文件中的一个记录，而子进程则可能要为父进程创建一个文件。**所以在一个进程完成操作之后要通知到对方，并且在继续运行之前，要等待另一方完成其操作**。示例代码如下：
+
+```c
+#include "apue.h"
+TELL_WAIT(); // 为 TELL_XXX 和 WAIT_XXX 设置事情。
+if ((pid = fork()) < 0)
+    err_sys("fork error");
+else if (pid == 0) { // 子进程
+    // 子进程继续执行要做的事情 ...
+    TELL_PARENT(getppid()); // 通知父进程
+    WAIT_PARENT(); // 等待父进程
+    // 子进程继续执行
+    exit(0);
+}
+// 父进程继续执行要做的事情 ...
+TELL_CHILD(pid);    // 通知子进程
+WAIT_CHILD();// 等待子进程
+// 父进程继续执行
+exit(0);
+```
+
+通过一个例子来查看多进程发生竞争时会发生什么？以及如何通过信号修复。
+
+一个由子进程输出，另一个由父进程输出：
+
+```c
+#include "apue.h"
+
+static void charatatime(char *);
+
+int main(void)
+{
+    pid_t pid;
+    if ((pid == fork()) < 0) {
+        err_sys("fork error");
+    } else if (pid == 0) { // 子进程
+        charatatime("output from child\n");
+    } else {// 父进程
+        charatatime("output from parent\n");
+    }
+    exit(0);
+}
+
+static void charatatime(char *str)
+{
+    char *ptr;
+    int c;
+    setbuf(stdout, NULL); // 设置无缓冲
+    for (ptr = str; (c = *ptr++) != 0;)
+        putc(c, stdout);
+}
+```
+
+fork 之后无法控制两个进程的执行顺序，所以在执行过程会频繁的在两个进程之间切换。
+
+下面是通过信号机制来避免竞争问题的代码段：
+
+```CQL
+#include "apue.h"
+
+static void charatatime(char *);
+
+int main(void)
+{
+    pid_t pid;
+    TELL_WAIT();
+    if ((pid == fork()) < 0) {
+        err_sys("fork error");
+    } else if (pid == 0) { // 子进程
+        WAIT_PARENT(); // 等待父进程
+        charatatime("output from child\n");
+    } else {// 父进程
+        charatatime("output from parent\n");
+        TELL_CHILD(pid);    // 通知子进程
+    }
+    exit(0);
+}
+
+static void charatatime(char *str)
+{
+    char *ptr;
+    int c;
+    setbuf(stdout, NULL); // 设置无缓冲
+    for (ptr = str; (c = *ptr++) != 0;)
+        putc(c, stdout);
+}
+```
+
