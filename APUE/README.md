@@ -474,3 +474,54 @@ static void charatatime(char *str)
 }
 ```
 
+### 解释器
+
+Unix 解释器是一种文本文件，其起始行的形式是：`#! pathname [optional-argument]`。其中 pathname 是绝对路径显示指定，就是解释器。所有的 UNIX 系统都支持解释器文件。最常用的就是 `#! /bin/sh`。解释器文件可以将程序隐藏起来，也就是说解释器文件本身是一个程序，可以被解释器（/bin/sh）编译的文件，在 UNIX 最常见的就是 shell 脚本。
+
+### 切换用户ID和用户组ID
+
+在UNIX系统中，每个进程都有一个**有效用户 ID** 和一个**有效组 ID**，用于确定该进程的权限。如果进程需要执行需要更高权限的操作，则需要更改其用户ID和组ID。例如，一个普通用户不能更改系统中的某些文件，但是如果该用户更改了自己的用户 ID和组 ID，就可以获得更高的权限并更改这些文件。
+
+下面是一个 at 程序的示例，at 程序用于在指定的时间运行某个命令。该示例程序需要更高的权限才能创建和写入 at 作业文件，因此需要更改其用户 ID和组 ID：
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+
+int main(int argc, char *argv[]) {
+    uid_t uid;
+    gid_t gid;
+
+    if (argc < 3) {
+        fprintf(stderr, "Usage: %s time command [arg ...]\n", argv[0]);
+        exit(EXIT_FAILURE);
+    }
+
+    uid = getuid();
+    gid = getgid();
+
+    seteuid(getuid());
+    setegid(getgid());
+
+    /* create and write to at job file */
+    /* ... */
+
+    seteuid(uid);
+    setegid(gid);
+
+    return 0;
+}
+```
+
+在这个示例程序中，首先获取了当前进程的用户 ID 和组 ID，然后调用 `seteuid` 和 `setegid` 函数将进程的有效用户 ID 和有效组 ID 更改为当前用户 ID 和组 ID。
+
+然后，程序创建和写入 at 作业文件，完成操作后再将进程的有效用户 ID 和有效组 ID 更改回原始值。
+
+这样，该程序就可以在需要更高权限的情况下执行特定的操作，并在完成后恢复进程的原始权限，以确保安全性。
+
+### 进程调度
+
+进程调度是基于调度优先级的粗粒度机制。调度策略和调度优先级是由内核决定的。进程可以通过调整 `nice` 值选择以更低的优先级运行（调整 `nice` 值降低它对 CPU 的占用情况）。
+
+进程可以通过调用 `nice` 函数来获取或更改值（只影响该进程的调度优先级，不影响其它进程）。
