@@ -40,7 +40,7 @@ namespace EventSourceDemo
     {
         public static OptimizedEventSource Log { get; } = new OptimizedEventSource();
 
-        [Event(1, Keywords = EventSourceKeywordsConsts.Kwd1, Level = EventLevel.Informational,
+        [Event(1, Keywords = Keywords.Kwd1, Level = EventLevel.Informational,
            Message = "LogElements called {0}/{1}/{2}.")]
         public void LogElements(int n, short sh, long l)
         {
@@ -63,6 +63,10 @@ namespace EventSourceDemo
             descrs[3].Size = 4;
 
             WriteEventCore(eventId, 4, descrs);
+        }
+        public class Keywords
+        {
+            public const EventKeywords Kwd1 = (EventKeywords)0x0001;
         }
     }
 }

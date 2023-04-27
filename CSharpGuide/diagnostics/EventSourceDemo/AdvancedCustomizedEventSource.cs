@@ -19,11 +19,17 @@ namespace EventSourceDemo
             WriteEvent(2, RequestID, PhaseName);
         }
 
-        [Event(3, Keywords = EventSourceKeywordsConsts.Requests,
+        [Event(3, Keywords = Keywords.Requests,
                Task = EventTaskConsts.Request, Opcode = EventOpcode.Stop)]
         public void RequestStop(int RequestID)
         {
             WriteEvent(3, RequestID);
+        }
+
+        public class Keywords
+        {
+            public const EventKeywords Startup = (EventKeywords)0x0001;
+            public const EventKeywords Requests = (EventKeywords)0x0002;
         }
     }
 }
