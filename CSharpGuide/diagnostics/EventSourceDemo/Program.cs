@@ -1,6 +1,10 @@
 ﻿// See https://aka.ms/new-console-template for more information
+
+#define DiagnosticSource
+
 using EventSourceDemo;
 using EventSourceDemo.EventListeners;
+using System.Diagnostics;
 
 // EventListener
 var listener = new ConsoleWriterEventListener();
@@ -53,6 +57,9 @@ static async Task HelperB()
 #endregion
 #endif
 
+#if DiagnosticSource
+DiagnosticSourceQuickStart.Start();
+#endif
 //Console.WriteLine("Hello, World!");
 //CustomEventSource.Log.AppStarted("Hello, World!", 12);
 
