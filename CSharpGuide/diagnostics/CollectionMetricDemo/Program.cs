@@ -24,10 +24,10 @@ class Program
         PromethusProgram.Main2(args);
         #endregion
 
-        var workingSetCounter = new PollingCounter(
-            "working-set",  CallConvThiscall, () => (double)(Environment.WorkingSet / 1_000_000))
-        {
+        //var workingSetCounter = new PollingCounter(
+        //    "working-set",  CallConvThiscall, () => (double)(Environment.WorkingSet / 1_000_000))
+        //{
 
-        }
+        //}
     }
 }
