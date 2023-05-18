@@ -40,3 +40,31 @@ int main(int argc, char *argv[])
 #elif defined(_SC_NZERO)
     nzero = sysconf(_SC_NZERO); // 通过系统调用获取 nice 值的默认偏移量
 #else
+#error NZERO undefined
+#endif
+    printf("NZERO = %d\n", nzero);
+    if (argc == 2)
+        adj = strtol(argv[1], NULL, 10); // 将字符串转换为长整型数
+    gettimeofday(&end, NULL);
+    end.tv_sec += 10; // 10 秒后结束
+
+    if ((pid = fork()) < 0) {
+        err_sys("fork failed");
+    } else if (pid == 0) { // 子进程
+        s = "child";
+        printf("current nice value in child is %d, adjusting by %d\n", nice(0) + nzero, adj);
+        errno = 0;
+        if ((ret = nice(adj)) == -1 && errno != 0)
+            err_sys("child set scheduling priority");
+        printf("now child nice value is %d\n", ret + nzero);
+    } else { // 父进程
+        s = "parent";
+        printf("current nice value in parent is %d\n", nice(0) + nzero);
+    }
+    for (;;)
+    {
+        if (++count == 0)
+            err_quit("%s counter wrap", s);
+        checktime(s);
+    }
+}
