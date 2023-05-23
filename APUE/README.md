@@ -593,3 +593,53 @@ int main(int argc, char *argv[]) {
 
 > raise(signo) 就等价于 kill(getpid(), signo)
 
+#### sigprocmask
+
+```c
+void pr_mask(const char *str)
+{
+    sigset_t sigset;
+    int errno_save;
+
+    errno_save = errno; // 保存 errno
+    if (sigprocmask(0, NULL, &sigset) < 0) {
+        err_ret("sigprocmask error");
+    } else {
+        printf("%s", str);
+        if (sigismember(&sigset, SIGINT)) // 检查 SIGINT 信号是否在信号屏蔽字中
+            printf(" SIGINT");
+        if (sigismember(&sigset, SIGQUIT)) // 检查 SIGQUIT 信号是否在信号屏蔽字中
+            printf(" SIGQUIT");
+        if (sigismember(&sigset, SIGUSR1)) // 检查 SIGUSR1 信号是否在信号屏蔽字中
+            printf(" SIGUSR1");
+        if (sigismember(&sigset, SIGALRM)) // 检查 SIGALRM 信号是否在信号屏蔽字中
+            printf(" SIGALRM");
+
+        /* remaining signals can go here  其他信号可以在这里添加 */
+
+        printf("\n");
+    }
+
+    errno = errno_save; // 恢复 errno
+}
+```
+
+`sigprocmask(0, NULL, &sigset)` 是一个系统调用，它的作用是获取或修改进程的信号屏蔽字。其中第一个参数 0 表示不修改信号屏蔽字，第二个参数为 NULL 表示不需要保存原来的信号屏蔽字，第三个参数 &sigset 表示获取当前的信号屏蔽字并保存到 sigset 变量中。
+
+如果 `sigprocmask` 调用成功，返回值为 0，否则返回值为 -1，并且设置全局变量 errno 表示错误原因。因此，`sigprocmask(0, NULL, &sigset) < 0` 的判断就是判断 `sigprocmask` 调用是否失败。如果失败，就会执行 `err_ret("sigprocmask error")` 函数，打印错误信息并退出程序。如果成功，就会继续执行后面的代码，打印当前进程的信号屏蔽字中包含哪些信号。
+
+#### sigsetjmp & siglongjmp
+
+在信号处理程序中，当一个信号到达时，内核会中断当前进程的正常执行流程，转而执行信号处理程序。在信号处理程序中，如果直接使用 `longjmp` 函数进行跳转，会导致一些问题，例如跳转后的代码可能会覆盖一些寄存器的值，从而影响到原来的程序执行流程。这种跳转方式被称为“非局部转移”。
+
+为了解决这个问题，我们可以使用 `sigsetjmp` 和 `siglongjmp` 这两个函数。它们与 `setjmp` 和 `longjmp` 函数的作用类似，**但是它们会保存和恢复信号屏蔽字，从而保证在跳转后，进程的信号屏蔽字不会被改变，从而避免了一些潜在的问题。**
+
+因此，在信号处理程序中，如果需要进行跳转，应当使用 `sigsetjmp` 和 `siglongjmp` 这两个函数，而不是 `setjmp` 和 `longjmp` 函数。
+
+#### abord 
+
+`abort`函数用于异常终止程序的执行。当程序调用 `abort` 函数时，它会向进程发送一个 `SIGABRT` 信号，导致进程异常终止。在进程异常终止时，会执行一些清理工作，例如关闭打开的文件、释放分配的内存等。
+
+`abort` 函数的主要作用是在程序出现无法恢复的错误时，快速地终止程序的执行。例如，当程序遇到一个无法处理的错误时，可以调用 `abort` 函数来终止程序的执行，以避免进一步的错误发生。
+
+需要注意的是，`abort` 函数不会执行任何清理工作，例如关闭文件或释放内存。因此，在调用 `abort` 函数之前，应该先执行必要的清理工作，以避免资源泄漏等问题。
