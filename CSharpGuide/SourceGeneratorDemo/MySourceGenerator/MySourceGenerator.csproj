@@ -14,6 +14,7 @@
 
   <ItemGroup>
     <Folder Include="Properties\" />
+    <AdditionalFiles Include="path\to\file.txt" />
   </ItemGroup>
 
   <!-- This ensures the library will be packaged as a source generator when we use `dotnet pack` -->

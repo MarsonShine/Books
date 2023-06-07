@@ -16,6 +16,8 @@ namespace MySourceGenerator
             {
                 Debugger.Launch();
             }
+            // AdditionalFiles 附加文件在读取文件时的路径是通过 csproj 中的 ItemGroup.<AdditionalFiles> 配置的
+            // 路径是相对于.csproj文件的路径
             var myFiles = context.AdditionalFiles.Where(at => at.Path.EndsWith(".xml"));
             foreach (var file in myFiles)
             {
@@ -27,13 +29,21 @@ namespace MySourceGenerator
 
         private string Transform(string content)
         {
-            //string output = MyXmlToCSharpCompiler.Compile(content);
+            string output = MyXmlToCSharpCompiler.Compile(content);
             return content;
         }
 
         public void Initialize(GeneratorInitializationContext context)
         {
 
+        }
+
+        internal class MyXmlToCSharpCompiler
+        {
+            public static string Compile(string content)
+            {
+                return "public class MyClass { }";
+            }
         }
     }
 }

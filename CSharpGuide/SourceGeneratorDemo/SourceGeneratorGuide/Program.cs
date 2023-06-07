@@ -8,7 +8,7 @@ partial class Program
     static void Main(string[] args)
     {
         HelloFrom("Generated Code");
-        Console.ReadLine();
+        // Console.ReadLine();
 
         Direction c = Direction.Down;
         Console.WriteLine(c.ToStringFast());
@@ -19,6 +19,7 @@ partial class Program
         Console.WriteLine(c2.ToDescription());
         // Console.WriteLine()
         GeneratedNamespace.GeneratedClass.GeneratedMethod();
+        MySourceGenerator.UserClass.GeneratedMethod();
     }
 
     static partial void HelloFrom(string name);
