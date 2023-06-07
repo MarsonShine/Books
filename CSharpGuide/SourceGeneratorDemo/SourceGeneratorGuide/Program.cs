@@ -18,6 +18,7 @@ partial class Program
         Console.WriteLine(c2.ToStringFast());
         Console.WriteLine(c2.ToDescription());
         // Console.WriteLine()
+        GeneratedNamespace.GeneratedClass.GeneratedMethod();
     }
 
     static partial void HelloFrom(string name);
