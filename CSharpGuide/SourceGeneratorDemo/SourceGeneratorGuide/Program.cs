@@ -19,7 +19,7 @@ partial class Program
         Console.WriteLine(c2.ToDescription());
         // Console.WriteLine()
         GeneratedNamespace.GeneratedClass.GeneratedMethod();
-        MySourceGenerator.UserClass.GeneratedMethod();
+        new UserClass().UserMethod(); 
     }
 
     static partial void HelloFrom(string name);

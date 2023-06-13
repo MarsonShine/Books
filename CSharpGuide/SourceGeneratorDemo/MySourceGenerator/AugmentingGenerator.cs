@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -15,6 +16,10 @@ public class AugmentingGenerator : ISourceGenerator
 
     public void Execute(GeneratorExecutionContext context)
     {
+        //if (!Debugger.IsAttached)
+        //{
+        //    Debugger.Launch();
+        //}
         // 生成器基础设施将创建一个接收器并填充它
         // 我们可以通过上下文检索已填充的实例
         AugmentingSyntaxReceiver receiver = (AugmentingSyntaxReceiver)context.SyntaxReceiver!;

@@ -12,10 +12,6 @@ namespace MySourceGenerator
     {
         public void Execute(GeneratorExecutionContext context)
         {
-            if (!Debugger.IsAttached)
-            {
-                Debugger.Launch();
-            }
             // AdditionalFiles 附加文件在读取文件时的路径是通过 csproj 中的 ItemGroup.<AdditionalFiles> 配置的
             // 路径是相对于.csproj文件的路径
             var myFiles = context.AdditionalFiles.Where(at => at.Path.EndsWith(".xml"));

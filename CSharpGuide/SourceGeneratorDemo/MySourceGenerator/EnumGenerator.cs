@@ -16,12 +16,6 @@ namespace MySourceGenerator
         public const string EnumExtensionsAttribute = "MySourceGenerator.EnumExtensionsAttribute";
         public void Execute(GeneratorExecutionContext context)
         {
-#if DEBUG
-            // if (!Debugger.IsAttached)
-            // {
-            //     Debugger.Launch();
-            // }
-#endif
             context.AddSource("EnumExtensionsAttribute.g.cs", SourceText.From(GeneratorHelper.Attribute, Encoding.UTF8));
             var enumSyntaxReceiver = (EnumSyntaxReceiver)context.SyntaxContextReceiver!;
             if (enumSyntaxReceiver == null)
@@ -35,12 +29,6 @@ namespace MySourceGenerator
 
         public void Initialize(GeneratorInitializationContext context)
         {
-#if DEBUG
-            // if (!Debugger.IsAttached)
-            // {
-            //     Debugger.Launch();
-            // }
-#endif 
             context.RegisterForSyntaxNotifications(() => new EnumSyntaxReceiver());
         }
     }
