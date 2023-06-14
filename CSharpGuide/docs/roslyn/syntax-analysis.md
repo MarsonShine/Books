@@ -314,3 +314,5 @@ Press any key to continue . . .
 ```
 
 祝贺！你已使用语法 API 在 C# 源代码中查找特定类型的 C# 语句和声明。
+
+下一篇：[语义分析入门](semantic-analysis.md)
