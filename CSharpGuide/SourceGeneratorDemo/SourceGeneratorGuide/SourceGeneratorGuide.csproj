@@ -4,6 +4,11 @@
     <OutputType>Exe</OutputType>
     <TargetFrameworks>net7.0</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>preview</LangVersion>
+    <!-- https://andrewlock.net/creating-a-source-generator-part-6-saving-source-generator-output-in-source-control/ -->
+    <!-- 设置编译器生成文件，生成在 obj 文件夹中，如何想要将文件添加到项目中来（obj 文件夹一般会被 git ignore 排除），可以设置<CompilerGeneratedFilesOutputPath>属性 -->
+    <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+    <!-- <CompilerGeneratedFilesOutputPath>Generated</CompilerGeneratedFilesOutputPath> -->
   </PropertyGroup>
 
   <ItemGroup>

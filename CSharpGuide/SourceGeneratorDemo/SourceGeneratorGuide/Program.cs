@@ -18,7 +18,7 @@ partial class Program
         Console.WriteLine(c2.ToStringFast());
         Console.WriteLine(c2.ToDescription());
         // Console.WriteLine()
-        GeneratedNamespace.GeneratedClass.GeneratedMethod();
+        GeneratedClass.GeneratedMethod();
         new UserClass().UserMethod(); 
     }
 

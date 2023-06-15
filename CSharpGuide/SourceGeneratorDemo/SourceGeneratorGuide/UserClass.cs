@@ -10,7 +10,7 @@ namespace MySourceGenerator
         private int _intProp;
         public void UserMethod()
         {
-            this.GeneratedMethod();
+            GeneratedMethod();
         }
     }
     [AttributeUsage(AttributeTargets.Field, Inherited = false, AllowMultiple = false)]
@@ -18,7 +18,7 @@ namespace MySourceGenerator
     {
         public AutoNotifyAttribute() { }
 
-        public string PropertyName { get; set; }
+        public string? PropertyName { get; set; }
     }
 
     public partial class UserClass : INotifyPropertyChanged
@@ -43,6 +43,6 @@ namespace MySourceGenerator
             }
         }
 
-        public event PropertyChangedEventHandler PropertyChanged;
+        public event PropertyChangedEventHandler? PropertyChanged;
     }
 }

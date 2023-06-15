@@ -11,7 +11,7 @@ public class AugmentingGenerator : ISourceGenerator
     {
         // Add any initialization code here
         // 注册工厂类，能创建自定义的语法接收器
-        context.RegisterForSyntaxNotifications(() => new AugmentingSyntaxReceiver());
+        context.RegisterForSyntaxNotifications(() => new MySyntaxReceiver());
     }
 
     public void Execute(GeneratorExecutionContext context)
@@ -22,7 +22,7 @@ public class AugmentingGenerator : ISourceGenerator
         //}
         // 生成器基础设施将创建一个接收器并填充它
         // 我们可以通过上下文检索已填充的实例
-        AugmentingSyntaxReceiver receiver = (AugmentingSyntaxReceiver)context.SyntaxReceiver!;
+        MySyntaxReceiver receiver = (MySyntaxReceiver)context.SyntaxReceiver!;
         // 获取记录的用户类
         ClassDeclarationSyntax userClass = receiver.ClassToAugment!;
         if (userClass is null)
@@ -32,29 +32,33 @@ public class AugmentingGenerator : ISourceGenerator
         // 创建一个新的类，它将扩展用户类
         SourceText sourceText = SourceText.From(
 $@"
-public partial class {userClass.Identifier}
+namespace MySourceGenerator
 {{
-    private void GeneratedMethod()
+
+    public partial class {userClass.Identifier}
     {{
-        // generated code
-        Console.WriteLine(""Hello from generated code!"");
+        private void GeneratedMethod()
+        {{
+            // generated code
+            Console.WriteLine(""Hello from generated code!"");
+        }}
     }}
 }}
 ", Encoding.UTF8);
-        context.AddSource("UserClass.g.cs", sourceText);
+        context.AddSource("UserClass.Generated.cs", sourceText);
     }
-}
 
-internal class AugmentingSyntaxReceiver : ISyntaxReceiver
-{
-    public ClassDeclarationSyntax? ClassToAugment { get; private set; }
-    public void OnVisitSyntaxNode(SyntaxNode syntaxNode)
+    class MySyntaxReceiver : ISyntaxReceiver
     {
-        // 决定是否我们对这里的业务逻辑感兴趣
-        if (syntaxNode is ClassDeclarationSyntax classDeclarationSyntax
-            && classDeclarationSyntax.Identifier.ValueText == "UserClass")
+        public ClassDeclarationSyntax? ClassToAugment { get; private set; }
+        public void OnVisitSyntaxNode(SyntaxNode syntaxNode)
         {
-            ClassToAugment = classDeclarationSyntax;
+            // 决定是否我们对这里的业务逻辑感兴趣
+            if (syntaxNode is ClassDeclarationSyntax classDeclarationSyntax
+                && classDeclarationSyntax.Identifier.ValueText == "UserClass")
+            {
+                ClassToAugment = classDeclarationSyntax;
+            }
         }
     }
 }

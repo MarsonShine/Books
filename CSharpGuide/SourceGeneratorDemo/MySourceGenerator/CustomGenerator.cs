@@ -9,7 +9,7 @@ public class CustomGenerator : ISourceGenerator
     {
         context.AddSource("myGeneratedFile.cs", SourceText.From(
 """
-namespace GeneratedNamespace
+namespace MySourceGenerator
 {
     public class GeneratedClass
     {
