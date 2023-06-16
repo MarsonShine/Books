@@ -12,21 +12,28 @@
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" PrivateAssets="all" GeneratePathProperty="true" />
   </ItemGroup>
 
-  <ItemGroup>
+  <!--<ItemGroup>
     <Folder Include="Properties\" />
     <AdditionalFiles Include="path\to\file.txt" />
-  </ItemGroup>
+    <AdditionalFiles Include="file1.txt" />
+    --><!-- logging will be controlled by default, or global value --><!--
+    <AdditionalFiles Include="file2.txt" MyGenerator_EnableLogging="true" />
+    --><!-- always enable logging for this file --><!--
+    <AdditionalFiles Include="file3.txt" MyGenerator_EnableLogging="false" />
+    --><!-- never enable logging for this file --><!--
+  </ItemGroup>-->
 
   <!--https://github.com/dotnet/roslyn/blob/main/docs/features/source-generators.cookbook.md#package-a-generator-as-a-nuget-package -->
   <!-- 生成器打包为 NuGet 包以供使用。例如：要在构建时将生成器项目转换为 NuGet 包，请将以下内容添加到项目文件中-->
   <PropertyGroup>
-    <GeneratePackageOnBuild>true</GeneratePackageOnBuild> <!-- Generates a package at build -->
-    <IncludeBuildOutput>false</IncludeBuildOutput> <!-- Do not include the generator as a lib dependency -->
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>  Generates a package at build 
+    <IncludeBuildOutput>false</IncludeBuildOutput>  Do not include the generator as a lib dependency 
   </PropertyGroup>
 
   <ItemGroup>
     <None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
-    <None Include="$(PkgNewtonsoft_Json)\lib\netstandard2.0\*.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+    <!--<None Include="$(PkgNewtonsoft_Json)\lib\netstandard2.0\*.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />-->
+    <None Include="MyGenerator.props" Pack="true" PackagePath="build" Visible="false" />
   </ItemGroup>
   
 </Project>

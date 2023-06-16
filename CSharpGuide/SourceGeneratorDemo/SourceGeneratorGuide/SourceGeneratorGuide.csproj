@@ -12,13 +12,19 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\MySourceGenerator\MySourceGenerator.csproj" 
-                      OutputItemType="Analyzer" 
-                      ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\MySourceGenerator\MySourceGenerator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
   <ItemGroup>
     <Folder Include="Properties\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EditorConfigFiles Remove="E:\repositories\Books\CSharpGuide\SourceGeneratorDemo\SourceGeneratorGuide\.editorconfig" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="E:\repositories\Books\CSharpGuide\SourceGeneratorDemo\SourceGeneratorGuide\.editorconfig" />
   </ItemGroup>
 
 </Project>

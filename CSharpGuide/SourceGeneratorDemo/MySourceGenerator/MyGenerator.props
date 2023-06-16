@@ -1,0 +1,10 @@
+﻿<Project>
+    <ItemGroup>
+        <!--MyGenerator_EnableLogging 属性将在生成之前发出到生成的分析器配置文件，名称为 build_property.MyGenerator_EnableLogging 。然后，生成器能够通过 GeneratorExecutionContext 的 AnalyzerConfigOptions 属性从中读取此属性-->
+        <CompilerVisibleProperty Include="MyGenerator_EnableLogging" />
+        <!--现在，假设生成器作者希望基于每个附加文件选择性地允许选择加入/退出日志记录。作者可以通过添加到 CompilerVisibleItemMetadata 项组来请求 MSBuild 发出指定文件的元数据值。作者指定要从中读取元数据的 MSBuild 项类型（在本例中为 AdditionalFiles ）和要为其检索的元数据的名称。
+       对应到 sg 中就是 build_metadata.AdditionalFiles.MyGenerator_EnableLogging
+        -->
+        <CompilerVisibleItemMetadata Include="AdditionalFiles" MetadataName="MyGenerator_EnableLogging" />
+    </ItemGroup>
+</Project>
