@@ -24,8 +24,8 @@ public class SerializingGenerator : ISourceGenerator
         }
 
         //context.AddSource("Serializer.g.cs", SourceText.From(GeneratorHelper.Attribute, Encoding.UTF8));
-        var enumSyntaxReceiver = (SerializationSyntaxReceiver)context.SyntaxContextReceiver!;
-        if (enumSyntaxReceiver == null)
+        var serializationSyntaxReceiver = (SerializationSyntaxReceiver)context.SyntaxContextReceiver!;
+        if (serializationSyntaxReceiver == null)
             return;
 
         //string result = GeneratorHelper.GenerateExtensionClass(enumSyntaxReceiver.EnumsToGenerate);
@@ -88,7 +88,7 @@ partial class {c.Identifier}
 
     public void Initialize(GeneratorInitializationContext context)
     {
-
+        context.RegisterForSyntaxNotifications(() => new SerializationSyntaxReceiver());
     }
 
     internal class SerializationSyntaxReceiver : ISyntaxContextReceiver
