@@ -49,5 +49,11 @@ partial class Program
         [Description("黑")]
         Black,
     }
+    [GeneratorSerializable]
+    partial class MyRecord
+    {
+        public string ITem1 { get; }
+        public int ITem2 { get; }
+    }
 
 }

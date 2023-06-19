@@ -1,5 +1,7 @@
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
+using MySourceGenerator;
 using System;
 using System.Linq;
 using System.Text;
@@ -20,11 +22,81 @@ public class SerializingGenerator : ISourceGenerator
         {
             context.ReportDiagnostic(Diagnostic.Create(MissingReferenceLib, Location.None, "Newtonsoft.Json"));
         }
+
+        //context.AddSource("Serializer.g.cs", SourceText.From(GeneratorHelper.Attribute, Encoding.UTF8));
+        var enumSyntaxReceiver = (SerializationSyntaxReceiver)context.SyntaxContextReceiver!;
+        if (enumSyntaxReceiver == null)
+            return;
+
+        //string result = GeneratorHelper.GenerateExtensionClass(enumSyntaxReceiver.EnumsToGenerate);
+        //context.AddSource("EnumExtensions.g.cs", SourceText.From(result, Encoding.UTF8));
+    }
+
+    private static string Generate(ClassDeclarationSyntax c)
+    {
+        var sb = new StringBuilder();
+        int indent = 8;
+        foreach (var member in c.Members)
+        {
+            if (member is PropertyDeclarationSyntax p)
+            {
+                var name = p.Identifier.ToString();
+                appendWithIndent($"addWithIndent($\"\\\"{name}\\\": ");
+                if (p.Type.ToString() != "int")
+                {
+                    sb.Append("\\\"");
+                }
+                sb.Append($"{{this.{name}.ToString()}}");
+                if (p.Type.ToString() != "int")
+                {
+                    sb.Append("\\\"");
+                }
+                sb.AppendLine(",\");");
+            }
+        }
+
+        return $@"
+using System.Text;
+partial class {c.Identifier}
+{{
+    public string Serialize()
+    {{
+        var sb = new StringBuilder();
+        sb.AppendLine(""{{"");
+        int indent = 8;
+
+        // Body
+{sb.ToString()}
+
+        sb.AppendLine(""}}"");
+
+        return sb.ToString();
+
+        void addWithIndent(string s)
+        {{
+            sb.Append(' ', indent);
+            sb.AppendLine(s);
+        }}
+    }}
+}}";
+        void appendWithIndent(string s)
+        {
+            sb.Append(' ', indent);
+            sb.Append(s);
+        }
     }
 
     public void Initialize(GeneratorInitializationContext context)
     {
 
+    }
+
+    internal class SerializationSyntaxReceiver : ISyntaxContextReceiver
+    {
+        public void OnVisitSyntaxNode(GeneratorSyntaxContext context)
+        {
+            throw new NotImplementedException();
+        }
     }
 }
 
