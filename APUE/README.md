@@ -969,3 +969,128 @@ FIFO 就是命名管道。
 > 为了避免这种情况的发生，需要使用**同步机制**来保证多个进程之间的数据传输是同步的。例如，可以使用**互斥锁**或**信号量**等机制来保证每个进程在写入数据时都能够获得独占的访问权，从而避免数据交叉和混乱的情况。
 >
 > 此外，还可以使用其他的进程间通信机制来实现数据的同步和共享。例如，可以使用**共享内存**或**消息队列**等机制来实现多个进程之间的数据传输和同步。这些机制都可以保证多个进程之间的数据传输是同步的，避免出现数据交叉和混乱的情况。
+
+## XSI IPC
+
+**XSI IPC（X/Open System Interface Inter-Process Communication）**是一组用于进程间通信（IPC）的标准接口，由 X/Open 公司定义。XSI IPC 包括三种 IPC 机制：消息队列（Message Queues）、信号量（Semaphores）和共享内存（Shared Memory）。
+
+### 消息队列
+
+消息队列是一种进程间通信机制，允许一个进程向另一个进程发送消息。消息队列是一个消息的链表，每个消息都有一个**类型**和一个**数据部分**。发送进程可以指定消息类型，接收进程可以选择接收特定类型的消息。消息队列可以用于进程间同步和通信。
+
+> 注意，消息队列还不完善。因为每个消息队列没有维护引用计数器（打开文件有这种计数器），所以在队列被删除后，仍在使用这一队列的进程会下一次队列操作时会出错返回。
+>
+> 要删除一个文件时，也要等到使用该文件的最后一个进程关闭文件描述符之后才会删除文件夹的内容。
+
+### 信号量
+
+信号量是一种进程间同步机制，用于控制对共享资源的访问。信号量是一个计数器，可以用于多个进程之间的同步。进程可以对信号量进行 P 操作（等待）和 V 操作（释放）。当信号量的值为 0 时，P 操作会阻塞进程，直到信号量的值变为正数。V 操作会增加信号量的值，唤醒等待的进程。
+
+以下是使用例子：
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/ipc.h>
+#include <sys/sem.h>
+
+#define KEY 1234
+
+union semun {
+    int val;
+    struct semid_ds *buf;
+    unsigned short *array;
+};
+
+int main(void)
+{
+    int semid, pid;
+    union semun arg;
+    struct sembuf sb;
+
+    // 创建一个新的信号量集
+    semid = semget(KEY, 1, IPC_CREAT | 0666);
+    if (semid == -1) {
+        perror("semget");
+        exit(EXIT_FAILURE);
+    }
+
+    // 初始化信号量的值为 1
+    arg.val = 1;
+    if (semctl(semid, 0, SETVAL, arg) == -1) {
+        perror("semctl");
+        exit(EXIT_FAILURE);
+    }
+
+    // 创建一个子进程
+    pid = fork();
+    if (pid == -1) {
+        perror("fork");
+        exit(EXIT_FAILURE);
+    }
+
+    if (pid == 0) {
+        // 子进程执行 P 操作
+        sb.sem_num = 0;
+        sb.sem_op = -1;
+        sb.sem_flg = 0;
+        if (semop(semid, &sb, 1) == -1) {
+            perror("semop");
+            exit(EXIT_FAILURE);
+        }
+
+        // 子进程输出一条消息
+        printf("Child process\n");
+
+        // 子进程执行 V 操作
+        sb.sem_num = 0;
+        sb.sem_op = 1;
+        sb.sem_flg = 0;
+        if (semop(semid, &sb, 1) == -1) {
+            perror("semop");
+            exit(EXIT_FAILURE);
+        }
+
+        exit(EXIT_SUCCESS);
+    } else {
+        // 父进程执行 P 操作
+        sb.sem_num = 0;
+        sb.sem_op = -1;
+        sb.sem_flg = 0;
+        if (semop(semid, &sb, 1) == -1) {
+            perror("semop");
+            exit(EXIT_FAILURE);
+        }
+
+        // 父进程输出一条消息
+        printf("Parent process\n");
+
+        // 父进程执行 V 操作
+        sb.sem_num = 0;
+        sb.sem_op = 1;
+        sb.sem_flg = 0;
+        if (semop(semid, &sb, 1) == -1) {
+            perror("semop");
+            exit(EXIT_FAILURE);
+        }
+
+        exit(EXIT_SUCCESS);
+    }
+
+    return 0;
+}
+```
+
+### 共享内存
+
+共享内存是一种进程间通信机制，允许多个进程共享同一块内存区域。共享内存可以提高进程间通信的效率，因为数据不需要在进程之间复制。但是，共享内存需要进行同步，以避免多个进程同时访问同一块内存区域。
+
+### 小结
+
+如果存在多个进程共享同一个资源，则可以使用`信号量`、`记录锁`、`互斥量`来协调访问。我们可以使用映射到两个进程地址空间中的信号量、记录锁或互斥量。
+
+- 使用信号量，则先创建一个包含一个成员的信号量集合，然后将集合信号量初始化为 1。为了分配资源，以 `sem_op` 为 -1 调用 `demop` 函数。为了释放资源，以 `sem_op` + 1 调用 `semop` 函数。对每个操作都指定 `SEM_UNDO`，以处理在未释放资源条件下进程终止的情况。
+- 使用记录锁，则先创建一个空文件，并用该文件的第一个字节（无需存在）作为锁字节。为了分配资源，先对该字节获得一个写锁。释放该资源时，则对该字节解锁。记录锁的性能确保了当一个锁的持有者进程终止时，内核会自动释放该锁。
+- 使用互斥量时，需要所有的进程将相同的文件映射到它们的地址空间里，并且使用 `PTHREAD_PROCESS_SHARED` 互斥量属性在文件的相同便宜处初始化互斥量。为了分配资源，我们对互斥量加锁。为了释放锁，我们解除互斥量。如果一个进程没有释放互斥量而终止，恢复将是非常困难的，除非我们使用**鲁棒互斥量**。
