@@ -1207,3 +1207,66 @@ int s_unlock(struct slock *sp)
 小端字节序列适合于处理器内部和存储器中的数据存储，因为处理器内部和存储器中的数据存储都采用小端字节序列。小端字节序列采用低位字节在前的方式存储数据，可以提高处理器内部和存储器中数据的读写效率，从而提高系统的性能。
 
 因此，在编写跨平台的程序时，需要注意字节序的问题，并使用适当的函数进行字节序转换。在网络传输和通信协议中，应该使用大端字节序列；在处理器内部和存储器中的数据存储中，应该使用小端字节序列。
+
+### 建立 socket 连接
+
+使用 `connect` 函数来建立 socket 连接：
+
+```c
+int connect(int sockfd, const struct sockaddr *addr, socklen_t len);
+```
+
+`addr` 参数表示想与之建立通信的服务器地址。如果 `sockfd` 没有绑定到下一个地址，connect 会给调用者绑定一个默认地址。
+
+要想一个连接请求成功，要连接的计算机必须是开启的，并且正在运行，服务器必须绑定到一个想与之连接的地址上，并且**服务器的等待连接队列要有足够的空间**。因此，应用程序必须能够处理 `connect` 返回的错误，这些错误可能是由一些瞬时条件引起的。
+
+```c
+#define MAXSLEEP 128
+
+int connect_retry(int domain, int type, int protocol, const struct sockaddr *addr, socklen_t alen)
+{
+    int numsec, fd;
+
+    // Try to connect with exponential backoff. 指数退避算法
+    for (numsec = 1; numsec <= MAXSLEEP; numsec <<= 1)
+    {
+        if ((fd = socket(domain, type, protocol)) < 0)
+            return (-1);
+        if (connect(fd, addr, alen) == 0)
+        {
+            // Connection accepted.
+            return (fd);
+        }
+        close(fd);
+
+        // Delay before trying again.
+        if (numsec <= MAXSLEEP / 2)
+            sleep(numsec);
+    }
+    return (-1);
+}
+```
+
+### listen 接受连接请求
+
+在连接 socket 连接之后，可以调用 `listen` 函数明确接受来自客户端的连接请求：
+
+```c
+int listen(int sockfd, int backlog);
+```
+
+参数 `backlog` 提供了一个提示，提示系统该进程所要入队的**未完成连接请求数量**。其实际值由系统决定，但上限由`<sys/socket.h>` 中的 `SOMAXCONN` 指定。**一旦队列满了就会拒绝多余的连接请求。**
+
+### accept
+
+一旦服务器调用了 `listen`，所用的套接字就能接收到连接请求。使用 `accept` 函数获得连接请求并建立连接：
+
+```c
+int accept(int sockfd, struct sockaddr *restrict addr, socklen_t *restrict len);
+```
+
+`sockfd` 参数是一个已经标记为被动套接字的套接字描述符，`addr` 参数是一个指向 `sockaddr` 结构体的指针，用于存储客户端的地址信息，`addrlen` 参数是一个指向 `socklen_t` 类型的指针，用于存储 `addr` 结构体的长度。如果 `accept` 函数执行成功，它将返回一个新的套接字描述符，该套接字用于与客户端进行通信，否则返回一个非零错误码。在调用 `accept` 函数之前，应该先调用 `bind` 函数将套接字绑定到本地地址，并调用 `listen` 函数将套接字标记为被动套接字。在调用 `accept` 函数之后，应该使用返回的新套接字描述符来与客户端进行通信，同时应该关闭原始套接字描述符，以便释放系统资源。
+
+如果没有连接请求在等待，`accept` 会阻塞直到一个请求进来。如果 `sockfd` 处于非阻塞模式， `accept` 会返回 −1，并将 errno 设置为 EAGAIN 或 EWOULDBLOCK。
+
+如果服务器调用 `accept`，并且当前没有连接请求，服务器会阻塞直到一个请求到来。另外，服务器可以使用 poll 或 select 来等待一个请求的到来。在这种情况下，一个带有等待连接请求的套接字会以可读的方式出现。
