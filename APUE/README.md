@@ -1094,3 +1094,74 @@ int main(void)
 - 使用信号量，则先创建一个包含一个成员的信号量集合，然后将集合信号量初始化为 1。为了分配资源，以 `sem_op` 为 -1 调用 `demop` 函数。为了释放资源，以 `sem_op` + 1 调用 `semop` 函数。对每个操作都指定 `SEM_UNDO`，以处理在未释放资源条件下进程终止的情况。
 - 使用记录锁，则先创建一个空文件，并用该文件的第一个字节（无需存在）作为锁字节。为了分配资源，先对该字节获得一个写锁。释放该资源时，则对该字节解锁。记录锁的性能确保了当一个锁的持有者进程终止时，内核会自动释放该锁。
 - 使用互斥量时，需要所有的进程将相同的文件映射到它们的地址空间里，并且使用 `PTHREAD_PROCESS_SHARED` 互斥量属性在文件的相同便宜处初始化互斥量。为了分配资源，我们对互斥量加锁。为了释放锁，我们解除互斥量。如果一个进程没有释放互斥量而终止，恢复将是非常困难的，除非我们使用**鲁棒互斥量**。
+
+## POSIX 信号量
+
+前面有说到，多进程同步操作，需要用到 sem_op 加减 1 来完成多进程协同操作。而 POSIX 信号量的函数 `int sem_trywait(sem_t *sem)`、`int sem_wait(sem_t *sem)` 自动实现了这个方法。
+
+使用 `sem_wait` 函数时，如果信号量计数器是 0 时就会发生阻塞。直到信号量减 1 或者被信号中断时才返回。如果要避免阻塞的话，可以使用 `sem_trywait` 函数。
+
+而调用 `sem_post` 函数可使信号量计数器增 1。这和解锁一个二进制信号量或者释放一个计数信号量相关的资源的过程是类似的。
+
+`sem_init` 函数是初始化一个未命名的信号量。
+
+当未命名的信号量使用完成时，可以调用 `sem_destroy` 函数销毁它。
+
+POSIX 信号量的性能要比 XSI 信号量要好不少。
+
+```c
+// 分配一个新的 slock 结构体
+struct slock * s_alloc()
+{
+    struct slock *sp;
+    static int cnt;
+
+    // 分配内存空间
+    if ((sp = malloc(sizeof(struct slock))) == NULL) {
+        return NULL;
+    }
+
+    // 生成一个唯一的信号量名称
+    do {
+        snprintf(sp->name, sizeof(sp->name), "/%ld.%d", (long)getpid(), cnt++);
+        sp->semp = sem_open(sp->name, O_CREAT | O_EXCL, S_IRWXU, 1);
+    } while ((sp->semp == SEM_FAILED) && (errno == EEXIST));
+
+    // 如果信号量创建失败，释放内存空间并返回 NULL
+    if (sp->semp == SEM_FAILED) {
+        free(sp);
+        return NULL;
+    }
+
+    // 删除信号量的名称，使其在进程结束时自动删除
+    sem_unlink(sp->name);
+
+    return sp;
+}
+
+// 释放一个 slock 结构体
+void s_free(struct slock *sp)
+{
+    sem_close(sp->semp);
+    free(sp);
+}
+
+// 对一个 slock 结构体进行加锁
+int s_lock(struct slock *sp)
+{
+    return (sem_wait(sp->semp));
+}
+
+// 尝试对一个 slock 结构体进行加锁
+int s_trylock(struct slock *sp)
+{
+    return (sem_trywait(sp->semp));
+}
+
+// 对一个 slock 结构体进行解锁
+int s_unlock(struct slock *sp)
+{
+    return (sem_post(sp->semp));
+}
+```
+
