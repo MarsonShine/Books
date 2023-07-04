@@ -846,3 +846,240 @@ unsafe int ComputeFirstIndex<T>(ref T searchSpace, ref T current, Vector128<T> e
 }
 ```
 
+### 比较
+
+除了相等性检查之外，矢量 API 还允许进行比较。当给定条件为真时， `bool` 返回重载返回 `true` ：
+
+```c#
+public static bool GreaterThanAll<T>(Vector128<T> left, Vector128<T> right) where T : struct
+public static bool GreaterThanAny<T>(Vector128<T> left, Vector128<T> right) where T : struct
+public static bool GreaterThanOrEqualAll<T>(Vector128<T> left, Vector128<T> right) where T : struct
+public static bool GreaterThanOrEqualAny<T>(Vector128<T> left, Vector128<T> right) where T : struct
+public static bool LessThanAll<T>(Vector128<T> left, Vector128<T> right) where T : struct
+public static bool LessThanAny<T>(Vector128<T> left, Vector128<T> right) where T : struct
+public static bool LessThanOrEqualAll<T>(Vector128<T> left, Vector128<T> right) where T : struct
+public static bool LessThanOrEqualAny<T>(Vector128<T> left, Vector128<T> right) where T : struct
+```
+
+与 `Equals` 类似，向量返回重载返回一个向量，其元素为全位集或零，具体取决于 `left` 和 `right` 中的相应元素是否满足给定条件。
+
+```c#
+public static Vector128<T> GreaterThan<T>(Vector128<T> left, Vector128<T> right) where T : struct
+public static Vector128<T> GreaterThanOrEqual<T>(Vector128<T> left, Vector128<T> right) where T : struct
+public static Vector128<T> LessThan<T>(Vector128<T> left, Vector128<T> right) where T : struct
+public static Vector128<T> LessThanOrEqual<T>(Vector128<T> left, Vector128<T> right) where T : struct
+```
+
+`ConditionalSelect` 有条件地从两个向量中按位选择一个值。
+
+```c#
+public static Vector128<T> ConditionalSelect<T>(Vector128<T> condition, Vector128<T> left, Vector128<T> right)
+    => (left & condition) | (right & ~condition);
+```
+
+这个方法值得一个自我描述的例子：
+
+```c#
+Vector128<float> left = Vector128.Create(1.0f, 2, 3, 4);
+Vector128<float> right = Vector128.Create(4.0f, 3, 2, 1);
+
+Vector128<float> result = Vector128.ConditionalSelect(Vector128.GreaterThan(left, right), left, right);
+
+Assert.Equal(Vector128.Create(4.0f, 3, 3, 4), result); // TRUE
+```
+
+### 数学
+
+非常简单的数学运算也可以使用运算符来表达。应尽可能首选运算符，因为它有助于避免运算符优先级方面的错误并可以提高可读性。
+
+```c#
+public static Vector128<T> Add<T>(Vector128<T> left, Vector128<T> right) where T : struct => left + right;
+public static Vector128<T> Divide<T>(Vector128<T> left, Vector128<T> right) => left / right;
+public static Vector128<T> Divide<T>(Vector128<T> left, T right) => left / right;
+public static Vector128<T> Multiply<T>(Vector128<T> left, Vector128<T> right) => left * right;
+public static Vector128<T> Multiply<T>(Vector128<T> left, T right) => left * right;
+public static Vector128<T> Subtract<T>(Vector128<T> left, Vector128<T> right) => left - right;
+```
+
+注意：某些方法接受单个值作为第二个参数。
+
+还提供 `Abs` 、 `Ceiling` 、 `Floor` 、 `Max` 、 `Min` 、 `Sqrt` 和 `Sum` ：
+
+```c#
+public static Vector128<T> Abs<T>(Vector128<T> vector) where T : struct
+public static Vector128<double> Ceiling(Vector128<double> vector)
+public static Vector128<float> Ceiling(Vector128<float> vector)
+public static Vector128<double> Floor(Vector128<double> vector)
+public static Vector128<float> Floor(Vector128<float> vector)
+public static Vector128<T> Max<T>(Vector128<T> left, Vector128<T> right) where T : struct
+public static Vector128<T> Min<T>(Vector128<T> left, Vector128<T> right) where T : struct
+public static Vector128<T> Sqrt<T>(Vector128<T> vector) where T : struct
+public static T Sum<T>(Vector128<T> vector) where T : struct
+```
+
+### 转换
+
+向量类型提供了一组专用于数字转换的方法：
+
+```c#
+public static unsafe Vector128<double> ConvertToDouble(Vector128<long> vector)
+public static unsafe Vector128<double> ConvertToDouble(Vector128<ulong> vector)
+public static unsafe Vector128<int> ConvertToInt32(Vector128<float> vector)
+public static unsafe Vector128<long> ConvertToInt64(Vector128<double> vector)
+public static unsafe Vector128<float> ConvertToSingle(Vector128<int> vector)
+public static unsafe Vector128<float> ConvertToSingle(Vector128<uint> vector)
+public static unsafe Vector128<uint> ConvertToUInt32(Vector128<float> vector)
+public static unsafe Vector128<ulong> ConvertToUInt64(Vector128<double> vector)
+```
+
+为了重新解释（没有值被更改，它们可以像不同类型一样使用）：
+
+```c#
+public static Vector128<TTo> As<TFrom, TTo>(this Vector128<TFrom> vector)
+public static Vector128<byte> AsByte<T>(this Vector128<T> vector)
+public static Vector128<double> AsDouble<T>(this Vector128<T> vector)
+public static Vector128<short> AsInt16<T>(this Vector128<T> vector)
+public static Vector128<int> AsInt32<T>(this Vector128<T> vector)
+public static Vector128<long> AsInt64<T>(this Vector128<T> vector)
+public static Vector128<nint> AsNInt<T>(this Vector128<T> vector)
+public static Vector128<nuint> AsNUInt<T>(this Vector128<T> vector)
+public static Vector128<sbyte> AsSByte<T>(this Vector128<T> vector)
+public static Vector128<float> AsSingle<T>(this Vector128<T> vector)
+public static Vector128<ushort> AsUInt16<T>(this Vector128<T> vector)
+public static Vector128<uint> AsUInt32<T>(this Vector128<T> vector)
+public static Vector128<ulong> AsUInt64<T>(this Vector128<T> vector)
+```
+
+### 加宽和缩小（Widening and Narrowing）
+
+每个向量的前半部分称为“低”，第二个部分称为“高”。
+
+```c#
+------------------------------128-bits---------------------------
+|           LOWER               |             UPPER             |
+-----------------------------------------------------------------
+|      32       |      32       |      32       |      32       |
+----------------------------------------------------------------|
+|  16   |  16   |  16   |  16   |  16   |  16   |  16   |  16   |
+-----------------------------------------------------------------
+| 8 | 8 | 8 | 8 | 8 | 8 | 8 | 8 | 8 | 8 | 8 | 8 | 8 | 8 | 8 | 8 |
+-----------------------------------------------------------------
+```
+
+对于 `Vector128` ， `GetLower` 获取低 64 位的值作为新的 `Vector64` ， `GetUpper` 获取高 64 位。
+
+```c#
+public static Vector64<T> GetLower<T>(this Vector128<T> vector)
+public static Vector64<T> GetUpper<T>(this Vector128<T> vector)
+```
+
+每种向量类型都提供了 `Create` 方法，允许从下层和上层进行创建：
+
+```c#
+public static unsafe Vector128<byte> Create(Vector64<byte> lower, Vector64<byte> upper)
+public static Vector256<byte> Create(Vector128<byte> lower, Vector128<byte> upper)
+```
+
+`Lower` 和 `Upper` 也被 `Widen` 使用。此方法将 `Vector128` 加宽为两个 `Vector128` ，其中 `sizeof(T2) == 2 * sizeof(T1)` 。
+
+```c#
+public static unsafe (Vector128<ushort> Lower, Vector128<ushort> Upper) Widen(Vector128<byte> source)
+public static unsafe (Vector128<int> Lower, Vector128<int> Upper) Widen(Vector128<short> source)
+public static unsafe (Vector128<long> Lower, Vector128<long> Upper) Widen(Vector128<int> source)
+public static unsafe (Vector128<short> Lower, Vector128<short> Upper) Widen(Vector128<sbyte> source)
+public static unsafe (Vector128<double> Lower, Vector128<double> Upper) Widen(Vector128<float> source)
+public static unsafe (Vector128<uint> Lower, Vector128<uint> Upper) Widen(Vector128<ushort> source)
+public static unsafe (Vector128<ulong> Lower, Vector128<ulong> Upper) Widen(Vector128<uint> source)
+```
+
+也可以仅加宽下部或上部：
+
+```c#
+public static Vector128<ushort> WidenLower(Vector128<byte> source)
+public static Vector128<ushort> WidenUpper(Vector128<byte> source)
+```
+
+扩展的一个示例是将 ASCII 字节缓冲区转换为字符：
+
+```c#
+byte[] byteBuffer = Enumerable.Range('A', 128 / 8).Select(i => (byte)i).ToArray();
+Vector128<byte> byteVector = Vector128.Create(byteBuffer);
+Console.WriteLine(byteVector);
+(Vector128<ushort> Lower, Vector128<ushort> Upper) = Vector128.Widen(byteVector);
+Console.Write(Lower.AsByte());
+Console.WriteLine(Upper.AsByte());
+
+Vector256<ushort> ushortVector = Vector256.Create(Lower, Upper);
+Span<ushort> ushortBuffer = stackalloc ushort[256 / 16];
+ushortVector.CopyTo(ushortBuffer);
+Span<char> charBuffer = MemoryMarshal.Cast<ushort, char>(ushortBuffer);
+Console.WriteLine(new string(charBuffer));
+```
+
+```
+<65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80>
+<65, 0, 66, 0, 67, 0, 68, 0, 69, 0, 70, 0, 71, 0, 72, 0><73, 0, 74, 0, 75, 0, 76, 0, 77, 0, 78, 0, 79, 0, 80, 0>
+ABCDEFGHIJKLMNOP
+```
+
+`Narrow` 与 `Widen` 相反。
+
+```c#
+public static unsafe Vector128<float> Narrow(Vector128<double> lower, Vector128<double> upper)
+public static unsafe Vector128<sbyte> Narrow(Vector128<short> lower, Vector128<short> upper)
+public static unsafe Vector128<short> Narrow(Vector128<int> lower, Vector128<int> upper)
+public static unsafe Vector128<int> Narrow(Vector128<long> lower, Vector128<long> upper)
+public static unsafe Vector128<byte> Narrow(Vector128<ushort> lower, Vector128<ushort> upper)
+public static unsafe Vector128<ushort> Narrow(Vector128<uint> lower, Vector128<uint> upper)
+public static unsafe Vector128<uint> Narrow(Vector128<ulong> lower, Vector128<ulong> upper)
+```
+
+与 Sse2.PackUnsignedSaturate 和 AdvSimd.Arm64.UnzipEven 相比， `Narrow` 通过 AND 应用掩码来剪切高于返回向量最大值的任何内容：
+
+```c#
+Vector256<ushort> ushortVector = Vector256.Create((ushort)300);
+Console.WriteLine(ushortVector);
+unchecked { Console.WriteLine((byte)300); }
+Console.WriteLine(300 & byte.MaxValue);
+Console.WriteLine(Vector128.Narrow(ushortVector.GetLower(), ushortVector.GetUpper()));
+
+if (Sse2.IsSupported)
+{
+    Console.WriteLine(Sse2.PackUnsignedSaturate(ushortVector.GetLower().AsInt16(), ushortVector.GetUpper().AsInt16()));
+}
+```
+
+```
+<300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300>
+44
+44
+<44, 44, 44, 44, 44, 44, 44, 44, 44, 44, 44, 44, 44, 44, 44, 44>
+<255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255>
+```
+
+### 随机播放
+
+`Shuffle` 通过使用一组索引（表示输入向量索引的值）从输入向量中选择值来创建新向量。
+
+```c#
+public static Vector128<int> Shuffle(Vector128<int> vector, Vector128<int> indices)
+public static Vector128<uint> Shuffle(Vector128<uint> vector, Vector128<uint> indices)
+public static Vector128<float> Shuffle(Vector128<float> vector, Vector128<int> indices)
+public static Vector128<long> Shuffle(Vector128<long> vector, Vector128<long> indices)
+public static Vector128<ulong> Shuffle(Vector128<ulong> vector, Vector128<ulong> indices)
+public static Vector128<double> Shuffle(Vector128<double> vector, Vector128<long> indices)
+```
+
+它可以用于很多事情，包括反转输入：
+
+```c#
+Vector128<int> intVector = Vector128.Create(100, 200, 300, 400);
+Console.WriteLine(intVector);
+Console.WriteLine(Vector128.Shuffle(intVector, Vector128.Create(3, 2, 1, 0)));
+```
+
+#### Vector256.Shuffle 与 Avx2.Shuffle
+
+`Vector256.Shuffle` 和 `Avx2.Shuffle` 不相同。
+
+`Avx2.Shuffle` 实际上是 `2x128-bit ops` ，而 `Vector256.Shuffle` 将其视为“单个 256 位向量”（而不是“2x128 位向量”）。这样做是为了保持一致性，并更好地映射到跨平台心态，其中 `AVX-512` 和 `SVE` 都以“全角”运行。
