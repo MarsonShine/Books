@@ -93,3 +93,72 @@
 
 一个常见的反对意见是，找到这些缝隙（seams）太困难了。虽然我们同意这在一开始是具有挑战性的，但我们发现这是比其他方法更好的方法，因为其他方法往往会导致功能均等和大爆炸式的发布。我们还注意到，许多企业之所以排除这种方法，是因为他们孤立地看待技术或业务流程。单独改变技术的一部分或更新业务流程很可能会失败，但如果我们能够将两者结合起来考虑和实施，就有办法"吃掉大象"。
 
+#### 开始吧
+
+在旅程的开始阶段，遗产现代化似乎是一个最令人生畏的命题。与任何旅程一样，我们必须首先尝试并了解最初的方向。此外，与所有旅程一样，您必须从您所在的地方开始。我们经常遇到的一个问题是，我们似乎从一片森林中开始，看不到前方的风景，因此也不知道要走的方向。因此，第一步就是爬到树上，仔细观察四周！这意味着要在最短的时间内尽可能了解当前的系统和架构。这通常很难做到，而且很容易被过多的细节所困扰。
+
+幸运的是，有许多非常有用的工具可以协同使用，以获得足够好的理解，从而继续工作。这些工具将在其他地方进行详细讨论，但总结列表将包括[事件风暴（Event Storming）](http://ziobrando.blogspot.com/2013/11/introducing-event-storming.html)、[Wardley 映射（Wardley Mapping）](https://blog.gardeviance.org/2015/02/an-introduction-to-wardley-value-chain.html)、业务能力映射（Business Capacity Mapping）和领域映射（Domain Mapping）。请注意，在这份清单中，我们主要关注的是业务概念如何映射到系统架构中，进而了解该[架构如何支持价值生成](https://martinfowler.com/articles/value-architectural-attribute.html)。这是一个经常被忽略的视角，尤其是对于传统系统而言。
+
+了解问题的模式：
+
+| [创建城镇计划](https://martinfowler.com/articles/patterns-legacy-displacement/create-town-plan.html) † | 确定组织的稳定部分，围绕这些部分组建团队和软件 |
+| ------------------------------------------------------------ | ---------------------------------------------- |
+| [事件风暴](https://martinfowler.com/articles/patterns-legacy-displacement/event-storming.html) † | 用于了解业务流程的技术                         |
+| [识别业务能力](https://martinfowler.com/articles/patterns-legacy-displacement/identify-business-capabilities.html) † | 确定组织的稳定部分，围绕这些部分组建团队和软件 |
+| [价值流图](https://martinfowler.com/articles/patterns-legacy-displacement/value-stream-map.html) † | 描述用户如何完成工作的工件                     |
+
+具体来说，我们发现人们常常在遗留系统的边界上停止发现式的活动，"龙在这里"，不再前进。如果不跨越边界，揭示遗留系统是如何支持（或阻碍）业务流程和活动的，就很难找到并提取薄片进行交付。
+
+另一个经常被忽视但非常有价值的信息来源是系统用户本身。事实上，根据作者的经验，这往往是您能够找到大量有用信息的地方，尤其是能够揭露许多变通方法和影子 IT 生态系统，这些通常是围绕旧系统建立起来的，即实际运行业务的 Access 数据库和版本化 Excel 电子表格。客户旅程映射（Customer Journey Mapping）、创建服务蓝图（Service Blueprints）和价值流映射（Value Stream Mapping）等工具在揭示此类细节方面效果显著。
+
+解决问题的模式：
+
+| [提取产品线](https://martinfowler.com/articles/patterns-legacy-displacement/extract-product-lines.html) | 按产品线识别和分离系统                         |
+| ------------------------------------------------------------ | ---------------------------------------------- |
+| [提取价值流](https://martinfowler.com/articles/patterns-legacy-displacement/extract-value-streams.html) | 识别并分离关键价值流                           |
+| [功能平价](https://martinfowler.com/articles/patterns-legacy-displacement/feature-parity.html) | 使用新技术堆栈复制旧系统的现有功能。           |
+| [唯一真环](https://martinfowler.com/articles/patterns-legacy-displacement/one-true-ring.html) | 通过识别独特和共享的业务能力，对问题进行细分。 |
+
+### 成功交付部件
+
+对快速变更的需求，以及在没有大量依赖关系的情况下逐步交付和独立变更业务元素的能力，往往导致"敏捷"交付方法与基于微服务的架构并存。持续交付成为这些可单独部署组件的必备条件。除了普通的软件交付之外，更具挑战性的是找到从现有大型解决方案中分离出来、与之共存并最终取代其元素的策略。有几种成功的策略，包括**并行运行**、**入口分叉**和**分流**。
+
+交付模式：
+
+| [金丝雀发布](https://martinfowler.com/articles/patterns-legacy-displacement/canary-release.html) | 向部分用户推出变更                                           |
+| ------------------------------------------------------------ | ------------------------------------------------------------ |
+| [关键聚合器](https://martinfowler.com/articles/patterns-legacy-displacement/critical-aggregator.html) | 整合来自不同业务部门的数据，为关键决策提供支持               |
+| [暗启动](https://martinfowler.com/articles/patterns-legacy-displacement/dark-launching.html) | 在不使用结果的情况下调用新的后端功能，以评估其性能影响分流   |
+| [分流](https://martinfowler.com/articles/patterns-legacy-displacement/divert-the-flow.html) | 首先将跨组织活动从传统业务中转移出来                         |
+| [事件拦截](https://martinfowler.com/articles/patterns-legacy-displacement/event-interception.html) | 拦截对系统状态的任何更新，并将其中一些更新路由到新组件。     |
+| [模仿传统系统](https://martinfowler.com/articles/patterns-legacy-displacement/legacy-mimic.html) | 新系统与旧系统交互时，旧系统不会察觉到任何变化。             |
+| [还原到源](https://martinfowler.com/articles/patterns-legacy-displacement/revert-to-source.html) | 确定数据的源头，并集成到源头。                               |
+| [停止世界切换](https://martinfowler.com/articles/patterns-legacy-displacement/stop-the-world.html) | 在切换到新系统时暂停正常业务活动                             |
+| [过渡架构](https://martinfowler.com/articles/patterns-legacy-displacement/transitional-architecture.html) | 为简化遗留系统的迁移而安装的软件元素，我们打算在迁移完成后将其移除。 |
+
+### 更改组织以允许这种情况持续发生
+
+如果我们后退一步，审视一下交付新业务需求的整个过程，我们很快就会发现这只是技术问题的一部分。如果我们使用较新的技术来减少构建解决方案的时间和成本，那么我们就会发现任何与达成需求和将变更投入生产有关的问题。
+
+我们需要改变组织结构和流程，以充分利用更好的技术，而且根据[康威定律](https://github.com/MarsonShine/MS.Microservice/blob/master/docs/ConwayLaw.md)，我们还需要一个有利于实现这一点的技术架构。如果团队和他们的沟通是围绕现有的解决方案和流程来组织的，我们可能需要使用[反康威法（Inverse Conway Maneuver）](https://martinfowler.com/bliki/ConwaysLaw.html#icm)来重组他们，以匹配新的解决方案和架构。
+
+传统系统会制约和限制采用更现代化工程实践的能力，尤其是那些与极限编程和持续交付相关的实践。在替换传统系统时，重要的是要确保改变工作方式，以确保我们最终不会回到一个缓慢、难以改变且成本高昂的系统。
+
+传统也是组织文化和领导力的产物，如果没有更广泛的变革，你应该期待与以前相同的结果。我们观察到，许多传统的现代化努力都因"企业抗体"而失败，"企业抗体"会发现新事物，并采取行动将其拒之于组织之外。
+
+我们曾与一家大型电信公司合作，该公司希望为移动电话开发软件。该公司的领导层都明白，这意味着反馈周期更快，变革更频繁，而他们看到的是，与现有的专注于固定基础设施的项目相比，这意味着更快的反馈周期和更频繁的变革。
+
+尽管领导层都明白这一点，但他们并没有改变现有的工作实践，也没有改变负责这些流程的中层管理人员。因此，现有的变更控制流程被严格执行。最终，软件团队花费在填写变更控制表格和参加变更控制会议上的时间比他们生产软件的时间还多。“企业抗体”成功地拒绝了新的工作方式。
+
+组织变革是一个很大的话题，已经有很多文献可供参考。很少有组织能够在重新设计（或重建，对于外包受害者）其整个交付方法以及其组织结构和关键业务流程的同时，推迟遗留问题的现代化。尽管组织变革这一更广泛的话题超出了我们的范围，但我们还是推荐了一些在传统背景下应用和保护新工作方式的策略。如果你只是改变传统的工作方式，而不做任何其他事情，那么几年后，你将会再次取代传统的工作方式。
+
+持续的组织变革模式：
+
+| [按照您的需求进行构建](https://martinfowler.com/articles/patterns-legacy-displacement/build-as-you-mean-to-continue.html) | 以您需要的方式创建您的传统替代品，以便在其上线后继续运营。   |
+| ------------------------------------------------------------ | ------------------------------------------------------------ |
+| [新公司](https://martinfowler.com/articles/patterns-legacy-displacement/new-co.html) | 成立一家全新的公司，以打破市场格局。                         |
+| [受保护的试点](https://martinfowler.com/articles/patterns-legacy-displacement/protected-pilot.html) | 为新工作创建一个试点项目，并将其从正常的公司治理流程中分离出来。 |
+
+在组织转型方面肯定还有其他战略和方法，我们只是强调了这两种，因为在某种程度上，这两种战略和方法可以让我们尽早开始传统的现代化工作。
+
+## 例子：集成中间件移除
