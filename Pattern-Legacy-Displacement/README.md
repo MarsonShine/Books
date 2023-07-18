@@ -127,7 +127,7 @@
 
 | [金丝雀发布](https://martinfowler.com/articles/patterns-legacy-displacement/canary-release.html) | 向部分用户推出变更                                           |
 | ------------------------------------------------------------ | ------------------------------------------------------------ |
-| [关键聚合器](https://martinfowler.com/articles/patterns-legacy-displacement/critical-aggregator.html) | 整合来自不同业务部门的数据，为关键决策提供支持               |
+| [关键聚合器](critical-aggregator.md)                         | 整合来自不同业务部门的数据，为关键决策提供支持               |
 | [暗启动](https://martinfowler.com/articles/patterns-legacy-displacement/dark-launching.html) | 在不使用结果的情况下调用新的后端功能，以评估其性能影响分流   |
 | [分流](https://martinfowler.com/articles/patterns-legacy-displacement/divert-the-flow.html) | 首先将跨组织活动从传统业务中转移出来                         |
 | [事件拦截](https://martinfowler.com/articles/patterns-legacy-displacement/event-interception.html) | 拦截对系统状态的任何更新，并将其中一些更新路由到新组件。     |
