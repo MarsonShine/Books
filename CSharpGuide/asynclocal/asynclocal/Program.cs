@@ -122,6 +122,8 @@ internal class DisposableThing2 : IDisposable
     {
         get
         {
+            byte[] s = new byte[] { 1,2,3};
+            Console.WriteLine(s);
             if (_disposed) throw new ObjectDisposedException(GetType().FullName);
             return 1;
         }
