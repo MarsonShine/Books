@@ -132,3 +132,16 @@ int close(int fd);
 ```
 
 `fd` 参数是待关闭的 socket。**不过，`close` 系统调用并非总是立即关闭一个连接，而是将 fd 的引用计数减 1。只有当 fd 的引用计数为 0 时，才真正关闭连接。**多进程程序中，一次 fork 系统调用默认将使父进程中打开的 socket 的引用计数加 1，因此我们必须在父进程和子进程中都对该 socket 执行 close 调用才能将连接关闭。
+
+## 读写数据
+
+```c
+#include＜sys/types.h＞
+#include＜sys/socket.h＞
+ssize_t recv(int sockfd,void* buf,size_t len,int flags);
+ssize_t send(int sockfd,const void* buf,size_t len,int flags);
+```
+
+`recv` 读取的是 `sockfd` 上的数据，`buf` 和 `len` 参数分贝是指读缓冲区的位置和大小。**recv 成功时返回实际读取到的数据的长度，它可能小于我们期望的长度len。因此我们能要多次调用 recv，才能读取到完整的数据。recv 可能返回0，这意味着通信对方已经关闭连接了。**
+
+`send` 是往 `sockfd` 写入数据，`buf` 和 `len` 参数分别指定写缓冲区的位置和大小。`send` 成功时返回实际写入的数据的长度。
