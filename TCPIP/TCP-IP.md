@@ -119,9 +119,13 @@ kind 字段总共有 7 种值：
 
 流量控制机制是通过 TCP 的拥塞控制窗口大小字段控制的，在网络传输中会将这个字段信息传递出去。
 
-慢启动算法：短时间有大量的数量传输。
+**慢启动算法**：短时间有大量的数量传输。慢启动算法的理由是，刚开始不知道网络的具体情况，需要用一种试探性的方式平滑的增加 cwnd 的大小。但是如果对这种情况不加以限制的话，那么慢启动势必会引起网络拥塞（cwnd 达到最大值）。因此 TCP 拥塞控制中定义了另一个变量：慢启动门限（slow start threshold size，ssthresh）。当 cwnd 的大小超过这个阈值时，TCP 拥塞控制将进入拥塞避免阶段。
 
-FACK（转发确认）= overdamping（过度衰减） + rampdowm(缓慢衰减)。还有一种叫`带参数界定的速率减半(Rate-Halving with Bounding Parameters)`：在一个 RTT 内，重复收到两个 ACK，TCP 即可发送一个新的数据包。
+**拥塞避免算法：**该算法其实是将慢启动的指数上升的 cwnd 变成了线性增长，如下图所示：
+
+![](./asserts/tcp-3.png)
+
+**FACK（转发确认）**= overdamping（过度衰减） + rampdowm(缓慢衰减)。还有一种叫`带参数界定的速率减半(Rate-Halving with Bounding Parameters)`：在一个 RTT 内，重复收到两个 ACK，TCP 即可发送一个新的数据包。
 
 ### 专业术语
 
