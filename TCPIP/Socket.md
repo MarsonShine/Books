@@ -145,3 +145,27 @@ ssize_t send(int sockfd,const void* buf,size_t len,int flags);
 `recv` 读取的是 `sockfd` 上的数据，`buf` 和 `len` 参数分贝是指读缓冲区的位置和大小。**recv 成功时返回实际读取到的数据的长度，它可能小于我们期望的长度len。因此我们能要多次调用 recv，才能读取到完整的数据。recv 可能返回0，这意味着通信对方已经关闭连接了。**
 
 `send` 是往 `sockfd` 写入数据，`buf` 和 `len` 参数分别指定写缓冲区的位置和大小。`send` 成功时返回实际写入的数据的长度。
+
+## 如何重用 TIME_WAIT 占用的地址
+
+在一般情况下，TCP 连接的 TIME_WAIT 状态是不允许其它进程重用的。
+
+我们可以通过设置 socket 的 `SO_REUSEADDR` 选项强制使用被处于 TIME_WAIT 状态的连接占用的 socket 地址。
+
+具体实现代码如下：
+
+```c
+int sock = socket(PF_INET, SOCK_STREAM, 0);
+assert(sock >= 0);
+int reuse = 1;
+setsockopt(sock,SOL_SOCKET,SO_REUSEADDR,&reuse,sizeof(reuse));
+struct sockaddr_in address;
+bzero(&address,sizeof(address));
+address.sin_family=AF_INET;
+inet_pton(AF_INET,ip,&address.sin_addr);
+address.sin_port=htons(port);
+int ret=bind(sock,(struct sockaddr*)&address,sizeof(address));
+```
+
+这样，即使 socket 处于 TIME_WAIT 状态，与之绑定的 socket 地址可以立即重用。而且我们可以直接修改 Linux 内核参数 `/proc/sys/net/ipv4/tcp_tw_recycle` 来快速回收被关闭的 socket，从而使得 TCP 连接根本不用进入 TIME_WAIT 状态，进而就允许应用程序立即绑定该 socket 地址。
+
