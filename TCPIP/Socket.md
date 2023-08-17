@@ -169,3 +169,27 @@ int ret=bind(sock,(struct sockaddr*)&address,sizeof(address));
 
 这样，即使 socket 处于 TIME_WAIT 状态，与之绑定的 socket 地址可以立即重用。而且我们可以直接修改 Linux 内核参数 `/proc/sys/net/ipv4/tcp_tw_recycle` 来快速回收被关闭的 socket，从而使得 TCP 连接根本不用进入 TIME_WAIT 状态，进而就允许应用程序立即绑定该 socket 地址。
 
+## 修改 Socket 接收/发送缓冲区大小
+
+选项 `SO_RCVBUF` 表示 TCP 接收缓冲区的大小。
+
+选项 `SO_SNDBUF` 表示 TCP 发送缓冲区的大小。
+
+通过调用函数 `setsockopt` 来设置 TCP 发送/接收缓冲区的大小值。
+
+同理，我们可以通过直接修改 Linux 内核参数 `/proc/sys/net/ipv4/tcp_rmem` 和 `proc/sys/net/ipv4/tcp_wmem` 来强制设置 TCP 的接收/发送缓冲区大小。
+
+## 获取客户端/服务器的IP、Port、Name
+
+- `gethostbyname`：根据主机名获取主机的完整信息
+- `gethostbyaddr`：根据主机 IP 地址获取主机的完整信息
+
+上述功能实则是取的 Linux 中的 /etc/hosts 中的信息。如果没有对应的信息，则会访问 DNS 服务器。
+
+- `getservbyname`：根据名称获取服务的完整信息。
+- `getservbyport`：根据端口号获取服务的完整信息。
+
+上述功能实际上是取得 Linux 中的 /etc/services 文件来获取服务的信息。
+
+- `getaddrinfo`：该函数实际上是对 `gethostbyname` 和 `getservbyname` 函数的封装，能通过主机名获取 IP 地址，也能通过服务名获取端口号。
+- `getnameinfo`：该函数实际上是对 `gethostbyaddr` 和 `getservbyport` 函数的封装，能通过 socket 地址同时获取主机名和服务名
