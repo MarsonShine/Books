@@ -67,3 +67,25 @@ void*mmap(void* start,size_t length,int prot,int flags,int fd,off_t offset);
 int munmap(void* start,size_t length);
 ```
 
+## splice
+
+**splice** 函数用于两个文件描述符之间移动数据的，此操作是**零拷贝操作**。
+
+```c
+#include＜fcntl.h＞
+ssize_t splice(int fd_in,loff_t* off_in,int fd_out,loff_t* off_out,size_t len,unsigned int flags);
+```
+
+splice 返回移动字节的数量。返回 0 表示没有数据移动。
+
+## tee
+
+**tee** 函数用于两个管道文件描述符之间的复制数据，此操作是**零拷贝操作**。
+
+它不消耗数据，因此源文件描述符上的数据仍然可以用于后续的读操作。
+
+```c
+#include＜fcntl.h＞
+ssize_t tee(int fd_in,int fd_out,size_t len,unsigned int flags);
+```
+
