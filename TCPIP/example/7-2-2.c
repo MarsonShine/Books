@@ -1,4 +1,7 @@
 // 切换用户
+#include<stdbool.h>
+#include<unistd.h>
+#include<sys/types.h>
 
 static int switch_to_user(uid_t user_id, gid_t gp_id)
 {
