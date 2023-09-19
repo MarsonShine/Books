@@ -13,6 +13,10 @@
 | DTrace/perf | DTrace  | CPU剖析和跟踪                 |
 | perf        | cpustat | CPU性能计数器分析             |
 
+> 提示：
+>
+> 要想知道每个工具返回的各项参数含义，可以执行：man tool。这里面含有每个项代表的意思。
+
 ## uptime
 
 ```
@@ -215,4 +219,162 @@ KiB Swap:  8257532 total,  8257532 free,        0 used. 13901192 avail Mem
 - `%MEM`:进程占用内存百分比
 - `TIME+`: 进程累计占用的CPU时间
 - `COMMAND`: 进程名称
+
+## pidstat
+
+pidstat 工具按进程或线程打印 CPU 用量，包括用户态和系统态时间的分解。默认情况下，仅循环输出活动进程的信息。
+
+```
+[root ~]# pidstat 1
+Linux 3.10.0-693.el7.x86_64  2023年09月19日  _x86_64_        (8 CPU)
+
+11时48分31秒   UID       PID    %usr %system  %guest    %CPU   CPU  Command
+11时48分32秒     0      3033    0.00    0.99    0.00    0.99     5  pidstat
+11时48分32秒     0      6884    0.00    0.99    0.00    0.99     3  sshd
+```
+
+各项参数含义如下：
+
+- `UID`: 进程的用户ID。
+- `PID`: 进程的进程ID。
+- `%usr`: 用户空间占用的百分比。
+- `%system`: 任务在系统级(内核)执行时使用的 CPU 百分比。
+- `%guest`: 任务在虚拟机(运行虚拟处理器)中占用的 CPU 百分比。
+- `%CPU`: CPU使用率的百分比。
+- `CPU`: 物理CPU的使用率。
+- `Command`: 进程的命令名称。
+
+## perf
+
+Linux 性能计数器（Performance Counters for Linux，PCL），是一整套剖析和跟踪的工具，现名为 Linux 性能事件（Linux Performance Events，LPE）。
+
+perf 有一系列的命令，具体可以执行 `man perf` 查看。
+
+perf 可以分析以下场景
+
+### 剖析
+
+`perf record` 可以用来剖析 CPU 调用路径，对 CPU 时间如何消耗在内核和用户空间进行概括总结。该命令以一定时间间隔取样，并导出一个 perf.data 文件:
+
+```
+[root ~]# perf record -a -g -F 997 sleep 10
+[ perf record: Woken up 10 times to write data ]
+[ perf record: Captured and wrote 4.705 MB perf.data (31470 samples) ]
+```
+
+- `-a` 选项表示记录所有事件（包括 CPU 周期、缓存失效等）。
+- `-g` 选项表示记录调用图（函数调用关系）
+- `-F 997` 选项表示设置采样频率为每秒 997 次。
+- `sleep 10` 是要执行的命令，即让进程休眠 10 秒钟。
+
+然后使用 `report` 命令查看文件：
+
+```
+[root ~]# perf report --stdio
+
+Samples: 31K of event 'cpu-clock', Event count (approx.): 31564693230                                                                                                          
+# Children      Self  Command          Shared Object                 Symbol                                                      
+# ........  ........  ...............  ............................  ............................................................
+#
+    97.77%     0.01%  swapper          [kernel.kallsyms]             [k] cpu_startup_entry
+            |          
+             --97.76%--cpu_startup_entry
+                       |          
+                        --97.70%--arch_cpu_idle
+                                  |          
+                                   --97.69%--default_idle
+```
+
+上述内容只是结果中的一小部分，展示了 CPU 开销的去处。
+
+### 调度器延时
+
+```
+perf sched record sleep 10
+```
+
+查看延
+
+```
+perf sched latency
+```
+
+```
+ -----------------------------------------------------------------------------------------------------------------
+  Task                  |   Runtime ms  | Switches | Average delay ms | Maximum delay ms | Maximum delay at       |
+ -----------------------------------------------------------------------------------------------------------------
+  ksoftirqd/5:33        |      0.195 ms |        9 | avg:    1.800 ms | max:    4.809 ms | max at: 22078331.433877 s
+  kworker/4:1:58        |      0.459 ms |        9 | avg:    1.370 ms | max:   10.001 ms | max at: 22078337.473938 s
+  ksoftirqd/4:28        |      0.046 ms |        1 | avg:    1.005 ms | max:    1.005 ms | max at: 22078337.476961 s
+  ksoftirqd/6:38        |      0.032 ms |        3 | avg:    0.804 ms | max:    1.979 ms | max at: 22078331.172063 s
+  kworker/6:1:1954      |      0.757 ms |       21 | avg:    0.744 ms | max:    5.474 ms | max at: 22078334.186481 s
+  ksoftirqd/1:13        |      0.082 ms |        9 | avg:    0.351 ms | max:    2.725 ms | max at: 22078331.406783 s
+  kworker/2:1:27027     |      0.195 ms |       12 | avg:    0.338 ms | max:    2.393 ms | max at: 22078337.476373 s
+ [...]
+```
+
+### stat
+
+查看 CPU 的周期和指令计数，以及 IPC。这是一个对判断周期类型以及其中有多少个停滞周期非常有用的概要指标。
+
+```
+[root ~]# perf stat gzip file1.zip
+
+ Performance counter stats for 'gzip file1.zip':
+
+              3.51 msec task-clock                #    0.857 CPUs utilized          
+                 0      context-switches          #    0.000 K/sec                  
+                 1      cpu-migrations            #    0.285 K/sec                  
+               215      page-faults               #    0.061 M/sec                  
+   <not supported>      cycles                                                      
+                 0      stalled-cycles-frontend                                     
+                 0      stalled-cycles-backend    #    0.00% backend cycles idle    
+   <not supported>      instructions                                                
+   <not supported>      branches                                                    
+   <not supported>      branch-misses                                               
+
+       0.004096722 seconds time elapsed
+
+       0.002156000 seconds user
+       0.002156000 seconds sys
+```
+
+这里显示 ipc 计数目前的系统不支持。
+
+perf 还自带了很多计数器，可以调用 `perf list` 查看。
+
+这样我们就可以用选项 `-e` 来指定事件：
+
+```
+[root ~]# perf stat -e instructions,cycles,L1-dcache-load-misses gzip file1.zip.gz
+```
+
+## 可视化
+
+### 火焰图
+
+通过 `perf` 工具捕获的信息巨大，有成百上千万的输出记录。我们可以通过**火焰图**将栈帧的剖析信息可视化，这样可以非常直观的查看 CPU 各种开销。
+
+火焰图有如下特征：
+
+- 每个框代表栈里的一个函数（一个“栈帧”）。
+- Y 轴表示栈深度（栈上的帧数）。顶部的框表示在 CPU 上执行的函数。下面的都是它的祖先调用者。函数下面的函数即是其父函数，正如前面展示过的栈回溯。
+- X 轴横跨整个取样数据。它并不像大多数图那样，从左到右表示时间的流逝，其左右顺序没有任何含义（按字母排序）。
+- **框的宽度**表示函数在 CPU 上运行，或者是它的上级函数在 CPU 上运行的时间（基于取样计数）。更宽的函数框可能比窄框函数慢，也可能是因为只是很频繁地被调用。调用计数不显示（通过抽样也不可能知道）。
+- 如果是多线程运行，而且抽样是并发的情况，抽样计数可能会超过总时间。
+
+> 如何生成火焰图：
+>
+> 可以通过 [Flamegraph](https://github.com/brendangregg/FlameGraph) 生成火焰图，以 centos7 为例，具体步骤如下：
+>
+> 1. 安装 flamegraph：git clone https://github.com/brendangregg/FlameGraph
+> 2. perf 生成数据源
+>    1. perf record -F 99 -p 8643 -g -- sleep 10
+>    2. perf script > out.perf
+> 3. 分析堆栈信息 ./stackcollapse-perf.pl out.perf > out.folded
+> 4. 生成火焰图 ./flamegraph.pl out.folded > kernal-flamegraph.svg
+
+最后生成的demo火焰图如下
+
+![](./asserts/kernal-flamegraph.svg)
 
