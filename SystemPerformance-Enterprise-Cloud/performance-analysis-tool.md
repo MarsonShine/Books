@@ -148,6 +148,25 @@ Linux 3.10.0-693.el7.x86_64  2023年09月18日  _x86_64_        (8 CPU)
 平均时间:     all      0.44      0.00      0.52      0.00      0.00     99.04
 ```
 
+`-v` 选项可以查看内核 inode，文件和其它内核表的统计信息
+
+```
+[root /]# sar -v 1
+Linux 3.10.0-693.el7.x86_64  2023年09月23日  _x86_64_        (8 CPU)
+
+16时46分21秒 dentunusd   file-nr  inode-nr    pty-nr
+16时46分22秒    508541      2912     58883         2
+16时46分23秒    508572      2944     58925         2
+16时46分24秒    508563      2944     58907         2
+16时46分25秒    508563      2944     58907         2
+```
+
+- `dentunusd`：目录项缓存未用计数（可用项）。
+- `file-nr`：使用中的文件描述符个数。
+- `inode-nr`：使用中的 inode 个数。
+
+还有一个选项 `-r`，打印了分别代表缓冲区高速缓存大小和页缓存大小的 kbbuffers 和 kbcached，以 KB 为单位。
+
 ## ps
 
 进程状态命令，列出了所有进程的细节信息，包括 CPU 用量统计信息。
@@ -378,3 +397,6 @@ perf 还自带了很多计数器，可以调用 `perf list` 查看。
 
 ![](./asserts/kernal-flamegraph.svg)
 
+## 其它资料
+
+[如何分析 Linux 的 IO、CPU 和 内存](https://github.com/MarsonShine/Books/blob/master/linux/doc/how-diagnose-io-cpu-memory-in-linux.md)
