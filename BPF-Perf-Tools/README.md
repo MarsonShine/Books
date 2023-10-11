@@ -172,6 +172,22 @@ BPF 非常适合使用在系统的可观测领域。通过 BPF 程序可以在 C
 | sar    | 内核统计数据                 | 可以显示换页错误和页扫描的频率      |
 | perf   | 软件事件、硬件统计、硬件采样 | 内存相关的PMC统计信息和事件采样信息 |
 
+BPF 工具
+
+| 工具      | 分析对象 | 描述                                      |
+| --------- | -------- | ----------------------------------------- |
+| oomkill   | 00M      | 展示 OOM Killer 事件的详细信息            |
+| memleak   | 调度     | 展示可能有内存泄漏的代码路径              |
+| mmapsnoop | 系统调用 | 跟踪全系统的 `mmap() `调用                |
+| brkstack  | 系统调用 | 展示 (`brk()`) 调用对应的用户态代码调用栈 |
+| shmsnoop  | 系统调用 | 跟踪共享内存相关的调用信息                |
+| faults    | Faults   | 按用户调用栈展示缺页错误                  |
+| ffaults   | Faults   | 按文件名展示缺页错误                      |
+| vmscan    | VM       | 测量 VM 扫描器的收缩和回收时间            |
+| drsnoop   | VM       | 跟踪直接回收时间，并且显示延迟信息        |
+| swapin    | VM       | 按进程展示页换入信息                      |
+| hfaults   | Faults   | 按进程展示巨页的缺页错误信息              |
+
 分析策略：
 
 1. 检查系统信息中是否有 00M Killer 杀掉进程的信息(例如，使用 `dmesg`)。
@@ -182,3 +198,157 @@ BPF 非常适合使用在系统的可观测领域。通过 BPF 程序可以在 C
 6. 检查缺页错误和哪些文件有关。
 7. 通过跟踪 `brk()` 和 `mmap()` 调用来从另一个角度审查内存用量。
 8. 使用 PMC 测量硬件缓存命空率和内存访问(最好启用 PEBS)，以便分析导致内存 I/O 发生的函数和指令信息(例如，使用 `perf`)。
+
+下面代码片段是使用 btrace 查询 Linux 服务器中与内存相关的多种指标（内存分配、缺页、回收等）信息的代码:
+
+```bash
+#!/usr/bin/bpftrace
+
+// OOM Killer
+kprobe:oom_kill_process {
+  @oom[pid, comm] = count();
+}
+
+// 用户态内存分配  
+uprobe:/usr/lib/libc.so.6:malloc {
+  @malloc[pid, comm] = count();
+}
+
+uprobe:/usr/lib/libc.so.6:free {
+  @free[pid, comm] = count();  
+}
+
+// 内存映射
+kprobe:sys_mmap {
+  @mmap[pid, comm] = count();
+}
+
+// 缺页错误
+kprobe:handle_mm_fault {
+  @minfault[pid, comm] = count();
+}
+
+// vmscan 
+kprobe:try_to_free_pages {
+  @vmscan[pid, comm] = count();
+}
+
+// 直接回收
+kprobe:__vm_enough_memory {
+  @directreclaim[pid, comm] = count();
+}  
+
+// 页换入换出
+software:major-faults:1 {
+  @majflt[pid, comm] = count();
+}
+
+software:page-faults:1 {
+  @minflt[pid, comm] = count();
+}
+
+END {
+  clear(@oom);
+  clear(@malloc);
+  clear(@free);
+  clear(@mmap); 
+  clear(@minfault);
+  clear(@vmscan);
+  clear(@directreclaim);
+  clear(@majflt);
+  clear(@minflt);
+}
+```
+
+#### 与文件系统相关的检测工具
+
+![](./asserts/3.png)
+
+| 工具       | 目标     | 描述                                     |
+| ---------- | -------- | ---------------------------------------- |
+| opensnoop  | 系统调用 | 跟踪文件打开信息                         |
+| statsnoop  | 系统调用 | 跟踪 stat 调用的各种变体                 |
+| syncsnoop  | 系统调用 | 跟踪 sync 调用以及各种变体，带时间戳信息 |
+| mmapfiles  | 系统调用 | 统计 mmap 涉及的文件                     |
+| scread     | 系统调用 | 统计 read 涉及的文件                     |
+| fmapfault  | 系统调用 | 统计文件映射相关的缺页错误               |
+| filelife   | VFS      | 跟踪短时文件，按秒记录它们的生命周期     |
+| vfsstat    | VFS      | 统计常见的 VFS 操作                      |
+| vfscount   | VFS      | 统计所有的 VFS 操作                      |
+| vfssize    | VFS      | 展示 VFS 读/写的尺寸                     |
+| fsrwstat   | VFS      | 按文件系统类型展示 VFS 读/写数量         |
+| fileslower | VFS      | 展示较慢的文件读/写操作                  |
+| filetop    | VFS      | 按 IOPS 和字节数排序展示文件             |
+| filetype   | VFS      | 按文件类型和进程显示 VFS 读/写操作       |
+| writesync  | VFS      | 按 sync 开关展示文件写操作               |
+| cachestat  | 页缓存   | 页缓存相关统计                           |
+| writeback  | 页缓存   | 展示写回事件和对应的延迟信息             |
+| dcstat     | Dcache   | 目录缓存命中率统计信息                   |
+| dcsnoop    | Dcache   | 跟踪目录缓存的查找操作                   |
+| mountsnoop | VFS      | 跟踪系统中的挂载和卸载操作 (mount)       |
+| xfsslower  | XFS      | 统计过慢的 XES 操作                      |
+| xfsdist    | XFS      | 以直方图统计常见的 XFS 操作延迟          |
+| ext4dist   | ext4     | 以直方图统计常见的 ext4 操作延迟         |
+| icstat     | Icache   | inode 缓存的命中率统计                   |
+| bufarow    | 缓冲缓存 | 按进程和字节数统计缓冲缓存的增长         |
+| readahead  | VFS      | 展示预读取的命中率和效率                 |
+
+下面代码段是使用 btrace 查询 Linux 服务器文件系统相关指标的代码：
+
+```bash
+#!/usr/bin/bpftrace
+
+// VFS calls
+kprobe:vfs_read, vfs_write {
+  @vfs[func] = count();
+} 
+
+// 文件系统调用
+kprobe:sys_open, sys_close {
+  @fs[func] = count();
+}
+
+// 文件系统tracepoints
+tracepoint:ext4:ext4_da_write_begin, ext4:ext4_da_write_end {
+  @ext4[probe] = count(); 
+}
+
+// 写回和预读取
+kprobe:wbc_writeback_start, wbc_writeback_end {
+  @wb[func] = count();
+}
+
+kprobe:ra_submit, ra_end {
+  @readahead[func] = count();
+}
+
+// 缓存
+kprobe:mark_page_accessed {
+  @pagecache = count(); 
+}
+
+kprobe:dget, dput {
+  @dcache = count();
+}
+
+kprobe:iget, iput {
+  @icache = count();
+}
+
+kprobe:mark_buffer_dirty {
+  @buffercache = count();
+}
+  
+END {
+  clear(@vfs);
+  clear(@fs);
+  clear(@ext4);
+  clear(@wb);
+  clear(@readahead);
+  clear(@pagecache);
+  clear(@dcache);
+  clear(@icache);
+  clear(@buffercache);
+}
+```
+
