@@ -159,7 +159,7 @@ BPF 非常适合使用在系统的可观测领域。通过 BPF 程序可以在 C
 | smpcalls   | 内核     | 统计SMP模式下的远程CPU调用信息        |
 | llcstat    | PMC      | 按进程统计LLC命中率                   |
 
-#### 与内存相关的检测工具
+#### 与内存相关的监测工具
 
 | 工具   | 分析对象                     | 描述                                |
 | ------ | ---------------------------- | ----------------------------------- |
@@ -260,7 +260,7 @@ END {
 }
 ```
 
-#### 与文件系统相关的检测工具
+#### 与文件系统相关的监测工具
 
 ![](./asserts/3.png)
 
@@ -349,6 +349,179 @@ END {
   clear(@dcache);
   clear(@icache);
   clear(@buffercache);
+}
+```
+
+#### 与磁盘相关的监测工具
+
+![](./asserts/4.png)
+
+| 工具        | 目标      | 介绍                              |
+| ----------- | --------- | --------------------------------- |
+| biolatency  | 块I/O     | 以直方图形式统计块I/O延迟         |
+| biosnoop    | 块I/O     | 按PID和延迟闽值跟踪块I/O          |
+| biotop      | 块I/O     | top工具的磁盘版:按进程统计块I/O   |
+| bitesize    | 块I/O     | 按进程统计磁盘I/O请求尺寸直方图   |
+| seeksize    | 块I/O     | 展示IO寻址(seek)的平均距离        |
+| biopattern  | 块I/O     | 识别随机/顺序式磁盘访问模式       |
+| biostacks   | 块I/O     | 展示磁盘I/O相关的初始化软件栈信息 |
+| bioerr      | 块I/O     | 跟踪磁盘错误                      |
+| mdflush     | MD        | 跟踪MD的写空请求                  |
+| iosched     | I/O sched | 统计I/O调度器的延迟               |
+| scsilatency | SCSI      | 展示SCSI命令延迟分布情况          |
+| scsiresult  | SCSI      | 展示SCSI命令结果代码              |
+| nvmelatency | NVME      | 统计NVME驱动程序的命今延迟        |
+
+下面代码段是使用 btrace 查询 Linux 服务器磁盘系统相关指标的代码：
+
+```bash
+#!/usr/bin/bpftrace
+
+// 块I/O层
+kprobe:__make_request {
+  @blockrq[func] = count();
+}
+
+kprobe:submit_bio {
+  @blocksubmit[func] = count();  
+}
+
+// IO调度层
+kprobe:blk_queue_bio {
+  @ioreq[func] = count();
+}  
+
+kprobe:blk_peek_request, blk_dequeue_request {
+  @sched[func] = count();
+}
+
+// SCSI层
+kprobe:scsi_dispatch_cmd_start {
+  @scsi[func] = count();
+}
+
+// NVMe驱动层 
+kprobe:nvme_setup_cmd {
+  @nvme[func] = count();
+}
+
+kprobe:nvme_submit_io {
+  @nvmesubmit[func] = count();
+}
+
+END {
+  clear(@blockrq);
+  clear(@blocksubmit);
+  clear(@ioreq);
+  clear(@sched);
+  clear(@scsi);
+  clear(@nvme);
+  clear(@nvmesubmit);
+}
+```
+
+#### 与网络相关的监测工具
+
+传统工具：
+
+| 工具    | 目标         | 介绍                               |
+| ------- | ------------ | ---------------------------------- |
+| ss      | 内核统计     | 网络套接字统计                     |
+| ip      | 内核统计     | IP统计                             |
+| nstat   | 内核统计     | 网络软件栈统计                     |
+| netstat | 内核统计     | 显示网络软件栈统计和状态的复合工具 |
+| sar     | 内核统计     | 显示网络和其他统计信息的复合工具   |
+| nicstat | 内核统计     | 网络接口统计                       |
+| ethtool | 驱动程序统计 | 网络接口驱动程序统计               |
+| tcpdump | TCP抓包      | 抓包分析                           |
+
+BPF工具：
+
+![](./asserts/5.png)
+
+| 工具           | 目标   | 介绍                                   |
+| -------------- | ------ | -------------------------------------- |
+| sockstat       | 套接字 | 套接字统计信息总览                     |
+| sofamily       | 套接字 | 按进程统计新套接字协议                 |
+| soprotocol     | 套接字 | 按进程统计新套接字传输协议             |
+| soconnect      | 套接字 | 跟踪套接字的IP协议主动连接的细节信息   |
+| soaccept       | 套接字 | 跟踪套接字的IP协议被动连接的细节信息   |
+| socketio       | 套接字 | 套接字细节信息统计，包括IO 统计        |
+| socksize       | 套接字 | 按进程展示套接字IO尺寸直方图           |
+| sormem         | 套接字 | 展示套接字接收缓冲区用量和溢出情况     |
+| soconnlat      | 套接字 | 统计IP套接字连接延迟，带调用栈信息     |
+| solstbyte      | 套接字 | 统计IP套接字的首字节延迟               |
+| tepconnect     | TCP    | 跟踪TCP主动连接(connect))              |
+| tcpaccept      | TCP    | 跟踪TCP被动连接(accept))               |
+| tcplife        | TCP    | 跟踪TCP连接时长，带连接细节信息        |
+| tcptop         | TCP    | 按目的地展示TCP发送和接收吞吐量        |
+| tcpretrans     | TCP    | 跟踪TCP重传，带地址和TCP状态           |
+| tcpsynbl       | TCP    | 以直方图展示TCP SYN积压队列            |
+| tcpwin         | TCP    | 跟踪TCP发送中的阻塞窗口的细节信息      |
+| tcpnagle       | TCP    | 跟踪TCP中nagle算法的用量，以及发送延迟 |
+| udpconnect     | UDP    | 通过库函数调用跟踪DNS查找延迟          |
+| gethostlatency | DNS    | 跟踪IP入栈显式阻塞通知(ECN)的细节      |
+| ipecn          | IP     | 测量网络软件栈中的ICMPecho时间         |
+| superping      | ICMP   | 展示 FQ 队列管理器的延迟               |
+| qdisc-fq(..)   | qdisc  | 展示网络设备I/O尺寸                    |
+| netsize        | 网络   | 展示网络设备发送延迟                   |
+| nettxlat       | 网络   | 展示网络设备发送延迟                   |
+| skbdrop        | skbs   | 跟踪sk_buff丢弃情况，带内核调用栈信息  |
+| skblife        | skbs   | 在网络软件栈各层之间跟踪 sk_buf 的延迟 |
+| ieee80211scan  | Wifi   | 跟踪 IEEE802.11 WiFi 扫描情况          |
+
+下面代码段使用 btrace 查询 Linux 服务器网络相关指标的代码:
+
+```bash
+#!/usr/bin/bpftrace
+
+// 套接字层
+kprobe:inet_csk_accept, tcp_v4_connect {
+  @sock[func] = count();
+} 
+
+// TCP相关
+kprobe:tcp_sendmsg, tcp_cleanup_rbuf {
+  @tcp[func] = count(); 
+}
+
+// 网卡队列
+kprobe:dev_queue_xmit {
+  @qlen = hist(args->len); 
+}
+
+// 连接统计
+kprobe:tcp_connect {
+  @connect = count();
+}
+
+// 连接的时间
+kretprobe:tcp_connect /@retval == 0/ {
+  @tstart[tid] = nsecs; 
+}
+
+// 连接延迟
+kretprobe:tcp_connect /@retval == 0/ {
+  @tdelay[tid] = nsecs - @tstart[tid];
+  printf("connection time: %d ns\n", @tdelay[tid]);
+  delete(@tstart[tid]);  
+}
+
+// 首字节延迟
+kretprobe:tcp_recvmsg {
+  @tfristbyte[tid] = nsecs - @tdelay[tid];
+}
+// 重传指标 
+kprobe:tcp_retransmit_skb {
+  @retrans = count();
+}
+
+END {
+  clear(@sock); 
+  clear(@tcp);
+  clear(@qlen);
+  clear(@connect);
+  clear(@retrans);
 }
 ```
 
