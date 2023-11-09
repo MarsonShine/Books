@@ -63,6 +63,15 @@
   }
   ```
 
+## 软件设计的相关原则
+
+- DRY（Don't Repeat Yourself）：意味着，当有多个（一般指 2 个以上）地方发现有相似代码的时候，我们就需要把它们的共性之处抽象出来形成一个方法。
+- KISS（Keep It Simple，Stupid）：大道至简。
+- YAGNI（You Ain't Gonna Need It）：意思就是说不需要的就不要过多考虑，避免过度设计。等后面需要更多功能时，再添加进来。
+- LoD（Law of Demeter）：迪米特法则又称“最少知识原则”。
+- CoC（Convention over Configuration）：惯例大于配置原则，就是说将一些公认的规则、配制方法和信息作为内部默认规则来使用。
+- Soc（Separation of Concerns）：关注点分离原则，该原则渗透在各个领域，即通过各种手段，我们将一个大问题分解成独立且小的问题，这样就相对容易解决。
+
 ## 组件聚合的三个原则
 
 - REP（复用发布等同原则）

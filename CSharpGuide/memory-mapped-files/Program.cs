@@ -4,10 +4,83 @@
 using System.Buffers.Binary;
 using System.Diagnostics.CodeAnalysis;
 using System.IO.MemoryMappedFiles;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
 Console.WriteLine("Hello, World!");
+
+byte a = 2;
+
+bool b = Convert.ToBoolean(a);
+bool c = AS<byte, bool>(a);
+bool c2 = c;
+bool d = (b == c2);
+Console.WriteLine(Unsafe.SizeOf<byte>());
+Console.WriteLine(Unsafe.SizeOf<bool>());
+Console.WriteLine("b==c = " + d);
+
+static TTargetValue AS<TSourceValue, TTargetValue>(TSourceValue sourceValue)
+    where TSourceValue : struct
+    where TTargetValue : struct
+{
+    var c1 = TypeInfo.GetTypeCode(typeof(TSourceValue));
+    var c2 = TypeInfo.GetTypeCode(typeof(TTargetValue));
+
+    if (c1 == TypeCode.DateTime || c2 == TypeCode.DateTime)
+    {
+        throw new InvalidCastException(
+            $"不支持该类型字段的转换： {typeof(TSourceValue).Name}  => {typeof(TTargetValue).Name}");
+    }
+
+    if (c1 == c2) return Unsafe.As<TSourceValue, TTargetValue>(ref sourceValue);
+
+    switch (c1)
+    {
+        case TypeCode.Boolean:
+            var v1 = Convert.ToBoolean(sourceValue);
+            return Unsafe.As<Boolean, TTargetValue>(ref v1);
+        case TypeCode.SByte:
+            var v2 = Convert.ToSByte(sourceValue);
+            return Unsafe.As<SByte, TTargetValue>(ref v2);
+        case TypeCode.Byte:
+            var v3 = Convert.ToByte(sourceValue);
+            return Unsafe.As<Byte, TTargetValue>(ref v3);
+        case TypeCode.Int16:
+            var v4 = Convert.ToInt16(sourceValue);
+            return Unsafe.As<Int16, TTargetValue>(ref v4);
+        case TypeCode.UInt16:
+            var v5 = Convert.ToUInt16(sourceValue);
+            return Unsafe.As<UInt16, TTargetValue>(ref v5);
+        case TypeCode.Int32:
+            var v6 = Convert.ToInt32(sourceValue);
+            return Unsafe.As<Int32, TTargetValue>(ref v6);
+        case TypeCode.UInt32:
+            var v7 = Convert.ToUInt32(sourceValue);
+            return Unsafe.As<UInt32, TTargetValue>(ref v7);
+        case TypeCode.Int64:
+            var v8 = Convert.ToInt64(sourceValue);
+            return Unsafe.As<Int64, TTargetValue>(ref v8);
+        case TypeCode.UInt64:
+            var v9 = Convert.ToUInt64(sourceValue);
+            return Unsafe.As<UInt64, TTargetValue>(ref v9);
+        case TypeCode.Single:
+            var v10 = Convert.ToSingle(sourceValue);
+            return Unsafe.As<Single, TTargetValue>(ref v10);
+        case TypeCode.Double:
+            var v11 = Convert.ToDouble(sourceValue);
+            return Unsafe.As<Double, TTargetValue>(ref v11);
+        case TypeCode.Decimal:
+            var v12 = Convert.ToDecimal(sourceValue);
+            return Unsafe.As<Decimal, TTargetValue>(ref v12);
+        case TypeCode.Char:
+            var v13 = Convert.ToChar(sourceValue);
+            return Unsafe.As<Char, TTargetValue>(ref v13);
+    }
+
+    throw new InvalidCastException(
+        $"不支持该类型字段的转换： {typeof(TSourceValue).Name}  => {typeof(TTargetValue).Name}");
+}
 
 // example1
 using FileStream file = new(@"tmp.dat", FileMode.Create, FileAccess.ReadWrite, FileShare.None, 4096, FileOptions.RandomAccess);
@@ -98,7 +171,7 @@ public struct Data7
     private int _first;
     private int _padding0, _padding1, _padding2, _padding3, _padding4, _padding5, _padding6, _padding7, _padding8, _padding9;
     private int _second;
-    [UnscopedRef] 
+    [UnscopedRef]
     public ref T PaddingAs<T>() where T : struct => ref Unsafe.As<int, T>(ref _padding0);
 }
 // 所以完整的带有字节序的 Data2 结果如下
