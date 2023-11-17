@@ -1,9 +1,13 @@
 ﻿// See https://aka.ms/new-console-template for more information
+// https://learn.microsoft.com/zh-cn/dotnet/core/whats-new/dotnet-8
 using net8_guide.Randoms;
 using net8_guide.Serialize;
 using net8_guide.Times;
 using System.Buffers;
+using System.Diagnostics;
+using System.Diagnostics.Metrics;
 using System.Globalization;
+using System.IO.Hashing;
 using System.Numerics;
 using System.Security.Cryptography;
 using System.Text;
@@ -94,4 +98,56 @@ string[] animals = ["fox", "dog"];
 
 Console.WriteLine(string.Format(CultureInfo.InvariantCulture, compositeFormat, "fox", "dog"));
 Console.WriteLine(string.Format(CultureInfo.InvariantCulture, compositeFormat, args: animals));
+
+// XxHash,非加密哈希算法,需要引入包：System.IO.Hashing
+ReadOnlySpan<byte> source = "this is example"u8;
+var hashCode = new HashCode();
+hashCode.AddBytes(source);
+int code = hashCode.ToHashCode();
+// 速度要比hashcode快4倍
+int xxhash32 = unchecked((int)XxHash3.HashToUInt64(source));
+
+int sum = 0;
+for (int i = 0; i < 100; i++)
+{
+    sum += i;
+}
+Vector<int> vector = Vector<int>.Zero;
+int lastBlockIndex = 100 - 100 % Vector<int>.Count;
+int index = 0, sum2 = 0;
+for (index = 0; index < lastBlockIndex; index += Vector<int>.Count)
+{
+    vector += new Vector<int>(Enumerable.Range(index, index + Vector<int>.Count).ToArray());
+}
+for (int n = 0; n < Vector<int>.Count; n++)
+{
+    sum2 += vector[n];
+}
+// 剩下的相加
+while (index < 100)
+{
+    sum2 += index++;
+}
+
+// metrics
+//MeterOptions options = new("name")
+//{
+//    Version = "version",
+//    Tags = new TagList() { { "MeterKey1", "MeterValue1" }, { "MeterKey2", "MeterValue2" } }
+//};
+//Meter meter = meterFactory.Create(options);
+//Counter<int> instrument = meter.CreateCounter<int>("counter", null, null, new TagList() { { "counterKey1", "counterValue1" } });
+//instrument.Add(1);
+
+// 加密
+if (SHA3_256.IsSupported)
+{
+    byte[] hash = SHA3_256.HashData(inputs);
+}
+if (SHA3_256.IsSupported)
+{
+    using ECDsa ec = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+    byte[] signature = ec.SignData(inputs, HashAlgorithmName.SHA3_256);
+}
+
 Console.ReadLine();

@@ -1,4 +1,5 @@
 ﻿// See https://aka.ms/new-console-template for more information
+// https://devblogs.microsoft.com/dotnet/hardware-intrinsics-in-net-core/
 using simd_vector_demo;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -23,7 +24,6 @@ Vector128<float> left2 = Vector128.Create(1.0f,2,3,4);
 Vector128<float> right2 = Vector128.Create(4.0f,3,2,1);
 Vector128<float> r = Vector128.GreaterThan(left2,right2);
 Vector128<float> result = Vector128.ConditionalSelect(r,left2,right2);
-
 Console.WriteLine(Vector128.Create(4.0f,3,3,4) == result);
 
 // 加宽和缩小
