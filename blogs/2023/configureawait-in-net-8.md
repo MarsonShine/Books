@@ -186,3 +186,8 @@ await Task.CompletedTask.ConfigureAwait(ConfigureAwaitOptions.ForceYielding | Co
 很高兴看到 .NET 团队在多年后仍然在改进 async/await 的功能！
 
 如果您对 `ConfigureAwaitOptions` 背后的历史和设计讨论更感兴趣，可以查看相关的 [Pull Request](https://github.com/dotnet/runtime/pull/87067)。在发布之前，曾经有一个名为`ForceAsynchronousContinuation` 的选项，但后来被删除了。它具有更加复杂的用例，基本上可以覆盖 `await` 的默认行为，[将异步方法的继续操作调度为 `ExecuteSynchronously`](https://blog.stephencleary.com/2012/12/dont-block-in-asynchronous-code.html)。也许未来的更新会重新添加这个选项，或者也许将来的更新会为 `ValueTask` 添加 `ConfigureAwaitOptions` 的支持。我们只能拭目以待！
+
+## 原文链接
+
+[ConfigureAwait in .NET 8 (stephencleary.com)](https://blog.stephencleary.com/2023/11/configureawait-in-net-8.html)
+
