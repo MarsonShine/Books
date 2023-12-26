@@ -2,6 +2,7 @@
 using MetricDemo;
 using System.Diagnostics.Metrics;
 
+namespace CSharpGuide.diagnostics.MetricDemo;
 class Program
 {
     static Meter s_meter = new Meter("HatCo.HatStore", "1.0.0");

@@ -5,6 +5,7 @@ using System.Diagnostics.Tracing;
 using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 
+namespace CSharpGuide.diagnostics.CollectionMetricDemo;
 class Program
 {
     static Meter s_meter = new Meter("HatCo.HatStore", "1.0.0");

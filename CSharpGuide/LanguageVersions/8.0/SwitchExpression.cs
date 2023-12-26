@@ -1,12 +1,46 @@
 ﻿using CSharpGuide.LanguageVersions._8._0.demo;
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Text;
 
 namespace CSharpGuide.LanguageVersions._8._0
 {
     class SwitchExpression
     {
+        record class Room(int Id, bool Available);
+        record class Inn(string Name, ImmutableHashSet<Room> Rooms);
+
+        Inn ReserveRoom(Inn inn)
+        {
+            var room = inn.Rooms.FirstOrDefault(r => r.Available) ?? throw new InvalidOperationException("no rooms available");
+            return inn with
+            {
+                Rooms = inn.Rooms.Remove(room).Add(room with { Available = false }),
+            };
+        }
+
+        (Inn Inn,int RoomId) ReserveRoom2(Inn inn)
+        {
+            var room = inn.Rooms.FirstOrDefault(r => r.Available) ?? throw new InvalidOperationException("no rooms available");
+            return (
+                inn with
+                {
+                    Rooms = inn.Rooms.Remove(room).Add(room with { Available = false }),
+                },
+                room.Id
+            );
+        }
+
+        public void SwitchApplication()
+        {
+            Inn myInn = new("Bethlehem Gataway", Enumerable.Range(0, 50)
+                .Select(x => new Room(x, true))
+                .ToImmutableHashSet());
+            Inn resultInn = ReserveRoom(myInn);
+        }
+
+
         public static RGBColor FromRainbow(Rainbow colorBand) => colorBand switch
         {
             Rainbow.Red => new RGBColor(0xFF, 0x00, 0x00),
