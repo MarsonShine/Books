@@ -1,5 +1,7 @@
 ﻿// See https://aka.ms/new-console-template for more information
+using MySourceGenerator.Enums;
 using System.ComponentModel;
+using System.ComponentModel.DataAnnotations;
 
 namespace MySourceGenerator;
 
@@ -10,43 +12,46 @@ partial class Program
         HelloFrom("Generated Code");
         // Console.ReadLine();
 
-        Direction c = Direction.Down;
-        Console.WriteLine(c.ToStringFast());
-        Console.WriteLine(c.ToDescription());
+        //Direction c = Direction.Down;
+        //Console.WriteLine(c.ToStringFast());
+        //Console.WriteLine(c.ToDescription());
 
-        Color c2 = Color.Red;
-        Console.WriteLine(c2.ToStringFast());
-        Console.WriteLine(c2.ToDescription());
+        Color.Red.ToStringFast();
+
+        //Color c2 = Color.Red;
+        //Console.WriteLine(c2.ToStringFast());
+        //Console.WriteLine(c2.ToDescription());
         // Console.WriteLine()
         GeneratedClass.GeneratedMethod();
-        new UserClass().UserMethod(); 
+        new UserClass().UserMethod();
     }
 
     static partial void HelloFrom(string name);
 
-    [EnumExtensions(ExtensionClassName = "DirectionExtensions")]
-    public enum Direction
-    {
-        [Description("左")]
-        Left,
-        [Description("右")]
-        Right,
-        [Description("上")]
-        Up,
-        [Description("下")]
-        Down,
-    }
+    //[EnumExtensions(ExtensionClassName = "DirectionExtensions")]
+    //public enum Direction
+    //{
+    //    [Description("左")]
+    //    Left,
+    //    [Description("右")]
+    //    Right,
+    //    [Description("上")]
+    //    Up,
+    //    [Description("下")]
+    //    Down,
+    //}
     [EnumExtensions]
-    public enum Color {
-        [Description("红")]
+    public enum Color
+    {
+        [Display(Name = "红")]
         Red,
-        [Description("绿")]
+        [Display(Name = "绿")]
         Green,
-        [Description("黄")]
+        [Display(Name = "黄")]
         Yellow,
-        [Description("粉")]
+        [Display(Name = "粉")]
         Pink,
-        [Description("黑")]
+        [Display(Name = "黑")]
         Black,
     }
     [GeneratorSerializable]
