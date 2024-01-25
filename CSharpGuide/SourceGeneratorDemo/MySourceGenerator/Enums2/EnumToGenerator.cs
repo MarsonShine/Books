@@ -16,10 +16,9 @@ namespace MySourceGenerator.Enums2;
 [Generator]
 internal class EnumToGenerator : IIncrementalGenerator
 {
-    private const string EnumExtensionsAttribute = "MySourceGenerator.Enums.EnumExtensionsAttribute";
+    private const string EnumExtensionsAttribute = "MySourceGenerator.Enums2.EnumExtensionsAttribute";
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
-        //Debugger.Launch();
         // 添加标记特性给编译器
         context.RegisterPostInitializationOutput(ctx => ctx.AddSource(
             "EnumExtensionsAttribute.g.cs",
@@ -33,7 +32,7 @@ internal class EnumToGenerator : IIncrementalGenerator
                 transform: static (ctx, _) => GetSemanticTargetForGeneration(ctx)) // 使用 [EnumExtensions] 属性选择枚举并提取详细信息
             .Where(static m => m is not null); // 不需要关心过滤器输出的错误
 
-        IncrementalValueProvider<(Compilation Compilation, ImmutableArray<EnumDeclarationSyntax> EnumDeclarationSyntaxes)> compilationAndEnums = context.CompilationProvider.Combine(enumDeclarations.Collect());
+        IncrementalValueProvider<(Compilation Compilation, ImmutableArray<EnumDeclarationSyntax?> EnumDeclarationSyntaxes)> compilationAndEnums = context.CompilationProvider.Combine(enumDeclarations.Collect());
 
         // 上面的两部可以用 ForAttributeWithMetadataName 一步完成
         //IncrementalValuesProvider<EnumToGenerate?> enumsToGenerate = context.SyntaxProvider
@@ -111,7 +110,7 @@ internal class EnumToGenerator : IIncrementalGenerator
         {
             // generate the source code and add it to the output
             string result = SourceGenerationHelper.GenerateExtensionClass(enumsToGenerate);
-            context.AddSource("EnumExtensions.g.cs", SourceText.From(result, Encoding.UTF8));
+            context.AddSource("EnumExtensions2.g.cs", SourceText.From(result, Encoding.UTF8));
         }
 
     }
@@ -140,7 +139,7 @@ internal class EnumToGenerator : IIncrementalGenerator
             }
 
             string enumName = enumSymbol.ToString();
-            string extensionName = enumName + "EnumExtensions";
+            string extensionName = "EnumExtensions";
 
             foreach (AttributeData attributeData in enumSymbol.GetAttributes())
             {

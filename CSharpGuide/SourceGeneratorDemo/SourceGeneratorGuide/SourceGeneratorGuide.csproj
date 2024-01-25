@@ -2,15 +2,21 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFrameworks>net8.0</TargetFrameworks>
+    <TargetFrameworks>net8.0;net7.0</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>preview</LangVersion>
     <!-- https://andrewlock.net/creating-a-source-generator-part-6-saving-source-generator-output-in-source-control/ -->
+    <!--以下设置在调试模式（开发阶段）设置比较方便，发布成nuget包建议取消-->
     <!-- 设置编译器生成文件，生成在 obj 文件夹中，如何想要将文件添加到项目中来（obj 文件夹一般会被 git ignore 排除），可以设置<CompilerGeneratedFilesOutputPath>属性 -->
     <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
-    <!-- <CompilerGeneratedFilesOutputPath>Generated</CompilerGeneratedFilesOutputPath> -->
+    <GeneratedFolder>Generated</GeneratedFolder>
+    <CompilerGeneratedFilesOutputPath>$(GeneratedFolder)\$(TargetFramework)</CompilerGeneratedFilesOutputPath>
   </PropertyGroup>
-
+  
+  <!--CompilerGeneratedFilesOutputPath 生成到项目，可以下面设置将源生成器的输出排除在编译之外-->
+  <ItemGroup>
+    <Compile Remove="$(GeneratedFolder)/**/*.cs"></Compile>
+  </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\MySourceGenerator\MySourceGenerator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>

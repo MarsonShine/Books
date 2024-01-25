@@ -1,16 +1,17 @@
 ﻿using System.Collections.Generic;
+using System.Diagnostics;
 using System.Text;
 
 namespace MySourceGenerator.Enums2;
 public static class SourceGenerationHelper
 {
     public const string Attribute = @"
-namespace MySourceGenerator.Enums
+namespace MySourceGenerator.Enums2
 {
     [System.AttributeUsage(System.AttributeTargets.Enum)]
     public class EnumExtensionsAttribute : System.Attribute
     {
-
+        public string ExtensionClassName { get; set; }
     }
 }
 ";
@@ -19,7 +20,7 @@ namespace MySourceGenerator.Enums
     {
         var sb = new StringBuilder();
         sb.Append(@"
-namespace MySourceGenerator.Enums
+namespace MySourceGenerator.Enums2
 {");
         foreach (var enumToGenerate in enumToGenerates)
         {
@@ -38,7 +39,7 @@ namespace MySourceGenerator.Enums
             }
             sb.Append(@"
                     _ => value.ToString(),
-                };
+            };
         }
     ");
         }

@@ -1,7 +1,17 @@
-﻿using System.ComponentModel;
+﻿using MySourceGenerator.Enums2;
+using System.ComponentModel;
 
 namespace MySourceGenerator
 {
+    namespace NestedEnum
+    {
+        [EnumExtensions]
+        public enum RoleEnum
+        {
+            None = 0,
+            Admin = 1
+        }
+    }
     public partial class UserClass
     {
         [AutoNotify]

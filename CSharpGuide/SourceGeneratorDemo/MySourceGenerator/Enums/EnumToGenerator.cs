@@ -17,7 +17,6 @@ internal class EnumToGenerator : IIncrementalGenerator
 {
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
-        //Debugger.Launch();
         // 添加标记特性给编译器
         context.RegisterPostInitializationOutput(ctx => ctx.AddSource(
             "EnumExtensionsAttribute.g.cs",
