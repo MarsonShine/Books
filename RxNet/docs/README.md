@@ -17,3 +17,5 @@
 - 发布操作符
 - 测试 Rx
 
+线上地址：[Rx.Net Ebook](https://github.com/dotnet/reactive/blob/main/Rx.NET/Documentation/IntroToRx/00_Foreword.md)
+
