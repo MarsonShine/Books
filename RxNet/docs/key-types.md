@@ -65,7 +65,7 @@ public static IDisposable Subscribe<T>(this IObservable<T> source, Action<T> onN
 
 这是一个辅助方法，它将委托封装在 `IObserver<T>` 的实现中，然后将其传递给 `IObservable<T>.Subscribe`。这样做的效果是，我们只需编写一个简单的方法（而不是 `IObserver<T>` 的完整实现），可观察源就会在每次需要提供值时调用我们的回调。使用这种辅助工具比自己实现 Rx 接口更为常见。
 
-### 热冷资源
+### 热冷源
 
 由于 `IObservable<T>` 在我们订阅之前无法为我们提供值，因此我们订阅的时间可能非常重要。试想一下，一个 `IObservable<Trade>` 描述了某个市场中发生的交易。如果它提供的信息是实时的，那么它就不会告诉你在你订阅之前发生的任何交易。在 Rx 中，这类信息源被描述为热源。
 
