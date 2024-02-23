@@ -223,3 +223,120 @@ Observable
 不过，这并不是展示 `SelectMany` 功能的好方法，因为本例不再使用它（本例使用 `Concat`，这将在[组合序列](https://github.com/dotnet/reactive/blob/main/Rx.NET/Documentation/IntroToRx/09_CombiningSequences.md)一章中讨论）。我们使用 `SelectMany` 的情况要么是我们知道我们正在解包一个单值序列，要么是我们没有特定的排序要求，而想在元素从子观测变量中出现时获取它们。
 
 ### SelectMany 的意义
+
+如果你是按顺序阅读本书各章的，那么你已经在前面几章中看到了两个关于 `SelectMany` 的示例。第 2 章[LINQ 操作符和组合](key-types.md)一节中的第一个示例就使用了它。下面是相关代码：
+
+```c#
+IObservable<int> onoffs =
+    from _ in src
+    from delta in 
+       Observable.Return(1, scheduler)
+                 .Concat(Observable.Return(-1, scheduler)
+                                   .Delay(minimumInactivityPeriod, scheduler))
+    select delta;
+```
+
+(如果你想知道其中对 `SelectMany` 的调用在哪里，请记住，如果一个查询表达式包含两个 `from` 子句，C# 编译器就会将它们变成对 `SelectMany` 的调用）。这说明了 Rx 中的一种常见模式，可以说是先向外扩展，然后再向内扩展。
+
+您可能还记得，这个示例的工作原理是为 src 产生的每个项目创建一个新的、短暂的 `IObservable<int>`。(这些子序列由示例中的 `delta` 范围变量表示，它们产生的值为 1，然后在指定的最小活动期（`minimumActivityPeriod`）之后，它们产生的值为-1。 这使我们能够计算最近发出的事件的数量）。这就是“扇出”部分，源序列中的项目会产生新的可观测序列。在这些情况下，`SelectMany` 是至关重要的，因为它可以将所有这些新序列平铺到一个输出序列中。
+
+我使用 `SelectMany` 的第二个地方略有不同：它是[第 3 章在 Rx 中表示文件系统事件](creating-observable-sequences.md)一节的最后一个示例。虽然该示例也是将多个观测源合并为一个观测对象，但观测对象列表是固定的：`FileSystemWatcher` 的每个不同事件都有一个观测对象。它使用了不同的操作符 `Merge`（我们将在[组合序列](https://github.com/dotnet/reactive/blob/main/Rx.NET/Documentation/IntroToRx/09_CombiningSequences.md)中介绍），在这种情况下使用 `Merge` 更为简单，因为只需将要组合的所有观察对象的列表传给它即可。但是，由于该代码还想做其他一些事情（包括延迟启动、自动处理以及在多个订阅者处于活动状态时共享单个源），因此用于实现这一目标的运算符的特定组合意味着我们的合并代码（返回 `IObservable<FileSystemEventArgs>` 的代码）需要作为转换步骤来调用。如果我们只使用 `Select`，结果将是一个 `IObservable<IObservable<FileSystemEventArgs>>`。代码的结构意味着它只会产生一个 `IObservable<IObservable<FileSystemEventArgs>`，因此双包类型会非常不方便。在这种情况下，`SelectMany` 非常有用。如果操作符的组合引入了一层额外的可观察对象中的可观察对象，而这层可观察对象是你不想要的，`SelectMany` 可以为你解开一层可观察对象。
+
+这两种情况——展开然后再合并，以及移除或避免观察者的嵌套层级——经常出现，这使得 `SelectMany` 成为一个重要的方法。（在之前的示例中，我无法避免使用它，这并不令人意外。）
+
+事实上，`SelectMany` 在 Rx 所基于的数学理论中也是一个特别重要的操作符。它是一个基本的操作符，可以使用它来构建许多其他的 Rx 操作符。[附录D中的使用 SelectMany 重新创建其他操作符](https://github.com/dotnet/reactive/blob/main/Rx.NET/Documentation/IntroToRx/D_AlgebraicUnderpinnings.md#recreating-other-operators-with-selectmany)一节展示了如何使用 `SelectMany` 来实现`Select` 和 `Where` 操作符。
+
+## Cast
+
+C# 的类型系统并非无所不知。有时，我们可能知道一些从可观察源中产生的值的类型，而这些值并没有反映在该源的类型中。这可能是基于特定领域的知识。例如，对于船只广播的 AIS 信息，我们可能知道，如果信息的类型是 3，那么它将包含导航信息。这意味着我们可以这样写：
+
+```c#
+IObservable<IVesselNavigation> type3 = 
+   receiverHost.Messages.Where(v => v.MessageType == 3)
+                        .Cast<IVesselNavigation>();
+```
+
+这使用了 `Cast`，它是一个标准的 LINQ 操作符，当我们知道某个集合中的项目属于某种比类型系统推断出的类型更特殊的类型时，就可以使用它。
+
+`Cast` 与第 5 章中介绍的 `OfType` 操作符的区别在于它们处理不属于指定类型的项的方式。`OfType` 是一个过滤操作符，因此它只会过滤掉不属于指定类型的项目。但是对于 `Cast`（就像 C# 中的普通 cast 表达式一样），我们断言源项将是指定类型的，因此如果源项产生了与指定类型不兼容的项，`Cast` 返回的可观察对象将调用其订阅者的 `OnError`。
+
+如果我们使用其他更基本的操作符来重现 `Cast` 和 `OfType` 的功能，可能会更容易理解这种区别。
+
+```c#
+// source.Cast<int>(); is equivalent to
+source.Select(i => (int)i);
+
+// source.OfType<int>();
+source.Where(i => i is int).Select(i => (int)i);
+```
+
+## Materialize 和 Dematerialize
+
+`Materialize` 操作符将 `IObservable<T>` 的源转换为 `IObservable<Notification<T>>` 类型。它会为源产生的每个项提供一个 `Notification<T>`，并且如果源终止，它会产生一个最终的 `Notification<T>`，指示它是成功完成还是出现错误。
+
+这非常有用，因为它生成描述整个序列的对象。如果你想记录可观察对象的输出，并希望在以后能够重放...那么你可能会使用 `ReplaySubject<T>`，因为它正是为这个任务而设计的。但是，如果你想要能够做一些不仅仅是重放序列的事情——比如在重放之前检查项目或甚至修改它们，你可能希望编写自己的代码来存储项目。`Notification<T>` 很有帮助，因为它使你能够以统一的方式表示源的所有操作。你不需要单独存储关于序列如何终止的信息，这些信息就是最终的`Notification<T>`。
+
+在单元测试中，你可以想象将其与 `ToArray` 结合使用。这将使你获得一个类型为 `Notification<T>[]` 的数组，其中包含对源的所有操作的完整描述，从而可以轻松编写询问序列中第三个出现的项是什么的测试。（Rx.NET 源代码本身在许多测试中使用 `Notification<T>`。）
+
+如果我们对序列进行 materialize 操作，我们可以看到被包装的值被返回。
+
+```c#
+Observable.Range(1, 3)
+          .Materialize()
+          .Dump("Materialize");
+```
+
+输出：
+
+```
+Materialize --> OnNext(1)
+Materialize --> OnNext(2)
+Materialize --> OnNext(3)
+Materialize --> OnCompleted()
+Materialize completed
+```
+
+请注意，当源序列完成时，被 materialize 序列会产生一个 `OnCompleted` 通知值，然后完成。`Notification<T>` 是一个抽象类，有三种实现：
+
+- OnNextNotification
+- OnErrorNotification
+- OnCompletedNotification
+
+`Notification<T>` 公开了四个公共属性以帮助您检查它：`Kind`、`HasValue`、`Value` 和 `Exception`。显然，只有 `OnNextNotification` 才会为 `HasValue` 返回 `true`，并为 `Value` 提供有用的实现。同样，`OnErrorNotification` 也是唯一有 `Exception` 值的实现。`Kind` 属性返回一个枚举，让你知道哪些方法适合使用。
+
+```c#
+public enum NotificationKind
+{
+    OnNext,
+    OnError,
+    OnCompleted,
+}
+```
+
+在下一个示例中，我们生成了一个故障序列。请注意，materialize 序列的最终值是 `OnErrorNotification`。此外，materialize 序列没有出错，而是成功完成。
+
+```c#
+var source = new Subject<int>();
+source.Materialize()
+      .Dump("Materialize");
+
+source.OnNext(1);
+source.OnNext(2);
+source.OnNext(3);
+
+source.OnError(new Exception("Fail?"));
+```
+
+输出：
+
+```
+Materialize --> OnNext(1)
+Materialize --> OnNext(2)
+Materialize --> OnNext(3)
+Materialize --> OnError(System.Exception)
+Materialize completed
+```
+
+将序列具像化可以非常方便地对序列进行分析或记录。您可以通过应用 `Dematerialize` 扩展方法来解除物质化序列。`Dematerialize` 仅适用于 `IObservable<Notification<TSource>>`。
+
+至此，我们完成了对转换操作符的介绍。它们的共同特点是为每个输入项产生一个输出（或者，在 `SelectMany` 的情况下，产生一组输出）。接下来，我们将看看可以将源中多个项目的信息组合起来的操作符。
