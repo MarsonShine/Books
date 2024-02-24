@@ -267,3 +267,208 @@ Subject completed
 
 ## 构建自己的聚合器
 
+如果前文所述的内置聚合不能满足您的需求，您可以创建自己的聚合。Rx 提供了两种不同的方法。
+
+### Aggregate
+
+`Aggregate` 方法非常灵活：我们可以用它构建本章迄今为止所展示的任何运算符。你为它提供一个函数，它就会为每个元素调用一次该函数。但它并不只是将元素传递给函数：它还为函数提供了一种汇总信息的方法。除了当前元素，它还会传递一个累加器。累加器可以是任何你喜欢的类型--这取决于你想要累加哪类信息。无论函数返回的是什么值，都将成为新的累加器值，并将该值与源的下一个元素一起传入函数。这种方法有几种变体，但最简单的重载是这样的：
+
+```c#
+IObservable<TSource> Aggregate<TSource>(
+    this IObservable<TSource> source, 
+    Func<TSource, TSource, TSource> accumulator)
+```
+
+如果您想为 `int` 值生成自己版本的 `Count`，只需提供一个函数，将源代码生成的每个值加 1 即可：
+
+```c#
+IObservable<int> sum = source.Aggregate((acc, element) => acc + 1);
+```
+
+为了理解这到底是在做什么，让我们来看看 `Aggregate` 将如何调用这个 lambda。为了更容易理解，假设我们将 lambda 放入自己的变量中：
+
+```c#
+Func<int, int, int> c = (acc, element) => acc + 1;
+```
+
+现在，假设源产生了一个值为 100 的项目。`Aggregate` 将调用我们的函数：
+
+```
+c(0, 100) // returns 1
+```
+
+第一个参数是当前累加器的值。`Aggregate` 使用 `default(int)` 作为初始累加器值，即 0。因此，如果数据源产生了第二个值，比如 200，`Aggregate` 将传递新的累加器和数据源的第二个值：
+
+```
+c(1, 200) // returns 2
+```
+
+这个函数完全忽略了它的第二个参数（源元素）。它只是每次在累加器中加 1。因此，累加器只不过是函数被调用次数的记录。
+
+现在我们来看看如何使用 `Aggregate` 实现 `Sum`：
+
+```c#
+Func<int, int, int> s = (acc, element) => acc + element
+IObservable<int> sum = source.Aggregate(s);
+```
+
+对于第一个元素，`Aggregate` 将再次传递我们所选累加器类型的默认值，即 int：0，并传递第一个元素的值。因此，如果第一个元素是 100，它将这样做
+
+```
+s(0, 100) // returns 100
+```
+
+然后，如果第二个元素是 200，`Aggregate` 就会进行调用：
+
+```
+s(100, 200) // returns 300
+```
+
+请注意，这次的第一个参数是 100，因为这是上一次调用 s 的返回值。因此在这种情况下，在看到 100 和 200 元素后，累加器的值是 300，即所有元素的总和。
+
+如果我们希望累加器的初始值不是 `default(TAccumulator)` 呢？有一个重载可以解决这个问题。例如，我们可以在下面使用 `Aggregate` 实现类似 All 的功能：
+
+```c#
+IObservable<bool> all = source.Aggregate(true, (acc, element) => acc && element);
+```
+
+顺便说一下，这并不完全等同于真正的 `All`：它处理错误的方式不同。如果 `All` 看到一个元素是假的，它就会立即取消订阅源，因为它知道源产生的其他任何东西都不可能改变结果。这就意味着，如果信息源即将产生错误，它将不再有机会产生错误，因为 `All` 取消了订阅。但是，`Aggregate` 无法知道累加器已经进入了一个永远无法离开的状态，因此它将继续订阅源，直到源完成（或者直到订阅了 `Aggregate` 返回的 `IObservable<T>` 的代码取消订阅）。这意味着，如果源返回 `true`，然后又返回 `false`，与 `All` 不同，`Aggregate` 将继续订阅源，因此如果源继续调用 `OnError`，`Aggregate` 将接收该错误，并将其传递给订阅者。
+
+以下是一些人认为对 `Aggregate` 有帮助的思考方式。如果源产生 1 到 5 的值，如果我们传递给 `Aggregate` 的函数称为 `f`，那么源完成后，`Aggregate` 产生的值将是这样的：
+
+```
+T result = f(f(f(f(f(default(T), 1), 2), 3), 4), 5);
+```
+
+因此，在我们重现 `Count` 的例子中，累加器的类型是 `int`，所以就变成了...：
+
+```c#
+int sum = s(s(s(s(s(0, 1), 2), 3), 4), 5);
+// Note: Aggregate doesn't return this directly -
+// it returns an IObservable<int> that produces this value.
+```
+
+Rx 的 `Aggregate` 并不会一次性执行所有这些调用：每次源产生一个元素时，它都会调用函数，因此计算会分散到不同的时间。如果你的回调函数是一个纯粹的函数--不受全局变量和其他环境因素的影响，并且对任何特定输入总是返回相同的结果--那么这并不重要。`Aggregate` 的结果将与前面例子中的大表达式一样。但是，如果你的回调行为受到全局变量或文件系统当前内容的影响，那么当源产生每个值时都会调用它这一事实可能会更加重要。
+
+顺便说一下，聚合在某些编程系统中还有其他名称。有些系统称其为 `reduce`。它还经常被称为折叠（fold）。(特别是左折叠。右折叠则相反。通常，它的函数以相反的顺序接受参数，因此看起来像 `s(1、s(2、s(3、s(4、s(5、0)))))`。Rx 不提供内置的右折叠。这并不自然，因为它必须等到收到最后一个元素后才能开始，这意味着它需要保留整个序列中的每个元素，然后在序列完成时一次性评估整个折叠）。
+
+你可能已经发现，在我重新实现某些内置聚合运算符的过程中，我直接从 `Sum` 转到了 `Any`。那么平均值呢？事实证明，我们无法使用我迄今为止向你展示的重载来实现它。这是因为 `Average` 需要累积两个信息--运行中的总数和计数--而且它还需要在最后执行一个步骤：用总数除以计数。通过目前展示的重载，我们只能实现部分功能：
+
+```c#
+IObservable<int> nums = Observable.Range(1, 5);
+
+IObservable<(int Count, int Sum)> avgAcc = nums.Aggregate(
+    (Count: 0, Sum: 0),
+    (acc, element) => (Count: acc.Count + 1, Sum: acc.Sum + element));
+```
+
+它使用元组作为累加器，使其能够累加两个值：计数和总和。但累加器的最终值变成了结果，而这并不是我们想要的。我们缺少了用总和除以计数来计算平均值的最后一步。幸运的是，`Aggregate` 提供了第三个重载，使我们能够提供最后一步。我们传递第二个回调，当源完成时，它将被调用一次。`Aggregate` 会将最后的累加器值传入这个 lambda，然后无论它返回什么，都会成为 `Aggregate` 返回的可观察对象生成的单个项目。
+
+```c#
+IObservable<double> avg = nums.Aggregate(
+    (Count: 0, Sum: 0),
+    (acc, element) => (Count: acc.Count + 1, Sum: acc.Sum + element),
+    acc => ((double) acc.Sum) / acc.Count);
+```
+
+我一直在展示 `Aggregate` 如何重新实现一些内置的聚合运算符，以说明它是一个功能强大且非常通用的运算符。然而，这并不是我们使用它的目的。`Aggregate` 之所以有用，正是因为它允许我们定义自定义聚合。
+
+例如，假设我想建立一个列表，列出所有通过 AIS 广播过详细信息的船只名称。下面是一种方法：
+
+```c#
+IObservable<IReadOnlySet<string>> allNames = vesselNames
+    .Take(10)
+    .Aggregate(
+        ImmutableHashSet<string>.Empty,
+        (set, name) => set.Add(name.VesselName));
+```
+
+我在这里使用 `ImmutableHashSet<string>`，是因为它的使用模式恰好与 `Aggregate` 非常匹配。普通的 `HashSet<string>` 也可以使用，但不太方便，因为它的 `Add` 方法不返回集合，所以我们的函数需要额外的语句来返回累积的集合：
+
+```c#
+IObservable<IReadOnlySet<string>> allNames = vesselNames
+    .Take(10)
+    .Aggregate(
+        new HashSet<string>(),
+        (set, name) =>
+        {
+            set.Add(name.VesselName);
+            return set;
+        });
+```
+
+无论采用上述哪种实现， `vesselNames` 都将生成一个 `IReadOnlySet<string>` 值，其中包含在报告名称的前 10 条信息中看到的每个船名。
+
+在最后两个示例中，我不得不对一个问题进行了修改。我让它们只在前 10 条合适的信息中工作。想想如果我没有 `Take(10)` 会发生什么。代码可以编译，但我们会遇到问题。我在各种示例中使用的 AIS 信息源是一个无穷无尽的信息源。在可预见的未来，船舶将继续在大洋上航行。Ais.NET 不包含任何代码来检测文明的终结，或者发明将船只使用变得过时的技术，因此它永远不会调用订阅者的 `OnCompleted` 方法。由 `Aggregate` 返回的可观察对象在其源完成或失败之前不会报告任何内容。因此，如果我们移除 `Take(10)`，行为将与 `Observable.Never<IReadOnlySet<string>>` 完全相同。我不得不强制输入到 `Aggregate` 的数据结束，以使其产生结果。但还有另一种方法。
+
+### Scan
+
+虽然聚合允许我们将完整的序列还原为一个单一的最终值，但有时这并不是我们所需要的。如果我们要处理的是一个无穷无尽的数据源，我们可能更需要一个类似于运行总计的东西，每次接收到一个值时都进行更新。`Scan` 操作符正是为满足这种需求而设计的。`Scan` 和 `Aggregate` 的签名是一样的，区别在于 `Scan` 不会等待输入结束。它在每个项目后都会产生一个聚合值。
+
+我们可以用它来建立一组船只名称，如上一节所述，但使用 `Scan` 时，我们不必等到输入结束。每次收到包含名称的信息时，它都会报告当前列表：
+
+```c#
+IObservable<IReadOnlySet<string>> allNames = vesselNames
+    .Scan(
+        ImmutableHashSet<string>.Empty,
+        (set, name) => set.Add(name.VesselName));
+```
+
+请注意，即使没有任何变化，这个 `allNames` 可观察对象也会产生元素。如果累积的名称集合已经包含了刚刚从 `vesselNames` 中出现的名称，调用 `set.Add` 将什么也做不了，因为该名称已经在集合中了。但是 `Scan` 扫描会为每个输入产生一个输出，而且不会在意累加器是否不变。至于这一点是否重要，取决于你打算如何使用 `allNames` 可观察对象，但如果需要，你可以使用[第 5 章中的 DistinctUntilChanged 操作符](https://github.com/dotnet/reactive/blob/main/Rx.NET/Documentation/IntroToRx/05_Filtering.md#distinct-and-distinctuntilchanged)轻松解决这个问题。
+
+你可以把 `Scan` 看作是显示其工作的 `Aggregate` 版本。如果我们想看看计算平均值的过程是如何聚合计数和总和的，我们可以这样写：
+
+```c#
+IObservable<int> nums = Observable.Range(1, 5);
+
+IObservable<(int Count, int Sum)> avgAcc = nums.Scan(
+    (Count: 0, Sum: 0),
+    (acc, element) => (Count: acc.Count + 1, Sum: acc.Sum + element));
+
+avgAcc.Dump("acc");
+```
+
+输出结果如下：
+
+```
+acc-->(1, 1)
+acc-->(2, 3)
+acc-->(3, 6)
+acc-->(4, 10)
+acc-->(5, 15)
+acc completed
+```
+
+在这里你可以清楚地看到，每次源产生一个值时，`Scan` 都会发射当前的累加值。
+
+与 `Aggregate` 不同的是，`Scan` 并不提供重载，而是使用第二个函数将累加器转换为结果。因此，我们在这里可以看到包含计数和求和的元组，但看不到我们想要的实际平均值。不过，我们可以使用[转换一章](transformation-sequences.md)中介绍的 `Select` 操作符来实现：
+
+```c#
+IObservable<double> avg = nums.Scan(
+    (Count: 0, Sum: 0),
+    (acc, element) => (Count: acc.Count + 1, Sum: acc.Sum + element))
+    .Select(acc => ((double) acc.Sum) / acc.Count);
+
+avg.Dump("avg");
+```
+
+输出：
+
+```
+avg-->1
+avg-->1.5
+avg-->2
+avg-->2.5
+avg-->3
+avg completed
+```
+
+`Scan` 是一个比 `Aggregate` 更通用的操作符。您可以通过将 `Scan` 与 [过滤一章中描述的 `TakeLast()` 操作符](operation-filtering.md)相结合来实现 `Aggregate`。
+
+```c#
+source.Aggregate(0, (acc, current) => acc + current);
+// is equivalent to 
+source.Scan(0, (acc, current) => acc + current).TakeLast();
+```
+
+聚合对于减少数据量或将多个元素结合起来以产生平均值或其他包含多个元素信息的测量值非常有用。但要进行某些分析，我们还需要在计算汇总值之前对数据进行切分或其他重组。因此，在下一章中，我们将了解 Rx 提供的各种数据分区机制。
