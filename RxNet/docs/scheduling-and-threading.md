@@ -299,3 +299,93 @@ Received 4 on thread: 12
 Received 5 on thread: 12
 ```
 
+请注意，所有通知都发生在不同的线程（id 12）上，而不是我们调用 `Subscribe` 的线程（id 1）上。这是因为 `TaskPoolScheduler` 的主要特点是通过任务并行库（TPL）的任务池调用所有工作。这就是我们看到不同线程 ID 的原因：任务池并不拥有我们应用程序的主线程。在这种情况下，它不需要启动多个线程。这很合理，因为这里只有一个源，一次只提供一个项目。在这种情况下，我们没有获得更多线程是件好事--当单线程按顺序处理工作项时，线程池的效率最高，因为这样可以避免上下文切换的开销，而且由于这里没有并发工作的实际范围，如果在这种情况下创建多个线程，我们将一无所获。
+
+这个调度器还有一个非常重要的不同点：注意到在任何通知到达我们的观察者之前，调用 `Subscribe` 就已经返回了。这是因为这是我们看到的第一个引入真正并行性的调度程序。即时调度程序（`ImmediateScheduler`）和当前线程调度程序（`CurrentThreadScheduler`）无论执行的操作员多么希望执行并发操作，都不会自行启动新的线程。虽然 `TaskPoolScheduler` 认为没有必要创建多个线程，但它创建的线程与应用程序的主线程不同，这意味着主线程可以继续与该订阅并行运行。由于 `TaskPoolScheduler` 不会在启动工作的线程上执行任何工作，因此它可以在排队完成工作后立即返回，从而使订阅方法可以立即返回。
+
+如果我们在示例中使用带有嵌套观察对象的 `TaskPoolScheduler` 呢？这只是在内部调用 `Range` 时使用，因此外部调用仍将使用默认的 `CurrentThreadScheduler`：
+
+```c#
+Observable
+    .Range(1, 5)
+    .SelectMany(i => Observable.Range(i * 10, 5, TaskPoolScheduler.Default))
+    .Subscribe(
+    m => Console.WriteLine($"Received {m} on thread: {Environment.CurrentManagedThreadId}"));
+```
+
+现在，我们可以看到更多的线程参与进来：
+
+```
+Received 10 on thread: 13
+Received 11 on thread: 13
+Received 12 on thread: 13
+Received 13 on thread: 13
+Received 40 on thread: 16
+Received 41 on thread: 16
+Received 42 on thread: 16
+Received 43 on thread: 16
+Received 44 on thread: 16
+Received 50 on thread: 17
+Received 51 on thread: 17
+Received 52 on thread: 17
+Received 53 on thread: 17
+Received 54 on thread: 17
+Subscribe returned
+Received 14 on thread: 13
+Received 20 on thread: 14
+Received 21 on thread: 14
+Received 22 on thread: 14
+Received 23 on thread: 14
+Received 24 on thread: 14
+Received 30 on thread: 15
+Received 31 on thread: 15
+Received 32 on thread: 15
+Received 33 on thread: 15
+Received 34 on thread: 15
+```
+
+由于本例中只有一个观察者，Rx 规则要求观察者一次只能得到一个项目，因此实际上并不存在并行性问题，但与上例相比，更复杂的结构会导致更多的工作项目进入调度程序的队列，这可能就是这次工作由多个线程执行的原因。实际上，这些线程的大部分时间都会被阻塞在 `SelectMany` 内部的代码中，以确保一次只向目标观察者传送一个项目。也许让人有点惊讶的是，这些项目并没有更加混乱。子范围本身似乎是以随机顺序出现的，但它几乎是按顺序在每个子范围内生成项目的（项目 14 是唯一的例外）。这是一个与 `Range` 与 `TaskPoolScheduler` 交互方式有关的怪异现象。
+
+我还没有谈到调度程序的第三项工作：记录时间。`Range` 不会出现这种情况，因为它会尽可能快地生成所有项目。但对于我在[定时调用](#定时调用)部分展示的 `Delay` 运算符来说，时间显然是一个关键因素。事实上，这正是展示调度程序所提供的 API 的好时机：
+
+```
+public interface IScheduler
+{
+    DateTimeOffset Now { get; }
+    
+    IDisposable Schedule<TState>(TState state, 
+                                 Func<IScheduler, TState, IDisposable> action);
+    
+    IDisposable Schedule<TState>(TState state, 
+                                 TimeSpan dueTime, 
+                                 Func<IScheduler, TState, IDisposable> action);
+    
+    IDisposable Schedule<TState>(TState state, 
+                                 DateTimeOffset dueTime, 
+                                 Func<IScheduler, TState, IDisposable> action);
+}
+```
+
+可以看出，除了一个重载外，其他所有重载都与时间有关。只有第一个 `Schedule` 重载与时间无关，操作员在调度工作时会调用它，以便在调度程序允许的情况下尽快运行工作。这就是 `Range` 使用的重载。(严格来说，`Range` 会询问调度程序是否支持长时间运行操作，在这种情况下，操作员可以对线程进行长时间的临时控制。在可能的情况下，`Range` 更倾向于使用这种方式，因为这往往比向调度程序提交每一个它希望生成的项目的工作更有效率。`TaskPoolScheduler` 确实支持长时间运行的操作，这也解释了我们前面看到的略微令人惊讶的输出，但 `Range` 默认选择的 `CurrentThreadScheduler` 却不支持。因此，默认情况下，`Range` 会为它希望生成的每一个项目调用一次第一个 `Schedule` 重载。
+
+`Delay` 使用第二个重载。具体的实现相当复杂（主要是因为当繁忙的源导致它落后时，它如何有效地跟上），但实质上，每当一个新的项目到达 `Delay` 操作符时，它就会调度一个工作项目在配置的延迟后运行，这样它就能在预期的时间转移后向其订阅者提供该项目。
+
+调度程序必须负责管理时间，因为 .NET 有几种不同的定时器机制，而定时器的选择往往取决于要处理定时器回调的上下文。由于调度程序决定了工作运行的上下文，这意味着他们也必须选择定时器类型。例如，用户界面框架通常提供在适合更新用户界面的上下文中调用回调的定时器。Rx 提供了一些特定于用户界面框架的调度程序来使用这些定时器，但这些定时器在其他情况下并不合适。因此，每个调度程序都使用适合其运行工作项的上下文的计时器。
+
+这样做还有一个有用的结果：由于 `IScheduler` 为定时相关的细节提供了一个抽象，因此可以将时间虚拟化。这对测试非常有用。如果你查看 [Rx 软件仓库](https://github.com/dotnet/reactive)中的大量测试套件，就会发现其中有许多测试验证了与时间相关的行为。如果这些测试是实时运行的，那么测试套件的运行时间就会太长，而且还可能会产生一些虚假故障，因为与测试在同一台机器上运行的后台任务偶尔会改变执行速度，从而可能会混淆测试。相反，这些测试使用专门的调度程序，可以完全控制时间的流逝。(更多信息，请参阅后面的[测试调度程序](https://github.com/dotnet/reactive/blob/main/Rx.NET/Documentation/IntroToRx/11_SchedulingAndThreading.md#test-schedulers)部分，后面还有一[整章的测试内容](https://github.com/dotnet/reactive/blob/main/Rx.NET/Documentation/IntroToRx/16_TestingRx.md)）。
+
+请注意，所有三个 `IScheduler.Schedule` 方法都需要回调。调度程序会在它选择的时间和上下文中调用回调。调度器回调的第一个参数是另一个 `IScheduler`。这用于需要重复调用的情况，我们稍后会看到。
+
+Rx 提供多种调度程序。下文将介绍使用最广泛的调度程序。
+
+### ImmediateScheduler
+
+`ImmediateScheduler` 是 Rx 提供的最简单的调度程序。正如你在前面的章节中所看到的，只要要求它调度一些工作，它就会立即运行。这是在 `IScheduler.Schedule` 方法中实现的。
+
+这是一种非常简单的策略，它使 `ImmediateScheduler` 非常高效。因此，许多操作员默认使用 `ImmediateScheduler`。不过，对于即时生成多个项目的操作符来说，这可能会有问题，尤其是当项目数量可能很多时。例如，Rx 为 `IEnumerable<T>` 定义了 `ToObservable` 扩展方法。当您订阅由该方法返回的 `IObservable<T>` 时，它将立即开始遍历集合，如果您让它使用 `ImmediateScheduler`，`Subscribe` 将在到达集合的末尾时才返回。这对于无限序列来说显然是个问题，这也是此类操作符默认不使用 `ImmediateScheduler` 的原因。
+
+当调用使用 `TimeSpan` 的 `Schedule` 重载时，`ImmediateScheduler` 还可能出现令人惊讶的行为。这要求调度程序在指定的时间长度后运行某些工作。它的实现方式是调用 `Thread.Sleep`。对于大多数 Rx 的调度器，这个重载方法会安排某种定时器机制来延迟执行代码，使当前线程可以继续进行其他操作，但是 `ImmediateScheduler` 在这里真正做到了立即执行。它会阻塞当前线程，直到执行工作的时间到来。这意味着如果你指定了这个调度器，像 `Interval` 返回的基于时间的可观察对象仍然可以工作，但代价是阻止线程执行其他任务。
+
+使用 `DateTime` 的 `Schedule` 重载略有不同。如果指定的时间小于未来 10 秒，它将阻塞调用线程，就像使用 `TimeSpan` 时一样。但如果你传递的 `DateTime` 是更远的未来时间，它就会放弃立即执行，转而使用定时器。
+
+### CurrentThreadScheduler
