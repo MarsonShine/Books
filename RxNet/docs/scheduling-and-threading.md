@@ -389,3 +389,169 @@ Rx 提供多种调度程序。下文将介绍使用最广泛的调度程序。
 使用 `DateTime` 的 `Schedule` 重载略有不同。如果指定的时间小于未来 10 秒，它将阻塞调用线程，就像使用 `TimeSpan` 时一样。但如果你传递的 `DateTime` 是更远的未来时间，它就会放弃立即执行，转而使用定时器。
 
 ### CurrentThreadScheduler
+
+`CurrentThreadScheduler` 与 `ImmediateScheduler` 非常相似。不同之处在于，当当前线程已在处理现有工作项时，它如何处理调度工作的请求。如果将多个使用调度程序执行工作的操作符连锁在一起，就会出现这种情况。
+
+要了解会发生什么，了解快速连续生成多个项目的源是很有帮助的，例如 `IEnumerable<T>` 或 `Observable.Range` 的 `ToObservable` 扩展方法是如何使用调度程序的。这类操作符不使用普通的 `for` 或 `foreach` 循环。它们通常会为每次迭代安排一个新的工作项（除非调度器碰巧为长期运行的工作做出了特殊规定）。`ImmediateScheduler` 会立即运行这些工作，而 `CurrentThreadScheduler` 则会检查它是否已经在处理一个工作项。我们可以从前面的例子中看到这一点：
+
+```c#
+Observable
+    .Range(1, 5)
+    .SelectMany(i => Observable.Range(i * 10, 5))
+    .Subscribe(
+        m => Console.WriteLine($"Received {m} on thread: {Environment.CurrentManagedThreadId}"));
+```
+
+让我们来看看这里到底发生了什么。首先，假设这段代码只是在正常运行，而不是在任何不寻常的上下文中--也许是在程序的主入口中。当这段代码在 `SelectMany` 返回的 `IObservable<int>` 上调用 `Subscribe` 时，`SelectMany` 将反过来在第一个 `Observable.Range` 返回的 `IObservable<int>` 上调用 `Subscribe`，这将反过来调度一个工作项，用于生成范围中的第一个值 range(1)。
+
+由于我们没有向 `Range` 明确传递调度程序，它将使用默认的 `CurrentThreadScheduler`，并会自问“我是否已在处理此线程上的某个工作项？”在这种情况下，答案将是“否”，因此它会立即运行该工作项（在返回 `Range` 操作符调用的 `Schedule` 之前）。然后，`Range` 操作符将产生它的第一个值，并在 `IObserver<int>` 上调用 `OnNext`，该 `IObserver<int>` 是 `SelectMany` 操作符在订阅 `Range` 时提供的。
+
+`SelectMany` 操作符的 `OnNext` 方法现在将调用其 lambda，并传递所提供的参数（来自 `Range` 操作符的值 1）。从上面的示例中可以看到，这个 lambda 会再次调用 `Observable.Range`，返回一个新的 `IObservable<int>`。`SelectMany` 将立即对此进行订阅（在从其 `OnNext` 返回之前）。这是这段代码第二次调用 `Range` 返回的 `IObservable<int>` 的 `Subscribe`（但与上次不同），`Range` 将再次默认使用 `CurrentThreadScheduler`，并再次调度一个工作项来执行第一次迭代。
+
+因此，`CurrentThreadScheduler` 会再次自问：“我是否已在处理此线程上的某个工作项？”但这次，答案是肯定的。这就是当前线程调度器的行为与即时调度器的不同之处。`CurrentThreadScheduler` 会为每个使用它的线程维护一个工作队列，在这种情况下，它只是将新安排的工作添加到队列中，然后返回到 `SelectMany` 操作符 `OnNext`。
+
+现在，`SelectMany` 已经完成了对第一个 `Range` 中的项（值 `1`）的处理，因此它的 `OnNext` 返回。此时，外部 `Range` 操作符会调度另一个工作项。同样，`CurrentThreadScheduler` 会检测到当前正在运行一个工作项，因此会将其添加到队列中。
+
+在调度了将生成第二个值（`2`）的工作项后，`Range` 运算符返回。请记住，此时 `Range` 运算符中正在运行的代码是第一个已调度工作项的回调，因此它将返回到 `CurrentThreadScheduler`--我们又回到了它的 `Schedule` 方法（由 `Range` 运算符的 `Subscribe` 方法调用）中。
+
+此时，`CurrentThreadScheduler` 不会从 `Schedule` 返回，因为它会检查其工作队列，并会发现队列中现在有两个项目。(其中一个是嵌套 `Range` 观察对象计划生成第一个值的工作项，另一个是顶层 `Range` 观察对象刚刚计划生成第二个值的工作项）。现在，`CurrentThreadScheduler` 将执行其中的第一项：嵌套 `Range` 运算符现在可以生成第一个值（将是 `10`），因此它将调用 `SelectMany` 提供的观察者的 `OnNext`，该观察者将调用其观察者。该观察者将调用我们传递给 `Subscribe` 的 lambda，从而运行 `Console.WriteLine`。返回后，嵌套的 `Range` 操作符将调度另一个工作项来生成第二个工作项。同样，`CurrentThreadScheduler` 会意识到它已经在处理该线程上的一个工作项，因此它只是将其放入队列，然后立即从 `Schedule` 返回。嵌套 `Range` 操作符现在已完成本次迭代，因此它返回调度程序。调度程序现在将拾取队列中的下一个项目，在本例中就是由顶层 `Range` 添加的工作项目，从而产生第二个项目。
+
+如此循环往复。当工作已经在进行时，工作项的这种排队方式使多个可观测源可以并行地进行工作。
+
+相比之下，`ImmediateScheduler` 会立即运行新的工作项，因此我们看不到这种并行进展。
+
+(准确地说，在某些情况下，`ImmediateScheduler` 无法立即运行工作）。在这些迭代场景中，它实际上提供了一个稍有不同的调度程序，操作员用它来调度第一个项目后的所有工作，并检查它是否被要求同时处理多个工作项目。如果是，它就会退回到与 `CurrentThreadScheduler` 类似的队列策略，只不过它是初始工作项的本地队列，而不是每个线程队列。这样可以避免多线程带来的问题，还可以避免迭代操作员在当前工作项的处理程序内调度新工作项时出现堆栈溢出。由于队列不是线程中所有工作的共享队列，因此仍能确保工作项排队的任何嵌套工作在调用 Schedule 返回前完成。因此，即使这种队列启动，我们通常也不会看到来自不同来源的工作交错，就像使用 `CurrentThreadScheduler` 时那样。例如，如果我们让嵌套 `Range` 使用 `ImmediateScheduler`，那么当 `Range` 开始迭代时，这种队列行为就会启动，但由于队列是该嵌套 `Range` 执行的初始工作项的本地队列，因此它最终会在返回前完成所有嵌套 `Range` 项的工作。
+
+### DefaultScheduler
+
+`DefaultScheduler` 适用于需要在一段时间内分散执行的工作，或者可能需要并发执行的工作。这些特性意味着它不能保证在任何特定线程上运行工作，实际上它是通过 CLR 的线程池来调度工作的。这是 Rx 所有基于时间的操作符的默认调度器，也是 `Observable.ToAsync` 操作符的默认调度器，它可以将 .NET 方法封装为 `IObservable<T>`。
+
+如果您希望工作不在当前线程上进行，这个调度器就非常有用--也许您正在编写一个带有用户界面的应用程序，您希望避免在负责更新用户界面和响应用户输入的线程上进行过多的工作。如果你想让所有工作都在一个线程上进行，而不是你现在所在的线程呢？有另一个调度程序可以解决这个问题。
+
+### EventLoopScheduler
+
+`EventLoopScheduler` 提供一次性调度，对新调度的工作项进行排队。这与 `CurrentThreadScheduler` 仅在一个线程中使用时的运行方式类似。不同的是，`EventLoopScheduler` 为这项工作创建了一个专用线程，而不是使用你碰巧调度工作的任意线程。
+
+与我们迄今为止研究过的调度程序不同，`EventLoopScheduler` 没有静态属性。这是因为每个调度器都有自己的线程，所以需要明确创建一个。它提供了两个构造函数：
+
+```c#
+public EventLoopScheduler()
+public EventLoopScheduler(Func<ThreadStart, Thread> threadFactory)
+```
+
+第一种是为你创建线程。第二种可以让你控制线程创建过程。它会调用你提供的回调，并将自己的回调传递给你，要求你在新创建的线程上运行。
+
+`EventLoopScheduler` 实现了 `IDisposable`，调用 `Dispose` 可以终止线程。这可以很好地与 `Observable.Using` 方法配合使用。下面的示例展示了如何使用 `EventLoopScheduler` 在专用线程上遍历 `IEnumerable<T>` 的所有内容，并确保在遍历结束后退出线程：
+
+```c#
+IEnumerable<int> xs = GetNumbers();
+Observable
+    .Using(
+        () => new EventLoopScheduler(),
+        scheduler => xs.ToObservable(scheduler))
+    .Subscribe(...);
+```
+
+### NewThreadScheduler
+
+`NewThreadScheduler` 会创建一个新线程来执行给定的每个工作项。这在大多数情况下都没有意义。不过，在需要执行一些长期运行的工作并通过 `IObservable<T>` 表示其完成的情况下，它可能会很有用。`Observable.ToAsync` 正是这样做的，它通常会使用 `DefaultScheduler`，这意味着它会在线程池线程上运行工作。**但如果工作时间可能超过一到两秒，线程池可能就不是一个好的选择，因为它是为短执行时间而优化的，而且其管理线程池大小的启发式设计并没有考虑到长时间运行的操作**。在这种情况下，`NewThreadScheduler` 可能是更好的选择。
+
+虽然每次调用 `Schedule` 都会创建一个新线程，但 `NewThreadScheduler` 会在工作项回调中传递一个不同的调度器，这意味着任何试图执行迭代工作的操作都不会为每次迭代创建一个新线程。例如，如果将 `NewThreadScheduler` 与 `Observable.Range` 结合使用，每次订阅所产生的 `IObservable<int>` 时都会获得一个新线程，但不会为每个项目都创建一个新线程，即使 `Range` 确实为每个生成的值安排了一个新的工作项。它通过工作项回调中提供的嵌套调度器安排这些每个值的工作项，而 `NewThreadScheduler` 在这些情况下提供的嵌套调度器会在同一个线程上执行所有这样的嵌套工作项。
+
+### SynchronizationContextScheduler
+
+这将通过同步上下文调用所有工作。这在用户界面场景中非常有用。大多数 .NET 客户端用户界面框架都提供了一个 `SynchronizationContext`，可用于在适合更改用户界面的上下文中调用回调。(通常这涉及在正确的线程上调用它们，但个别实现可以决定什么是适当的上下文）。
+
+### TaskPoolScheduler
+
+使用 [TPL 任务](https://learn.microsoft.com/en-us/dotnet/standard/parallel-programming/task-parallel-library-tpl)通过线程池调用所有工作。TPL 是在 CLR 线程池多年后引入的，现在是通过线程池启动工作的推荐方式。在添加 TPL 时，线程池在通过任务调度工作时使用的算法与使用旧版线程池 API 时使用的算法略有不同。这种更新的算法使其在某些情况下更有效率。现在的文档对此含糊其辞，因此不清楚这些差异在现代 .NET 中是否仍然存在，但任务仍然是使用线程池的推荐机制。出于向后兼容的原因，Rx 的 `DefaultScheduler` 使用了较早的 CLR 线程池 API。在性能至关重要的代码中，如果有大量工作在线程池线程上运行，您可以尝试使用 `TaskPoolScheduler` 来代替，看看它是否能为您的工作负载带来任何性能优势。
+
+### ThreadPoolScheduler
+
+使用 TPL 之前的旧 线程池 API，通过线程池调用所有工作。这种类型是一种历史产物，可以追溯到并非所有平台都提供同类线程池的时代。几乎在所有情况下，如果你想要这种类型所设计的行为，就应该使用 `DefaultScheduler`（尽管 `TaskPoolScheduler` 可能会提供不同的行为）。只有在编写 UWP 应用程序时，使用 `ThreadPoolScheduler` 才会有所区别。`System.Reactive` v6.0 的 UWP 目标为该类提供了与所有其他目标不同的实现。它使用 `Windows.System.Threading.ThreadPool`，而所有其他目标都使用 `System.Threading.ThreadPool`。UWP 版本提供的属性可让你配置 UWP 线程池的一些特定功能。
+
+实际上，在新代码中最好避免使用该类。UWP 目标有不同实现的唯一原因是，UWP 以前不提供 `System.Threading.ThreadPool`。但当 UWP 在 Windows 10.0.19041 版本中添加了对 .NET Standard 2.0 的支持后，情况就发生了变化。现在已经没有任何充分的理由再需要 UWP 专用的 `ThreadPoolScheduler` 了，而且这种类型在 UWP 目标中截然不同，这也是造成混乱的原因之一，但出于向后兼容的目的，它必须保留。(它很可能会被弃用，因为 Rx 7 将解决 `System.Reactive` 组件目前直接依赖 UI 框架这一事实所带来的一些问题）。如果使用 `DefaultScheduler`，无论您在哪个平台上运行，都将使用 `System.Threading.ThreadPool`。
+
+### UI 框架调度器：ControlScheduler, DispatcherScheduler and CoreDispatcherScheduler
+
+尽管 `SynchronizationContextScheduler` 适用于 .NET 中所有广泛使用的客户端 UI 框架，但 Rx 提供了更专业的调度程序。`ControlScheduler` 适用于 Windows 窗体应用程序，`DispatcherScheduler` 适用于 WPF，`CoreDispatcherScheduler` 适用于 UWP。
+
+这些更专业的类型有两个好处。首先，你不一定要在目标 UI 线程上才能获得这些调度器的实例。而对于 `SynchronizationContextScheduler`，一般来说，获得所需的 `SynchronizationContext` 的唯一方法是在 UI 线程上运行时检索 `SynchronizationContext.Current`。但其他这些特定于 UI 框架的调度器可以通过一个合适的 `Control`、`Dispatcher` 或 `CoreDispatcher` 来获取，而这些调度器可以从非 UI 线程中获取。其次，`DispatcherScheduler` 和 `CoreDispatcherScheduler` 提供了一种使用 `Dispatcher` 和 `CoreDispatcher` 类型所支持的优先级机制的方法。
+
+### Test Schedulers
+
+Rx 库定义了几种虚拟化时间的调度程序，包括 `HistoricalScheduler`、`TestScheduler`、`VirtualTimeScheduler` 和 `VirtualTimeSchedulerBase`。我们将在[测试](https://github.com/dotnet/reactive/blob/main/Rx.NET/Documentation/IntroToRx/16_TestingRx.md)一章介绍这类调度程序。
+
+## SubscribeOn 和 ObserveOn
+
+到目前为止，我已经讲过为什么有些 Rx 源需要访问调度器。这对于与时间相关的行为以及尽快生产项目的源都是必要的。但请记住，调度器程序控制三件事：
+
+- 确定执行工作的上下文（如某个线程）
+- 决定何时执行工作（如立即执行或延迟执行）
+- 跟踪时间
+
+迄今为止的讨论主要集中在第二和第三项功能上。当涉及到我们自己的应用代码时，我们最有可能使用调度程序来控制第一个方面。为此，Rx 为 `IObservable<T>` 定义了两个扩展方法： 这两个方法都接收一个 `IScheduler` 并返回一个 `IObservable<T>`，因此您可以在它们的下游链入更多操作符。
+
+这些方法的作用和它们的名字一样。如果使用 `SubscribeOn`，那么当你在生成的 `IObservable<T>` 上调用 `Subscribe` 时，它会通过指定的调度程序来调用原始 `IObservable<T>` 的 `Subscribe` 方法。下面是一个例子：
+
+```c#
+Console.WriteLine($"[T:{Environment.CurrentManagedThreadId}] Main thread");
+
+Observable
+    .Interval(TimeSpan.FromSeconds(1))
+    .SubscribeOn(new EventLoopScheduler((start) =>
+    {
+        Thread t = new(start) { IsBackground = false };
+        Console.WriteLine($"[T:{t.ManagedThreadId}] Created thread for EventLoopScheduler");
+        return t;
+    }))
+    .Subscribe(tick => 
+          Console.WriteLine(
+            $"[T:{Environment.CurrentManagedThreadId}] {DateTime.Now}: Tick {tick}"));
+
+Console.WriteLine($"[T:{Environment.CurrentManagedThreadId}] {DateTime.Now}: Main thread exiting");
+```
+
+这将调用 `Observable.Interval`（默认情况下使用 `DefaultScheduler`），但不是直接订阅，而是首先获取 `Interval` 返回的 `IObservable<T>` 并调用 `SubscribeOn`。 我使用了 `EventLoopScheduler`，并给它传递了一个它将使用的线程的工厂回调，以确保它是一个非后台线程。(默认情况下，`EventLoopScheduler` 会将自己创建为后台线程，这意味着该线程不会强制进程保持活动状态。通常情况下，这是你想要的，但我在本例中改变了这一设置，以显示正在发生的事情）。
+
+当我在 `SubscribeOn` 返回的 `IObservable<long>` 上调用 `Subscribe` 时，它会在我提供的 `EventLoopScheduler` 上调用 `Schedule`，然后在该工作项的回调中，它会在原始 `Interval` 源上调用 `Subscribe`。因此，对底层源的订阅不会在我的主线程中进行，而是在为 `EventLoopScheduler` 创建的线程中进行。运行程序会产生以下输出：
+
+```
+[T:1] Main thread
+[T:12] Created thread for EventLoopScheduler
+[T:1] 21/07/2023 14:57:21: Main thread exiting
+[T:6] 21/07/2023 14:57:22: Tick 0
+[T:6] 21/07/2023 14:57:23: Tick 1
+[T:6] 21/07/2023 14:57:24: Tick 2
+...
+```
+
+请注意，我的应用程序主线程在源代码开始产生通知之前就退出了。但也请注意，新创建线程的线程 ID 是 12，而我的通知是在另一个线程上发出的，线程 ID 是 6！这是怎么回事？
+
+这种情况经常让人措手不及。订阅可观察源的调度器并不一定会影响源启动和运行后的表现。还记得我之前说过 `Observable.Interval` 默认使用 `DefaultScheduler` 吗？我们在这里没有为 `Interval` 指定调度程序，因此它将使用默认调度程序。它并不关心我们从哪个上下文调用它的 `Subscribe` 方法。因此，在这里引入 `EventLoopScheduler` 的唯一作用就是让进程在主线程退出后仍然存活。调度器线程在对 `Observable.Interval` 返回的 `IObservable<long>` 进行初始 `Subscribe` 调用后，实际上再也不会被使用。它只是耐心地等待着对 `Schedule` 的进一步调用，而这些调用从未出现过。
+
+不过，并非所有源都完全不受调用 `Subscribe` 的上下文的影响。如果我替换这一行
+
+```c#
+.Interval(TimeSpan.FromSeconds(1))
+```
+
+用下面来替代：
+
+```c#
+.Range(1, 5)
+```
+
+输出：
+
+```
+[T:1] Main thread
+[T:12] Created thread for EventLoopScheduler
+[T:12] 21/07/2023 15:02:09: Tick 1
+[T:1] 21/07/2023 15:02:09: Main thread exiting
+[T:12] 21/07/2023 15:02:09: Tick 2
+[T:12] 21/07/2023 15:02:09: Tick 3
+[T:12] 21/07/2023 15:02:09: Tick 4
+[T:12] 21/07/2023 15:02:09: Tick 5
+```
+
