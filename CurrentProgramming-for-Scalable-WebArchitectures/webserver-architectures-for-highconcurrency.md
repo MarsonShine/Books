@@ -351,6 +351,12 @@ Gustafsson [^Gus05] 得出了类似的结果。导致线程使用繁琐的不是
 
 总的来说，选择适当的编程模型应该基于对高并发 Web 服务器的具体需求，考虑到性能、可伸缩性、内存使用、开发复杂性和环境兼容性。同时，随着技术的进步，新的语言特性和编程范式的出现可能会进一步缓解传统并发编程的一些挑战，使得在现代多核环境中构建高性能服务器变得更加容易和有效。
 
+## 总结
+
+在开发高性能的服务器时，无论是采用线程、事件还是两者的结合，都已成为一种可行的可能性。然而，当传统的同步、阻塞式 I/O 模型被用于大规模 I/O 并行处理时，性能就会遭受挫折。同样，使用大量线程的做法也受到了性能损失的限制，这是由于持续的上下文切换和由于线程栈大小导致的内存消耗。另一方面，事件驱动的服务器架构则因其编程风格的可理解性较差而受到影响，并且通常不能直接利用真正的 CPU 并行性。结合型的方法尝试特别规避单一模型固有的问题，或者提出了同时结合两种模型的概念。
+
+我们现在已经看到，基于线程和事件驱动的方法本质上是彼此的对偶，并且长期以来一直在网络服务器社区中引起分歧。获得协同调度和异步/非阻塞 I/O 操作的好处是 I/O 密集型服务器应用的主要愿望之一——然而，在线程阵营和事件阵营之间更广泛、混合的论战中，这一点往往被忽视。
+
 [^2]: https://www.usenix.org/legacy/events/hotos03/tech/full_papers/blake/blake.pdf
 [^4]: STEVENS, W. Richard; FENNER, Bill RUDOFF, Andrew M.: *Unix Network Programming, Volume 1: The Sockets Networking API (3rd Edition)*, Addison-Wesley Professional (2003)
 [^Pai99]: https://www.usenix.org/legacy/event/usenix99/full_papers/pai/pai.pdf
