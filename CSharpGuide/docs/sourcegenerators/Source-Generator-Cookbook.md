@@ -946,7 +946,7 @@ private static string Generate(ClassDeclarationSyntax c)
             {
                 sb.Append("\\\"");
             }
-            sb.Append($"{{this.{name}.ToString()}}");
+            sb.Append($"{this.{name}.ToString()}");
             if (p.Type.ToString() != "int")
             {
                 sb.Append("\\\"");
