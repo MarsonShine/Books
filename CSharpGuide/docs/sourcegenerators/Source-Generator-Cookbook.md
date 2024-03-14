@@ -177,12 +177,12 @@ public class AugmentingGenerator : ISourceGenerator
         // add the generated implementation to the compilation
         SourceText sourceText = SourceText.From($@"
 public partial class {userClass.Identifier}
-{%{
+{
     private void GeneratedMethod()
-    {%{
+    {
         // generated code
-    }%}
-}%}", Encoding.UTF8);
+    }
+}", Encoding.UTF8);
         context.AddSource("UserClass.Generated.cs", sourceText);
     }
 
@@ -430,12 +430,12 @@ public class JsonUsingGenerator : ISourceGenerator
 
         context.AddSource("myGeneratedFile.cs", SourceText.From($@"
 namespace GeneratedNamespace
-{%{
+{
     public class GeneratedClass
-    {%{
+    {
         public static const SerializedContent = serializedContent;
-    }%}
-}%}", Encoding.UTF8));
+    }
+}", Encoding.UTF8));
 
     }
 
@@ -959,27 +959,27 @@ private static string Generate(ClassDeclarationSyntax c)
     return $@"
 using System.Text;
 partial class {c.Identifier.ToString()}
-{%{
+{
     public string Serialize()
-    {%{
+    {
         var sb = new StringBuilder();
-        sb.AppendLine(""{%{"");
+        sb.AppendLine(""{"");
         int indent = 8;
 
         // Body
 {sb.ToString()}
 
-        sb.AppendLine(""}%}"");
+        sb.AppendLine(""}"");
 
         return sb.ToString();
 
         void addWithIndent(string s)
-        {%{
+        {
             sb.Append(' ', indent);
             sb.AppendLine(s);
-        }%}
-    }%}
-}%}";
+        }
+    }
+}";
     void appendWithIndent(string s)
     {
         sb.Append(' ', indent);
