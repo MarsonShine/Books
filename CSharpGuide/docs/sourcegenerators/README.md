@@ -130,13 +130,13 @@ Source Generator 可以提供的另一个功能是避免使用一些“严格类
    using System;
    
    namespace {mainMethod.ContainingNamespace.ToDisplayString()}
-   {{
+   {
        public static partial class {mainMethod.ContainingType.Name}
-       {{
+       {
            static partial void HelloFrom(string name) =>
-               Console.WriteLine($""Generator says: Hi from '{{name}}'"");
-       }}
-   }}
+               Console.WriteLine($""Generator says: Hi from '{name}'"");
+       }
+   }
    ";
                var typeName = mainMethod.ContainingType.Name;
    
