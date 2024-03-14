@@ -177,12 +177,12 @@ public class AugmentingGenerator : ISourceGenerator
         // add the generated implementation to the compilation
         SourceText sourceText = SourceText.From($@"
 public partial class {userClass.Identifier}
-{{
+{%{
     private void GeneratedMethod()
-    {{
+    {%{
         // generated code
-    }}
-}}", Encoding.UTF8);
+    }%}
+}%}", Encoding.UTF8);
         context.AddSource("UserClass.Generated.cs", sourceText);
     }
 
@@ -430,12 +430,12 @@ public class JsonUsingGenerator : ISourceGenerator
 
         context.AddSource("myGeneratedFile.cs", SourceText.From($@"
 namespace GeneratedNamespace
-{{
+{%{
     public class GeneratedClass
-    {{
+    {%{
         public static const SerializedContent = serializedContent;
-    }}
-}}", Encoding.UTF8));
+    }%}
+}%}", Encoding.UTF8));
 
     }
 
@@ -885,30 +885,31 @@ public string Serialize()
 让我们从一个基本的模板开始。我们添加了一个完整的 source generator，因此我们需要生成一个与输入类同名的类，它有一个名为 `Serialize` 的公共方法，还有一个填充区，在这里我们可以写出属性。
 
 ```c#
-string template = @"
+string template = """
 using System.Text;
 partial class {0}
-{{
+{
     public string Serialize()
-    {{
+    {
         var sb = new StringBuilder();
-        sb.AppendLine(""{{"");
+        sb.AppendLine("{");
         int indent = 8;
 
         // Body
 {1}
 
-        sb.AppendLine(""}}"");
+        sb.AppendLine("}");
 
         return sb.ToString();
 
         void addWithIndent(string s)
-        {{
+        {
             sb.Append(' ', indent);
             sb.AppendLine(s);
-        }}
-    }}
-}}";
+        }
+    }
+}
+""";
 ```
 
 现在我们已经知道了代码的一般结构，我们需要检查输入类型并找到要填写的所有正确信息。这些信息在我们示例中的 c# SyntaxTree 中都是可用的。假设我们得到了一个 `ClassDeclarationSyntax`，它被确认附加了一个 generation 属性。然后我们可以获取类的名称和它的属性名称，如下所示：
@@ -958,27 +959,27 @@ private static string Generate(ClassDeclarationSyntax c)
     return $@"
 using System.Text;
 partial class {c.Identifier.ToString()}
-{{
+{%{
     public string Serialize()
-    {{
+    {%{
         var sb = new StringBuilder();
-        sb.AppendLine(""{{"");
+        sb.AppendLine(""{%{"");
         int indent = 8;
 
         // Body
 {sb.ToString()}
 
-        sb.AppendLine(""}}"");
+        sb.AppendLine(""}%}"");
 
         return sb.ToString();
 
         void addWithIndent(string s)
-        {{
+        {%{
             sb.Append(' ', indent);
             sb.AppendLine(s);
-        }}
-    }}
-}}";
+        }%}
+    }%}
+}%}";
     void appendWithIndent(string s)
     {
         sb.Append(' ', indent);
