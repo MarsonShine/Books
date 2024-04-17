@@ -119,6 +119,8 @@ Reactor 要求主线程（I/O处理单元）只负责监听文件描述上是否
 
 ![](./asserts/eventmodel-reactor.png)
 
+关于 Reactor 模式更多内容移步：[了解 Reactor 模式：基于线程和事件驱动](../blogs/2024/understanding-reactor-pattern-thread-based-and-event-driven.md)
+
 ### Proactor 模式
 
 与 Reactor 模式不同，**Proactor 模式将所有I/O操作都交给主线程和内核来处理，工作线程仅仅负责业务逻辑。**
