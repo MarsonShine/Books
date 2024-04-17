@@ -214,10 +214,184 @@ Reactor 框架旨在简化分布式应用程序的开发，特别是网络服务
 
 一般来说，通过采用这种高度解耦的面向对象分解，与原始方法相比，开发和维护服务器日志守护进程的工作量显著减少。
 
-[^6]: 
-[^7]: 
-[^3]: 
-[^4]: 
-[^1]: 
-[^9]: 
-[^10]: 
+#### 4.2.1 连接相关机制
+
+- **ACE_Acceptor** 类：提供了一个通用模板，用于一系列类的标准化和自动化步骤，这些类负责接受来自客户端的网络连接请求。图 10 展示了 `ACE_Acceptor` 类的类接口。这个类继承自 `ACE_Event_Handler`，使其能够与 Reactor 框架交互。此外，这个模板类由以下内容参数化：一个复合的 `PEER_HANDLER` 子类（必须知道如何与客户端执行 I/O），一个 `PEER_ACCEPTOR` 类（必须知道如何接受客户端连接），以及 `PEER_ADDR`（适当的地址族的 C++ 包装器）。
+
+  ![](../asserts/reactor-pattern-figure10.png)
+
+  从 `ACE_Acceptor` 模板实例化的类能够执行以下行为：
+
+  1. 接受来自远程客户端的连接请求；
+  2. 动态分配 `PEER_HANDLER` 子类的实例；
+  3. 将此对象与 Reactor 实例注册。相应地，`PEER_HANDLER` 类必须知道如何处理与客户端交换的数据。
+
+  ![](../asserts/reactor-pattern-figure11.png)
+
+  图 11 展示了 `ACE_Acceptor` 类的实现。当一个或多个连接请求到达时，`handle_input` 方法由 Reactor 自动调度。此方法的行为如下：
+
+  - 首先，它动态创建一个单独的 `PEER_HANDLER` 对象，负责处理从每个新客户端接收的日志记录。
+  - 接下来，它接受传入的连接到该对象中。
+  - 最后，它调用 `open` 钩子。这个钩子可以将新创建的 `PEER_HANDLER` 对象注册到 Reactor 实例，或者可以生成一个单独的控制线程等。
+
+- **ACE_Svc_Handler 类**：这个参数化类型为处理从客户端发送的数据提供了一个通用的模板。例如，在分布式日志记录设施中，I/O 格式涉及日志记录。然而，不同的应用程序可以很容易地替换为不同的格式。通常情况下，从 `ACE_Svc_Handler` 实例化的类的对象会被动态创建并注册到 Reactor 中，由 `ACE_Acceptor` 类中的 `handle_input` 例程完成注册。`ACE_Svc_Handler` 类的接口如图12所示。与 `ACE_Acceptor` 类一样，这个类继承了 `ACE_Event_Handler` 基类的功能。
+
+  图13展示了 `ACE_Svc_Handler` 类的实现。当分配该类的对象时，构造函数会缓存关联客户端的主机地址。如图7中的“console”窗口所示，这个主机的名称会与从*客户端日志守护进程*接收到的日志记录一起打印出来。
+
+  `ACE_Svc_Handler::handle_input` 方法只是简单地调用纯虚方法 `recv`。这个 `recv` 函数必须由`ACE_Svc_Handler` 的子类提供，它负责执行特定于应用程序的 I/O 行为。注意继承、动态绑定和参数化类型的组合如何进一步将框架的通用部分（如连接建立）与应用程序特定功能（如接收日志记录）解耦。
+
+  当 `ACE_Reactor` 从内部表中移除一个 `ACE_Svc_Handler` 对象时，对象的 `handle_close` 方法会自动被调用。默认情况下，这个方法会释放对象的内存（最初由 `ACE_Acceptor` 类的 `handle_input` 方法分配）。通常情况下，当客户端日志守护进程关闭或发生严重传输错误时，会将对象移除。为了确保 `ACE_Svc_Handler` 对象只能动态地分配和释放，析构函数在类的私有部分声明（如图12底部所示）。
+  
+  ![](../asserts/reactor-pattern-figure12.png)
+
+图12：处理程序服务的类接口
+
+#### 4.2.2 应用程序特定服务
+
+- **Logging_Acceptor 类**：为了实现分布式日志记录应用程序，`Logging_Acceptor` 类是从通用 `ACE_Acceptor` 模板实例化的，如下所示：
+
+  ```c++
+  typedef ACE_Acceptor<Logging_Handler, ACE_SOCK_Acceptor, ACE_INET_Addr> Logging_Acceptor;
+  ```
+
+  `PEER_HANDLER` 参数使用 `Logging_Handler` 类实例化（在下面的项目中描述），`PEER_ACCEPTOR` 被 `ACE_SOCK_Acceptor` 类替换，`PEER_ADDR` 是 `ACE_INET_Addr` 类。
+
+  `ACE_SOCK_*` 和 `ACE_INET_Addr` 实例化类型是称为 `SOCK_SAP`[^8] 的 C++ 包装器的一部分。`SOCK_SAP` 封装了 BSD 套接字接口，用于在可能在不同主机机器上运行的两个进程之间可靠地传输数据。然而，这些类也可能是任何其他符合参数化类中使用的接口的网络接口（例如，用于 System V 传输层接口（TLI）的 TLI_SAP 包装器）。例如，根据底层操作系统平台的某些属性（例如，它是 BSD 还是 System V 变体的 UNIX），日志应用程序可能会实例化 `ACE_Svc_Handler` 类来使用 `SOCK_SAP` 或 `TLI_SAP`，如下所示：
+
+  ```c++
+  // 日志应用程序。
+  #if defined (MT_SAFE_SOCKETS)
+  typedef ACE_SOCK_Stream PEER_STREAM;
+  #else
+  typedef ACE_TLI_Stream PEER_STREAM;
+  #endif // MT_SAFE_SOCKETS.
+  
+  class Logging_Handler : public ACE_Svc_Handler<PEER_STREAM, ACE_INET_Addr> { // ... };
+  ```
+
+  这种基于模板的方法提供的灵活性程度在开发必须跨多个操作系统平台运行的应用程序时非常有用。事实上，通过传输接口参数化应用程序的能力在操作系统平台的变体中也很有用（例如，SunOS 5.2 不提供线程安全的套接字实现）。
+
+- **Logging_Handler 类**：这个类是通过实例化 `ACE_Svc_Handler` 类来创建的，如下所示：
+
+  ```c++
+  class Logging_Handler : public ACE_Svc_Handler<ACE_SOCK_Stream, ACE_INET_Addr> {
+  public:
+      // 开启钩子。
+      virtual int open (void) {
+          // 注册我们自己到 Reactor，这样当来自客户端的 I/O 到达时，我们可以自动被调度。
+          reactor_.register_handler(this, ACE_Event_Handler::READ_MASK);
+      }
+      // 复用钩子。
+      virtual int handle_input (ACE_HANDLE);
+  };
+  ```
+
+  `PEER_STREAM` 参数被 `ACE_SOCK_Stream` 类替换，`PEER_ADDR` 参数被 `ACE_INET_Addr` 类替换。当底层 `ACE_SOCK_Stream` 上有输入到达时，`handle_input` 方法会自动由 `ACE_Reactor` 调用。它的实现如下：
+
+  ```c++
+  // 处理来自客户端的远程日志传输的回调例程。
+  int Logging_Handler::handle_input (ACE_HANDLE) {
+      size_t len;
+      ssize_t n = this->peer_stream_.recv(&len, sizeof len);
+      if (n == sizeof len) {
+          Log_Record lr;
+          len = ntohl(len);
+          n = this->peer_stream_.recv_n(&lr, len);
+          if (n != len) ACE_ERROR_RETURN((LM_ERROR, "%p at host %s\n", "client logger", this->host_name), -1);
+          lr.decode();
+          if (lr.len == n) lr.print(this->host_name, 0, stderr);
+          else ACE_ERROR_RETURN((LM_DEBUG, "error, lr.len = %d, n = %d\n", lr.len, n), -1);
+          return 0;
+      } else return n;
+  }
+  ```
+
+  请注意，这个示例执行两次 `recv` 调用，以通过底层 TCP 连接模拟面向消息的服务（回想一下，TCP 提供的是字节流导向的服务，而不是记录导向的服务）。第一个 `recv` 读取了下一个日志记录的长度（存储为固定大小的整数）。第二个 `recv` 读取了“长度”字节以获取实际记录。自然地，发送此消息的客户端也必须遵循此消息框架协议。
+
+#### 4.2.3 主驱动程序
+
+以下事件循环驱动基于 Reactor 的日志服务器：
+
+```c++
+int main (int argc, char *argv[]) {
+    // 事件复用器。
+    ACE_Reactor reactor;
+
+    const char *program_name = argv[0];
+    ACE_LOG_MSG->open (program_name);
+
+    if (argc != 2) ACE_ERROR_RETURN ((LM_ERROR, "usage: %n port-number\n"), -1);
+    u_short server_port = ACE_OS::atoi (argv[1]);
+
+    // 事件复用器的实现并不完全健壮，它处理“短读”的方式。
+    Logging_Acceptor acceptor (&reactor, (ACE_INET_Addr) server_port);
+    reactor.register_handler (&acceptor);
+
+    // 循环“永远”接受连接和处理日志记录。
+    for (;;) reactor.handle_events ();
+    /* NOTREACHED */
+    return 0;
+}
+```
+
+主程序开始时打开一个日志通道，将服务器生成的任何日志记录导向其自身的标准错误流。图 11 和 13 中的示例代码展示了服务器如何使用应用程序日志接口记录其自身的诊断消息。请注意，由于这种安排没有递归地使用服务器日志守护进程，因此不会造成“无限日志循环”的危险。
+
+![](../asserts/reactor-pattern-figure13.png)
+
+图13：Svc_Hanlder 类实现
+
+然后，服务器打开 Reactor 的一个实例，`实例化一个 Logging_Acceptor` 对象，并将此对象注册到 Reactor 。接下来，服务器进入一个无限循环，在该循环中，`handle_events` 方法会阻塞，直到从客户端日志守护进程接收到事件。图 14 展示了在两个客户端已经联系了 Reactor 并成为分布式日志服务的参与者之后，日志服务器守护进程的状态。如图中所示，为每个客户端动态实例化并注册了一个 `Logging_Handler` 对象。随着传入事件的到来， Reactor 通过自动调度以下内容来处理它们：(1) `Logging_Acceptor` 和 `Logging_Handler` 类的 `handle_input` 方法。当来自客户端日志守护进程的连接请求到达时，会调用 `Logging_Acceptor::handle_input` 函数。同样，当来自先前连接的客户端日志守护进程的日志记录或关闭消息到达时，会调用 `Logging_Handler::handle_input` 函数。图 7 描绘了整个系统在执行期间的情况。日志记录从应用程序日志接口生成，转发到客户端日志守护进程，通过网络传输到服务器日志守护进程，最后显示在服务器日志控制台上。所显示的日志信息指示了 (1) 应用程序接口生成日志记录的时间，(2) 应用程序运行的主机机器，(3) 应用程序的进程标识符，(4) 日志记录的优先级级别，(5) 应用程序的命令行名称（即，“`argv[0]`”），以及 (6) 包含日志消息文本的任意文本字符串。
+
+![](../asserts/reactor-pattern-figure14.png)
+
+图14：服务器日志守护进程运行时配置
+
+### 4.3 评估替代的日志实现
+
+本节将根据几个软件质量因素（如模块化、可扩展性、可重用性和可移植性）比较分布式日志设施的面向对象和非面向对象版本。
+
+#### 4.3.1 非面向对象版本
+
+基于 Reactor 的分布式日志设施是对早期功能等效的非面向对象日志设施的面向对象重新实现。原始版本是为基于 BSD UNIX 的商业在线事务处理产品开发的。它最初用 C 语言编写，并直接使用了 BSD 套接字和 `select`。后来，它被移植到了一个只提供基于 System V 的 TLI 和 `poll` 接口的系统。原始的 C 实现由于以下原因难以修改、扩展和移植：(1) 功能紧密耦合，以及 (2) 过度使用全局变量。例如，原始版本中的事件复用、服务调度和事件处理操作与接受客户端连接请求和接收客户端日志记录紧密耦合。此外，使用了几个全局数据结构来维护 (1) 每个客户端的上下文信息（如客户端主机名和当前处理状态）和 (2) 标识适当上下文记录的 I/O 句柄之间的关系。因此，对程序的任何增强或修改都直接影响现有源代码。
+
+#### 4.3.2 面向对象版本
+
+面向对象的基于 Reactor 的版本使用数据抽象、继承、动态绑定和模板来 (1) 最小化对全局变量的依赖，以及 (2) 将处理传入连接和数据的应用程序策略与执行复用和调度的底层机制解耦。基于 Reactor 的日志设施不包含全局变量。相反，每个与 Reactor 注册的 `Logging_Handler` 对象都封装了客户端地址和用于与客户端通信的底层 I/O 句柄。
+
+通过解耦策略和机制，提高了多个软件质量因素。例如，系统组件的可重用性和可扩展性得到了改进，这简化了最初的开发工作和随后的修改。由于 Reactor 框架执行所有低级事件复用和服务调度，实现第 4.1 节中描述的服务器日志守护进程只需要少量的额外代码。此外，额外的代码主要涉及应用程序处理活动（如接受新连接和接收客户端日志记录）。此外，模板有助于将应用程序特定代码定位在少数几个定义良好的模块中。
+
+ Reactor 架构中策略和机制的分离，便于在其公共接口的“上方”和“下方”进行可扩展性和可移植性。例如，扩展服务器日志守护进程的功能（例如，添加“认证日志”功能）是直接的。这些扩展只需继承 `ACE_Event_Handler` 基类并选择性地实现必要的虚拟方法。同样，通过实例化 `ACE_Acceptor` 和 `ACE_Svc_Handler` 模板，可以在不重新开发现有基础设施的情况下生产后续应用程序。另一方面，以这种方式修改原始的非面向对象 C 版本需要直接更改现有代码。
+
+还可以修改 Reactor 的底层 I/O 复用机制，而不影响现有应用程序代码。例如，将基于 Reactor 的分布式日志设施从 BSD 平台移植到 System V 平台，不需要对应用程序代码进行可见更改。另一方面，将原始 C 版本的分布式日志设施从套接字/`select`移植到 TLI/`pool`是一项繁琐且耗时的工作。它还在源代码中引入了几个微妙的错误，这些错误直到运行时才显现出来。此外，在某些通信密集型应用程序中，数据总是立即在一个或多个句柄上可用。因此，通过非阻塞 I/O 轮询这些句柄可能比使用 `select` 或 `poll` 更有效率。如前所述，扩展 Reactor 以支持这种替代的复用实现不会修改其公共接口。
+
+### 4.4 C++ 语言影响
+
+几个 C++ 语言特性对 Reactor 的设计以及使用其功能的分布式日志设施至关重要。例如，C++ 类提供的数据隐藏能力通过封装和隔离 `select` 和 `pool` 之间的差异来提高可移植性。同样，将 C++ 类对象（而不是独立的子程序）注册到 Reactor 的技术有助于将应用程序特定的上下文信息与多个访问此信息的方法集成在一起。参数化类型通过允许使用除 `Logging_Handler` 和 `ACE_SOCK_Acceptor` 之外的 `PEER_HANDLER` 和 `PEER_ACCEPTOR` 来增加 `ACE_Acceptor` 类的可重用性。此外，继承和动态绑定通过允许开发人员在不修改现有代码的情况下增强 Reactor 及其相关应用程序的功能，从而促进了透明的可扩展性。
+
+动态绑定在 Reactor 中得到了广泛使用。先前的 C++ Report 文章讨论了 `IPC_SAP` 包装器[^8]，在设计“瘦身” C++ 包装器时通常建议避免使用动态绑定。特别是，由间接虚表调度引起的开销可能会阻碍开发人员使用更模块化和类型安全的面向对象接口。然而，与 `IPC_SAP` 不同， Reactor 框架不仅仅提供了一个围绕底层操作系统系统调用的面向对象的外表。因此，清晰度、可扩展性和模块性的显著增加弥补了效率的轻微降低。此外， Reactor 通常用于开发分布式系统。仔细检查分布式系统的主要开销源会发现，大多数性能瓶颈来自于缓存、延迟、网络/主机接口硬件、表示级格式化、内存到内存复制和进程管理等活动。因此，由动态绑定引起的额外内存引用开销相比之下是微不足道的[^13]。
+
+为了实证地证明这些论断，即将到来的 C++ Report 文章将展示一个基准测试实验的结果，该实验测量 `IPC_SAP` 和 Reactor 的性能。这些性能结果基于一个分布式系统基准测试工具，该工具测量分布式环境中的客户端/服务器性能。这个工具还指示了使用 IPC 机制的 C++ 包装器的开销。具体来说，有两个功能等效的基准测试工具版本：(1) 使用 `IPC_SAP` 和 Reactor  C++ 包装器的面向对象版本，以及 (2) 直接使用套接字、`select` 和 `poll` 系统调用的非面向对象的 C 语言版本。实验以受控的方式测量面向对象实现和非面向对象实现的性能。
+
+## 5 结论性评论
+
+Reactor 是一个面向对象的框架，它通过将现有的操作系统复用机制封装在一个面向对象的 C++ 接口中，简化了并发的、事件驱动的分布式系统的开发。它实现了这一点，总体上通过分离策略和机制，支持现有系统组件的重用，提高了可移植性，并提供了透明的可扩展性。基于 Reactor 的方法的一个缺点是，最初可能很难概念化应用程序的主控制线程的位置。这是像 Reactor 或更高层次的 X-windows 工具包这样的事件循环驱动的调度器所面临的典型问题。然而，围绕这种“间接事件回调”调度模型的混淆通常在编写了几个使用这种方法的应用程序后很快就会消失。 Reactor 和 `IPC_SAP` C++ 包装器的源代码和文档可在 http://www.cs.wustl.edu/~schmidt/ACE.html 在线获取。此次发布还包括一套测试程序和示例，以及许多其他封装命名管道、STREAM 管道、mmap 和 System V IPC 机制（即，消息队列、共享内存和信号量）的 C++ 包装器。即将在 C++ Report 中发表的文章将描述这些包装器的设计和实现。
+
+## 参考文献
+
+[^2]: W. R. Stevens, Advanced Programming in the UNIX Environment. Reading, Massachusetts: Addison Wesley, 1992.
+[^6]: D. C. Schmidt, “The Reactor: An Object-Oriented Interface for Event-Driven UNIX I/O Multiplexing (Part 1 of 2),” C++ Report, vol. 5, February 1993.
+[^7]: R. E. Barkley and T. P. Lee, “A Heap-Based Callout Implementation to Meet Real-Time Needs,” in Proceedings of the USENIX Summer Conference, pp. 213–222, USENIX Association, June 1988.
+[^3]: M. A. Linton and P. R. Calder, “The Design and Implementation of InterViews,” in Proceedings of the USENIX C++ Workshop, November 1987.
+[^4]: D. C. Schmidt, “Transparently Parameterizing Synchronization Mechanisms into a Concurrent Distributed Application,” C++ Report, vol. 6, July/August 1994.
+[^5]: T. H. Harrison, D. C. Schmidt, and I. Pyarali, “Asynchronous Completion Token: an Object Behavioral Pattern for Efficient Asynchronous Event Handling,” in Proceedings of the 3rd Annual Conference on the Pattern Languages of Programs, (Monticello, Illinois), pp. 1–7, September 1996.
+[^6]: D. E. Comer and D. L. Stevens, Internetworking with TCP/IP Vol II: Design, Implementation, and Internals. Englewood Cliffs, NJ: Prentice Hall, 1991.
+
+
+
+[^1]: D. C. Schmidt, “The Reactor: An Object-Oriented Interface for Event-Driven UNIX I/O Multiplexing (Part 1 of 2),” *C++* *Report*, vol. 5, February 1993.
+[^9]: UNIX Software Operations, UNIX System V Release 4 Programmer’s Guide: STREAMS. Prentice Hall, 1990.
+[^10]: G. Booch, Object Oriented Analysis and Design with Applications (2nd Edition). Redwood City, California: Benjamin/Cummings, 1993.
+[^11]: D. C. Schmidt, “Acceptor and Connector: Design Patterns for Initializing Communication Services,” in Proceedings of the 1st European Pattern Languages of Programming Conference, July 1996.
+[^12]: D. C. Schmidt and T. Suda, “Transport System Architecture Services for High-Performance Communications Systems,” IEEE Journal on Selected Areas in Communication, vol. 11, pp. 489–506, May 1993.
+[^8]: D. C. Schmidt, “IPC SAP: An Object-Oriented Interface to Interprocess Communication Services,” C++ Report, vol. 4, November/December 1992.
+[^13]: A. Koenig, “When Not to Use Virtual Functions,” C++ Journal, vol. 2, no. 2, 1992.
