@@ -89,7 +89,7 @@ addr % cache_number;
 
 组相连有什么好处呢？这样会提高缓存命中率，更加灵活的替换策略。
 
-> 关于替换策略的内容其实非常复杂，比如有利用[局部性原理](memory-hierarchy.md#内存管理与优化策略——局部性原理（Principle of Locatily）)的，也有最不常用策略（Least-Frequently-Used,LFU）、最近最少使用（Least-Recently-Used,LRU）等。
+> 关于替换策略的内容其实非常复杂，比如有利用[局部性原理](memory-hierarchy.md)的，也有最不常用策略（Least-Frequently-Used,LFU）、最近最少使用（Least-Recently-Used,LRU）等。
 
 ## 缓存一致性问题
 
