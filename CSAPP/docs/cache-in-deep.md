@@ -200,3 +200,36 @@ S：**在共享状态下，各个CPU核心目标缓存都是一致的，所以�
 
 > MESI协议其实是MSI的优化版本，相较于MSI，MESI减少了与[MSI协议](https://zh.wikipedia.org/wiki/MSI%E5%8D%8F%E8%AE%AE)相关的主存事务的数量，显著提高了性能。
 
+### MESI 协议的状态
+
+1. **Modified（M）**：缓存行是最新的，数据已被修改且只存在于当前缓存中（未写回主存）。
+2. **Exclusive（E）**：缓存行是最新的，数据与主存一致且只存在于当前缓存中（其他缓存没有此数据）。
+3. **Shared（S）**：缓存行数据与主存一致，可能存在于多个缓存中。
+4. **Invalid（I）**：缓存行无效，数据无效。
+
+### 状态转换图及其规则
+
+以下是各个状态之间的转换以及导致这些转换的操作。
+
+#### 从 Modified 状态的转换
+
+- **Read Miss**：另一个处理器请求读取当前缓存行。当前缓存行写回主存，然后转换为 Shared。
+- **Write Miss**：另一个处理器请求写入当前缓存行。当前缓存行写回主存，然后转换为 Invalid。
+- **Flush**：处理器将缓存行写回主存，转换为 Invalid（通常不发生在实际操作中）。
+
+#### 从 Exclusive 状态的转换
+
+- **Read Miss**：另一个处理器请求读取当前缓存行。转换为 Shared。
+- **Write Miss**：另一个处理器请求写入当前缓存行。转换为 Invalid。
+- **Local Write**：当前处理器写入缓存行。转换为 Modified。
+
+#### 从 Shared 状态的转换
+
+- **Write Miss**：另一个处理器请求写入当前缓存行。转换为 Invalid。
+- **Local Write**：当前处理器写入缓存行。广播无效化，转换为 Modified。
+- **Read Miss**：另一个处理器请求读取当前缓存行。保持 Shared。
+
+#### 从 Invalid 状态的转换
+
+- **Read Miss**：当前处理器请求读取数据。如果其他缓存有此数据且为 Shared 或 Exclusive，转换为 Shared；如果其他缓存无此数据（主存），转换为 Exclusive。
+- **Write Miss**：当前处理器请求写入数据。如果其他缓存有此数据且为 Shared 或 Exclusive，广播无效化，转换为 Modified。
