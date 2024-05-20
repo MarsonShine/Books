@@ -25,6 +25,12 @@ namespace HelloWorld
 }";
         public static void Main()
         {
+            StringSyntaxExample.SetDataFormat("yyyy-MM-dd");
+            StringSyntaxExample.SetJsonDataFormat(""); // 无反应
+            StringSyntaxExample.SetRegexDataFormat("");
+            StringSyntaxExample.SetData("hello {0} {1} {2}", 1, 2, 3);
+            StringSyntaxExample.SetXml("<xml></xml>");
+
             SyntaxTree tree = CSharpSyntaxTree.ParseText(programText);
             CompilationUnitSyntax root = tree.GetCompilationUnitRoot();
 
