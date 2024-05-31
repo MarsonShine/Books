@@ -31,7 +31,7 @@
 | `score`           | 标识符 (Identifier)          | `[a-zA-Z_][a-zA-Z0-9_]*` |
 | `)`               | 右圆括号 (Right Parenthesis) | `\)`                     |
 
-## LEX 程序
+### LEX 程序
 
 词法分析器生成工具 Lex，也叫 Flex。它支持使用正则表达式来描述各个词法单元的模式，由此给出一个词法分析器的规约。Lex 工具的输入表示方法称为 Lex 语言(Lex language)，而工具本身则称为 Lex 编译器(Lex compiler) 。在它的核心部分,  Lex 编译器将输入的模式转换成一个状态转换图，并生成相应的实现代码，
 
@@ -116,7 +116,7 @@ int installNumO {/* similar to installlD, but puts numer-ictal constants into a 
 }
 ```
 
-## NFA -> DFA
+### NFA -> DFA
 
 **NFA（Nondeterministic Finite Automaton，非确定有限状态自动机）**到 **DFA（Deterministic Finite Automaton，确定有限状态自动机）**的转换是编译原理中一个重要的过程，称为**子集构造法（subset construction method）**。这个过程涉及将一个可能具有多条转移路径的非确定性自动机转换为一个在任何状态下最多只有一条转移路径的确定性自动机。
 
@@ -152,7 +152,7 @@ int installNumO {/* similar to installlD, but puts numer-ictal constants into a 
 
 ![](./asserts/4.png)
 
-## 正则表达式构建 DFA
+### 正则表达式构建 DFA
 
 1. **构建正则表达式的抽象语法树**。
 
@@ -167,8 +167,56 @@ int installNumO {/* similar to installlD, but puts numer-ictal constants into a 
 
 3. 构造出 D 的状态集 Dstates 和 D 的转换函数 Dtran。D 的状态就是T 中的位置集合。每个状态最初都是“未标记的”，当我们开始考虑某个状态的离开转换时,  该状态变成“已标记的”。D 的开始状态是 `firstpos(n0)，其中结点 n0 是 T 的根结点。这个 DFA 的接受状态集合是那些包含了和结束标记#对应的位置的状态。 
 
-### 计算 followpos
+#### 计算 followpos
 
 1. 如果 n 是一个连接结点，且其左右子结点分别为 C1、C2，那么对于 `lastpos(c1)`中的每个位置 i，`firstpos(C2)` 中的所有位置都在 `followpos(i)` 中。
 2. 如果 n 是 star 结点，并且 i 是 `lastpos(n)` 中的一个位置，那么 `firstpos(n)` 中的所有位置都在 `followpos (i)` 中。
+
+## 语法分析
+
+语法分析一些代表性的文法：
+
+E 表示一组以+号分隔的项所组成的表达式；
+
+T 表示由一组以 * 号分隔的因子所组成的项；
+
+F表示因子，它可能是括号括起的表达式，也可能是标识符；
+
+```
+E—>E + T | T
+
+T —>T *F  | F
+
+F—>(E) | id
+```
+
+无左递归版本：
+
+```
+E—> TE'
+E'—>+ TE'|ε
+T—> FT'
+T'—>* FT'|ε
+F—>(E)|id
+```
+
+下面的文法以相同的方式处理 + 和 *，可以处理语法分析过程中处理二义性的技术：
+
+```
+E—>E + E|E*E|(E)|id
+```
+
+### 上下文无关法
+
+一个上下文无关文法（简称文法）由终结符号、非终结符号、一个开始符号和一组产生式组成。
+
+```
+stmt ——> if(expr) stmt else stmt
+```
+
+上述产生式中，各部分如下：
+
+- **终结符号**：if、else、(、) 
+- **非终结符号**：stmt、expr
+- 开始符号：stmt
 
