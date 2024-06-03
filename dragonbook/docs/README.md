@@ -220,3 +220,24 @@ stmt ——> if(expr) stmt else stmt
 - **非终结符号**：stmt、expr
 - 开始符号：stmt
 
+### 文法二义性
+
+如果一个文法可以为某个句子生成多颗语法分析树，那么它就是**二义性（ambiguous）**的。也就是说，二义性文法就是对同一个句子有多个最左推导或多个最右推导的文法。
+
+例如：许句子id + id * id具有两个最左推导：
+
+```
+E => E + E
+  => id + E
+  => id + E * E
+  => id + id * E
+  => id + id * id
+```
+```
+E => E + E
+  => E + E * E
+  => id + E * E
+  => id + id * E
+  => id + id * id
+```
+
