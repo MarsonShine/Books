@@ -1,5 +1,6 @@
 ﻿// See https://aka.ms/new-console-template for more information
 // https://learn.microsoft.com/zh-cn/dotnet/core/whats-new/dotnet-8
+using net8_guide.CollectionExpression;
 using net8_guide.Randoms;
 using net8_guide.Serialize;
 using net8_guide.Times;
@@ -140,14 +141,23 @@ while (index < 100)
 //instrument.Add(1);
 
 // 加密
-if (SHA3_256.IsSupported)
-{
-    byte[] hash = SHA3_256.HashData(inputs);
-}
-if (SHA3_256.IsSupported)
-{
-    using ECDsa ec = ECDsa.Create(ECCurve.NamedCurves.nistP256);
-    byte[] signature = ec.SignData(inputs, HashAlgorithmName.SHA3_256);
-}
+//if (SHA3_256.IsSupported)
+//{
+//    byte[] hash = SHA3_256.HashData(inputs);
+//}
+//if (SHA3_256.IsSupported)
+//{
+//    using ECDsa ec = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+//    byte[] signature = ec.SignData(inputs, HashAlgorithmName.SHA3_256);
+//}
 
+// 自定义集合表达式
+MyCollection myCollection = [1, 2, 3];
+MyCollection<int> myCollection2 = [1, 2, 3];
+MyBetterCollection collection3 = [1, 2, 3];
+MyBetterCollection<int> collection4 = [1, 2, 3];
+//IMyCollection<int> c5 = [1, 2, 3, 4];
+
+IList<int> a = [1, 2, 3, 4];
+ICollection<int> b = [1, 2, 3, 4];
 Console.ReadLine();
