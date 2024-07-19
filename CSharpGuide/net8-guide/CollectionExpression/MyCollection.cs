@@ -58,7 +58,10 @@ namespace net8_guide.CollectionExpression
 
 		public IEnumerator<T> GetEnumerator() => _values.AsEnumerable().GetEnumerator();
 	}
-	[CollectionBuilder(typeof(MyCollectionBuilder), nameof(MyCollectionBuilder.Create))]
+
+	public class MyImplementCollectionBuilder {
+		public static IMyCollection<T> Create<T>(ReadOnlySpan<T> values) => new MyImplementCollection<T>(values.ToArray());
+	}
 	public class MyImplementCollection<T>(T[] values) : IMyCollection<T>
 	{
 		public IEnumerator<T> GetEnumerator() => values.AsEnumerable().GetEnumerator();

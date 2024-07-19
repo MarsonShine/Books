@@ -10,7 +10,7 @@ namespace net8_guide.CollectionExpression
 	/*
 	 * CollectionBuilder 特性也可以用在接口上
 	 */
-	[CollectionBuilder(typeof(MyCollectionBuilder), nameof(MyCollectionBuilder.Create))]
+	[CollectionBuilder(typeof(MyImplementCollectionBuilder), nameof(MyImplementCollectionBuilder.Create))]
 	public interface IMyCollection<T> : IEnumerable<T>
 	{
 	}

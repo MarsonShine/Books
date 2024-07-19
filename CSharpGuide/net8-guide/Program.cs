@@ -156,7 +156,7 @@ MyCollection myCollection = [1, 2, 3];
 MyCollection<int> myCollection2 = [1, 2, 3];
 MyBetterCollection collection3 = [1, 2, 3];
 MyBetterCollection<int> collection4 = [1, 2, 3];
-//IMyCollection<int> c5 = [1, 2, 3, 4];
+IMyCollection<int> c5 = [1, 2, 3, 4];
 
 IList<int> a = [1, 2, 3, 4];
 ICollection<int> b = [1, 2, 3, 4];
