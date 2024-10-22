@@ -1421,7 +1421,200 @@ void run() {
 
 ![](./asserts/9.4.png)
 
+注意到我用了一个 UML 的实现箭头。这几乎就像是 `Payroll` 和 `PayrollImplementation` 是 Java 程序中的类一样。
 
+但我们还能做得更好。我们可以将所有的 `defmulti` 语句及其支持函数移入它们自己的 `payroll-interface` 命名空间和源文件中，如下所示：
+
+```clojure
+(ns payroll-interface)
+
+(defn- get-pay-class [employee]
+	(first (:pay-class employee)))
+
+(defn- get-disposition [paycheck-directive]
+	(first (:disposition paycheck-directive)))
+
+(defmulti is-today-payday :schedule)
+(defmulti calc-pay get-pay-class)
+(defmulti dispose get-disposition)
+```
+
+现在我们可以绘制出图 9.5 所示的架构图。
+
+![](./asserts/9.5.png)
+
+这看起来越来越像一个 Java 或 C# 程序的 UML 图了。看起来我们有了一个 `Payroll` 类、一个 `PayrollInterface` 类和一个 `PayrollImplementation` 类。实际上，从架构的角度来看，这个描述非常准确。
+
+但也有一些有趣的差异。例如，`PaySchedule`、`PayClassification` 和 `PayDisposition` 类，它们在面向对象 Java 程序的 UML 图中是明确的类，在哪里呢？
+
+我们可以轻松地将它们从 Clojure 程序中提取出来，通过将 `PayrollImplementation.clj` 文件拆分成三个命名空间和文件，如图 9.6 所示。
+
+![](./asserts/9.6.png)
+
+这并不是你能在 Java 或 C# 中做到的事情，因为在这些语言中，没有办法在不同的模块中实现接口的每个函数。然而，这在 Clojure 中是完全可能的。重要的是要记住，这是一个架构图，而不是类图。`PaySchedule`、`PayClassification` 和 `PayDisposition` 是命名空间和源文件，而不是类。我们不会实例化它们，它们不代表面向对象意义上的对象。
+
+并不是说我们的 Clojure 解决方案中没有对象。确实有对象，像 `employee`、`paycheck-directive`，甚至 `pay-class` 和 `disposition` 都是对象。它们没有像在面向对象语言中那样强烈地与方法相关联；但它们通过函数流动。
+
+## 命名空间和源文件
+
+在 Clojure 中，命名空间和源文件之间有着非常紧密的联系。每个命名空间必须包含在它自己的源文件中，并且该文件的名称必须与命名空间名称相对应。这与 Java 强制将公共类放入与类同名的源文件中的方式非常相似，也与 C++ 和 C# 程序员使用的文件/类惯例非常类似。这可能会让你认为每个 Clojure 命名空间有点像一个类。
+
+当然，这种对应并不完美。Clojure 命名空间的内容不必像类一样。但总体而言，这个概念并不坏。
+
+在像 Clojure 这样的函数式语言中，极大的诱惑是以一种随意的、凭感觉的方式将函数分组到命名空间中。由于没有面向对象的结构来强制我们将函数划分到类中并放入它们各自的源文件中，我们经常会得到比预期更脆弱和不牢固的源文件结构。
+
+因此，当编写函数式程序时，考虑面向对象的划分原则并继续应用它们并不是一个坏主意。在后面我们探讨原则、模式和架构时，会进一步看到这一点。
+
+## 总结
+
+首先，函数式程序和面向对象程序是不同的。函数式程序倾向于通过“管道”结构来调节数据流的转换，而可变的面向对象程序则通常一步步迭代操作对象。然而，从架构的角度来看，这两种风格是非常兼容的。事实证明，我们可以将函数式程序中的函数划分为与面向对象程序中架构上同样重要的元素。从架构角度来看，两者的差别其实很小。
+
+函数式程序可能并不由语法上强制的类来构成，这些类将方法封装并定义对象。然而，对象仍然存在于函数式程序中。这些对象与操作它们的函数之间的关系不像在面向对象语言中那样紧密。至于是优势还是劣势，这将是我们在接下来的章节中继续探讨的问题。
+
+随着这些页面逐渐转向设计和架构，我们将看到，函数式程序和不可变对象的面向对象编程之间的差异会变得越来越不重要。
+
+# 类型
+
+前一章可能让你感到有些不安。我所称的那些对象其实只是哈希映射，并且完全是无类型的。任何人都可以往里面随意插入内容而没有任何约束。`:pay-class` 中的薪水字段可以是一个字符串而不是一个数字，`:schedule` 字段也可能是一个整数而非合适的关键字。
+
+简而言之，这些对象不是静态类型的，编译器无法检查它们。因此，混乱可能会随时发生！
+
+许多函数式语言以及面向对象语言都是静态类型的，以防止这种混乱。而像 Clojure、Python 和 Ruby 这样的语言依赖于其他机制来防止这种混乱。
+
+我们这些实践 TDD（测试驱动开发）的人通常不太担心这种混乱。我们的测试通常会确保我们传递的对象是正确构造的。然而，在复杂的系统中，当对象的整体结构变得非常复杂时，确实需要一种比动态类型语言（甚至大多数静态类型语言）更正式和完整的方法来确保类型的完整性。
+
+在 Clojure 中，我使用 `clojure.spec` 库来实现类型完整性的目标。我们工资发放示例的类型规范如下所示：
+
+```clojure
+(s/def ::id string?)
+(s/def ::schedule #{:monthly :weekly :biweekly})
+(s/def ::salaried-pay-class (s/tuple #(= % :salaried) pos?))
+(s/def ::hourly-pay-class (s/tuple #(= % :hourly)
+(s/def ::hourly pay class (s/tuple #( % :hourly)
+(s/def ::commissioned-pay-class (s/tuple #(= % :commissioned)
+										pos? pos
+(s/def ::pay-class (s/or :salaried ::salaried-pay-class
+                        :Hourly ::hourly-pay-class
+                        :Commissioned ::commissioned-pay-class))
+                        
+(s/def ::mail-disposition (s/tuple #(= % :mail) string? string?))
+(s/def ::deposit-disposition (s/tuple #(= % :deposit)
+									string? string?))
+(s/def ::paymaster-disposition (s/tuple #(= % :paymaster
+									string?))
+(s/def ::disposition (s/or :mail ::mail-disposition
+                            :deposit ::deposit-dis
+                            :paymaster ::paymaster
+                            
+(s/def ::employee (s/keys :req-un [::id ::schedule
+                                    ::pay-class :
+(s/def ::employees (s/coll-of ::employee))
+
+(s/def ::date string?)
+(s/def ::time-card (s/tuple ::date pos?))
+(s/def ::time-cards (s/map-of ::id (s/coll-of ::time-card)))
+
+(s/def ::sales-receipt (s/tuple ::date pos?))
+(s/def ::sales-receipts (s/map-of
+							::id (s/coll-of ::sale-receipt)))
+							
+(s/def ::db (s/keys :req-un [::employees]
+					:opt-un [::time-cards ::sales-receipts]))
+					
+(s/def ::amount pos?)
+(s/def ::name string?)
+(s/def ::address string?)
+(s/def ::mail-directive (s/and #(= (:type %) :mail)
+                                (s/keys :req-un [::id
+                                ::name
+                                ::address
+                                ::amount])))
+(s/def ::routing string?)
+(s/def ::account string?)
+(s/def ::deposit-directive (s/and #(= (:type %) :deposit)
+								(s/keys :req-un [::id
+                                ::name
+                                ::address
+                                ::amount])))
+                                
+(s/def ::paymaster string?)
+(s/def ::paymaster-directive (s/and #(= (:type %) :paymaster
+                                    (s/keys :req-un [::id
+                                    ::routing
+                                    ::account
+                                    ::amount])))
+                                    
+(s/def ::paycheck-directive (s/or
+                            :mail ::mail-direct
+                            :deposit ::deposit-
+                            :paymaster ::paymas
+                            
+(s/def ::paycheck-directives (s/coll-of ::paycheck-directive))
+```
+
+> `pos? x` 如果 `x` 是一个数字类型且大于 0 ，则返回 `true`
+
+如果这看起来让你感到害怕，那是正常的。这里确实包含了很多细节。然而，请记住，要捕获所有的类型约束，在静态类型语言的模块中你也需要指定这一层级的细节。
+
+理解这个类型规范其实并不难。向中间部分看一下，找到 `::db` 的定义。它只是说明数据库是一个哈希映射，其中 `:employees` 字段是必需的，还有两个可选字段 `:time-cards` 和 `:sales-receipts`。
+
+如果你向上看一点，你会看到 `::employees` 只是 `::employee` 的一个集合，`::sales-receipts` 是 `::sales-receipt` 的集合，`::time-cards` 是 `::time-card` 的集合。不要让双冒号吓到你；它们是命名空间的约定。如果你想了解它们，可以稍后查阅 Clojure 文档。现在，只需要关注关键词，忽略冒号的数量。
+
+继续往上看，我们会看到 `::employee` 是一个哈希映射，要求有键 `:id`，`:schedule`，`:pay-class` 和 `:disposition`。继续探索，你会发现 `:id` 必须是字符串，`:schedule` 必须是 `:monthly`（按月）、`:weekly`（按周）或 `:biweekly`（每两周），而 `:salaried-pay-class` 是一个元组，包含 `:salaried` 和一个正数。
+
+`s/or` 语句可能会让你有些困惑。这些参数成对出现，每对中的第一个只是该备选项的名称。因此，在 `::disposition` 定义中，`:mail` 只是 `::mail-disposition` 备选项的名称。不要太担心这个问题。如果你有一天决定阅读 clojure.spec 文档，它会变得清晰。
+
+那么，给定这个详细的类型规范，我们如何使用它呢？有时我在测试中这样使用它：
+
+```clojure
+(it "pays one salaried employee at end of month by mail"
+	(let [employees [{:id "emp1"
+                    :schedule :monthly
+                    :pay-class [:salaried 5000]
+                    :disposition [:mail "name" "home"]}]
+		db {:employees employees}
+		today (parse-date "Nov 30 2021")]
+    (should (s/valid? ::db db))
+    (let [paycheck-directives (payroll today db)]
+        (should (s/valid? ::paycheck-directives
+							paycheck-directives))
+		(should= [{:type :mail
+                    :id "emp1"
+                    :name "name"
+                    :address "home"
+                    :amount 5000}]
+				paycheck-directives))))
+```
+
+请注意对 `s/valid?` 的调用，它是一个函数，如果数据符合规范则返回 `true`。仔细观察，你会发现我在输入时检查了 `::db` 规范，在输出时检查了 `::paycheck-directives` 规范。这相当安全。如果我的测试覆盖率高，并且所有测试都检查了它们调用的函数的输入和输出的规范，那么类型违规应该极为罕见。
+
+有时，我还使用了 Clojure 的 `:pre` 和 `:post` 特性，在我的应用程序的主要处理函数前后运行这些规范来验证关键数据。
+
+例如，以下是我几年前编写的 spacewar[^12] 游戏的主要处理步骤：
+
+```clojure
+(defn update-world [ms world]
+    ;{:pre [(valid-world? world)]
+    ; :post [(valid-world? %)]}
+    (->> world
+        (game-won ms)
+        (game-over ms)
+        (ship/update-ship ms)
+        (shots/update-shots ms)
+        (explosions/update-explosions ms)
+        (clouds/update-clouds ms)
+        (klingons/update-klingons ms)
+        (bases/update-bases ms)
+        (romulans/update-romulans ms)
+        (view-frame/update-messages ms)
+        (add-messages)))
+```
+
+`:pre` 和 `:post` 语句被注释掉了[^13]，但如果我怀疑存在某种严重的类型破坏，它们随时可以被重新启用。
+
+## 结论
+
+关于静态类型和动态类型的争论有很多喧嚣与摩擦。双方各自大喊大叫，但却不听取对方的意见。我认为双方的观点都有道理。动态类型让代码更容易编写，而静态类型使代码更加安全、易于理解，且具有更高的一致性。在我看来，像 `clojure.spec` 这样的库达到了很好的平衡。它让你能够根据需要选择类型检查的多寡。你可以指定何时进行类型检查，何时不进行。此外，它允许你指定动态约束，这是任何静态类型系统都无法检查的。因此，我认为这样的库比静态和动态类型两种方式的结合还要更好。
 
 [^1]: Robert C. Martin, *Clean Craftsmanship* (Addison-Wesley, 2021)。
 [^2]: Robert C. Martin, *Agile Software Development: Principles, Patterns, and Practices* (Pearson, 2002)。
@@ -1434,3 +1627,5 @@ void run() {
 [^9]: https://kata-log.rocks/gossiping-bus-drivers-kata
 [^10]: 如果你读过我的著作《Clean Craftmanship》，你就会明白为什么这是好的习惯
 [^11]: Erich Gamma, Richard Helm, Ralph Johnson 和 John Vlissides, *Design Patterns: Elements of Reusable Object-Oriented Software* (Addison-Wesley, 1995), 315页。
+[^12]: https://github.com/unclebob/spacewar
+[^13]: 我不太喜欢注释掉的代码。随着项目的发展，我会删除这些行。
