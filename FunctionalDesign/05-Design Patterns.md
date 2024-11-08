@@ -704,7 +704,633 @@ public class CompositeSwitchable implements Switchable {
 
 注意到 `translate` 和 `scale` 函数会返回新的形状实例。它们在行为上是完全函数式的。
 
+现在让我们来看下 `composite-shape`：
 
+```clojure
+(ns composite-example.composite-shape
+  (:require [clojure.spec.alpha :as s]
+			[composite-example.shape :as shape]))
+			
+(s/def ::shapes (s/coll-of ::shape/shape-type))
+(s/def ::composite-shape (s/keys :req [::shape/type
+									   ::shapes])
+									   
+(defn make []
+  {:post [(s/assert ::composite-shape %)]}
+  {::shape/type ::composite-shape
+   ::shapes []})
+
+(defn add [cs shape]
+  {:pre [(s/valid? ::composite-shape cs)
+		 (s/valid? ::shape/shape-type shape)]
+   :post [(s/valid? ::composite-shape %)]}
+   (update cs ::shapes conj shape))
+
+(defmethod shape/translate ::composite-shape [cs dx dy]
+  {:pre [(s/valid? ::composite-shape cs)
+		 (number? dx) (number? dy)]
+   :post [(s/valid? ::composite-shape %)]}
+  (let [translated-shapes (map #(shape/translate % dx dy)
+							   (::shapes cs))]
+	(assoc cs ::shapes translated-shapes)))
+
+(defmethod shape/scale ::composite-shape [cs factor]
+  {:pre [(s/valid? ::composite-shape cs)
+		 (number? factor)]
+   :post [(s/valid? ::composite-shape %)]}
+  (let [scaled-shapes (map #(shape/scale % factor)
+						   (::shapes cs))]
+	(assoc cs ::shapes scaled-shapes)))
+```
+
+我们在灯和可变灯的例子中已经见过这种模式。不过这一次，`composite-shape` 返回的是一个包含新形状实例的 `composite-shape`。因此，它是函数式的。
+
+对于好奇的读者，这里是我使用的测试：
+
+```clojure
+(ns composite-example.core-spec
+  (:require [speclj.core :refer :all]
+            [composite-example
+            [square :as square]
+            [shape :as shape]
+            [circle :as circle]
+            [composite-shape :as cs]]))
+            
+(describe "square"
+  (it "translates"
+	(let [s (square/make-square [3 4] 1)
+	  	  translated-square (shape/translate s 1 1)]
+	  (should= [4 5] (::square/top-left translated-square))
+	  (should= 1 (::square/side translated-square))))
+	  
+  (it "scales"
+	(let [s (square/make-square [1 2] 2)
+		  scaled-square (shape/scale s 5)]
+      (should= [1 2] (::square/top-left scaled-square))
+      (should= 10 (::square/side scaled-square)))))
+      
+(describe "circle"
+  (it "translates"
+	(let [c (circle/make-circle [3 4] 10)
+		  translated-circle (shape/translate c 2 3)]
+      (should= [5 7] (::circle/center translated-circle))
+      (should= 10 (::circle/radius translated-circle))))
+  
+  (it "scales"
+	(let [c (circle/make-circle [1 2] 2)
+		  scaled-circle (shape/scale c 5)]
+	  (should= [1 2] (::circle/center scaled-circle))
+	  (should= 10 (::circle/radius scaled-circle)))))
+	  
+(describe "composite shape"
+  (it "translates"
+	(let [cs (-> (cs/make)
+                 (cs/add (square/make-square [0 0] 1))
+                 (cs/add (circle/make-circle [10 10] 10)))
+                 translated-cs (shape/translate cs 3 4)]
+       (should= #{{::shape/type ::square/square
+                   ::square/top-left [3 4]
+                   ::square/side 1}
+                  {::shape/type ::circle/circle
+                   ::circle/center [13 14]
+                   ::circle/radius 10}}
+                (set (::cs/shapes translated-cs)))
+
+(it "scales"
+  (let [cs (-> (cs/make)
+               (cs/add (square/make-square [0 0] 1))
+               (cs/add (circle/make-circle [10 10] 10)))
+	   scaled-cs (shape/scale cs 12)]
+	(should= #{{::shape/type ::square/square
+                ::square/top-left [0 0]
+                ::square/side 12}
+               {::shape/type ::circle/circle
+                ::circle/center [10 10]
+                ::circle/radius 120}}
+			 (set (::cs/shapes scaled-cs))))))
+```
+
+你可能已经注意到，随着章节的推进，我逐渐使用了 Clojure 中更多细微的特性。这是有意为之。我希望你在阅读本书时，手边有一本可靠的 Clojure 参考书，因此我为你提供了一系列机会来查找内容并更熟悉这门语言。
+
+正如我们所见，组合模式（Composite）是另一个非常适合函数式编程的 GOF 设计模式。一旦我们开始利用多态分发，无论是通过虚表（vtables）、多方法（multi-methods），还是协议/记录（protocol/record）结构，GOF 模式就能够很好地融入函数式编程世界，几乎完全符合 GOF 的描述。
+
+### 装饰器模式
+
+“处理体模式”中另一个经典模式是装饰器（Decorator）。装饰器模式是一种在不直接修改类型模型的情况下，为类型模型添加功能的方法。
+
+例如，让我们继续我们的形状项目。我们有一个形状类型模型，该模型支持 `circle` 和 `square` 等子类型。在该类型模型中，只要符合里氏替换原则（LSP），我们就可以对任何形状的子类型进行平移和缩放，而无需知道具体的子类型。
+
+现在，我们想增加一个新的可选功能：带日志记录的形状（`journaled-shape`）。`journaled-shape` 是一种能够记录自创建以来执行过的操作的形状。我们希望能够记录某些 `square` 和 `circle` 的操作；但并不是每一个 `circle` 和 `square` 都需要记录，因为这样会带来高内存和处理成本。
+
+当然，我们可以通过向形状抽象中添加一个 `:journaled?` 标志，并在 `circle` 和 `square` 的实现中加入 `if` 语句来实现。但那样会显得杂乱无章。我们真正需要的是一种在不改变形状抽象或其任何子类型（包括 `circle`、`square` 和 `composite-shape`）的情况下，添加该功能的方法，这样也符合开放封闭原则（OCP）。
+
+这时装饰器模式登场了。其 UML 图示如图 16.7 所示。
+
+![](asserts/16.7.png)
+
+我之所以包含了 `composite-shape`，是因为它当前是形状类型模型的一部分，而 `journaled-shape` 则是装饰器。`journaled-shape` 继承自 `shape` 并包含一个对 `shape` 的引用。当在 `journaled-shape` 上调用 `translate` 或 `scale` 方法时，它会在日志中创建一个条目，然后将调用委托给包含的 `shape`。以下是 Clojure 的实现：
+
+```clojure
+(ns decorator-example.journaled-shape
+  (:require [decorator-example.shape :as shape]
+			[clojure.spec.alpha :as s]))
+			
+(s/def ::journal-entry
+	   (s/or :translate (s/tuple #{:translate} number? number?)
+			 :scale (s/tuple #{:scale} number?)))
+(s/def ::journal (s/coll-of ::journal-entry))
+(s/def ::shape ::shape/shape-type)
+(s/def ::journaled-shape (s/and
+						   (s/keys :req [::shape/
+                                         ::journal
+                                         ::shape])
+						   #(= ::journaled-shape
+							  (::shape/type %))))
+
+(defn make [shape]
+  
+  {:post [(s/valid? ::journaled-shape %)]}
+  {::shape/type ::journaled-shape
+   ::journal []
+   ::shape shape})
+
+(defmethod shape/translate ::journaled-shape [js dx dy]
+  {:pre [(s/valid? ::journaled-shape js)
+		 (number? dx) (number? dy)]
+   :post [(s/valid? ::journaled-shape %)]}
+  (-> js (update ::journal conj [:translate dx dy])
+	  (assoc ::shape (shape/translate (::shape js) dx dy))))
+
+(defmethod shape/scale ::journaled-shape [js factor]
+  {:pre [(s/valid? ::journaled-shape js)
+		 (number? factor)]
+   :post [(s/valid? ::journaled-shape %)]}
+  (-> js (update ::journal conj [:scale factor])
+	  (assoc ::shape (shape/scale (::shape js) factor))))
+```
+
+> (s/or :translate (s/tuple #{:translate} number? number?)
+> 			 :scale (s/tuple #{:scale} number?))):
+> 集合可以作为一个函数来测试元素是否属于其中。
+
+`::journaled-shape` 对象有 `::shape` 和 `::journal` 字段。`::journal` 字段是一个包含 `::journal-entry` 元组的集合，这些元组的形式为 `[:translate dx dy]` 或 `[:scale factor]`，其中 `dx`、`dy` 和 `factor` 是数字。`::shape` 字段必须包含一个有效的 `shape`。
+
+`make` 构造函数创建一个有效的 `journaled-shape`（由 `:post` 条件检查）。`translate` 和 `scale` 函数会将相应的日志条目添加到 `::journal` 中，然后将它们各自的操作委托给 `::shape`，返回一个包含更新的 `::journal` 和修改后的 `::shape` 的新 `journaled-shape`。
+
+以下是测试。我只用 `square` 测试了 `journaled-shape`，因为如果它对 `square` 有效，那它就能适用于所有 `shape`：
+
+```clojure
+(describe "journaled shape decorator"
+  (it "journals scale and translate operations"
+	(let [jsd (-> (js/make (square/make-square [0 0] 1))
+                  (shape/translate 2 3)
+                  (shape/scale 5))]
+	  (should= [[:translate 2 3] [:scale 5]]
+				(::js/journal jsd))
+	  (should= {::shape/type ::square/square
+                ::square/top-left [2 3]
+                ::square/side 5}
+			   (::js/shape jsd)))))
+```
+
+我们创建了一个包含 `square` 的 `journaled-shape`，对其进行了平移和缩放，然后确保 `::journal` 记录了 `translate` 和 `scale` 调用，并且 `square` 具有相应的平移和缩放后的值。
+
+我添加了类型规范，目的是给你一些挑战，同时展示这些规范的使用方式。不过坦率地说，我认为测试已经足够检查类型了，所以在实际情况下，对于这样的小问题，我可能不会使用如此详细的类型规范。不过，确实能清晰地看到这些类型的定义也挺不错的。
+
+总之，注意到 `journaled-shape` 装饰器可以适用于任何 `shape`，包括 `composite-shape`。因此，我们有效地为类型模型增加了新功能，而无需更改该类型模型的现有元素。这就是开放封闭原则（OCP）在起作用。
+
+### 访问者模式
+
+噢，不！又是……访问者模式！是的，我们将深入探讨被广泛误解的访问者模式。访问者模式不同于处理/主体模式，它有其独特的结构，正如我们将看到的，它因某些语言选择而变得复杂。
+
+访问者模式的目的是类似于装饰器模式。我们希望向现有的类型模型中添加一个新功能，而不更改该类型模型（遵循开闭原则，OCP）。当新功能与类型模型中的其他子类型无关时，装饰器模式是合适的。为了确认这一点，回顾一下带日志的 `journaled-shape`。日志记录与包含的图形是圆形还是方形无关。`journaled-shape` 装饰器从不需要知道其包含的图形的具体子类型。
+
+然而，当我们希望添加的功能依赖于类型模型中的子类型时，就需要使用访问者模式。
+
+例如，如果我们希望向 `shape` 抽象类型中添加一个将图形转换为字符串以便序列化的功能，我们可以直接在 `shape` 接口中添加一个 `to-string` 方法，简单明了。
+
+但等等！如果某个客户希望将图形以 XML 格式输出呢？那么我们可能还需要添加一个 `to-xml` 方法，除了已有的 `to-string` 方法。
+
+再等等！如果另一个客户想要 JSON 格式输出，而还有另一个客户想要 YAML 格式输出……最终，你会意识到这些数据格式几乎是无穷无尽的，客户会不断提出更多需求。我们可不想用这么多方法污染 `shape` 接口。
+
+访问者模式为我们提供了一种解决这个困境的方法。UML 图看起来像图 16.8。
+
+![](asserts/16.8.png)
+
+首先，我想指出的是在 `ShapeVisitor` 中将 `Shape` 子类型旋转了90度。`ShapeVisitor` 中的 `visit` 方法接收的参数类型分别是 `Square` 和 `Circle`，这些参数类型对应 `Shape` 的子类型。我称这种子类型到方法的转换为90度旋转，因为这让我的某些神经元感到愉悦。
+
+在左侧，我们看到 `Shape` 抽象及其所有子类型；在右侧，我们看到 `ShapeVisitor` 层级结构。该模式向 `Shape` 接口中添加了一个 `accept` 函数。这个函数接受一个 `ShapeVisitor` 作为唯一参数。这虽然违背了开闭原则（OCP），但仅仅一次。
+
+在 Java 中，实现 `accept` 函数非常简单：
+
+```java
+void accept(ShapeVisitor visitor) {
+  visitor.visit(this);
+}
+```
+
+如果您以前从未研究过访问者模式，可能会有点难以理解。所以，请花点时间，跟随我一步步梳理这个过程。
+
+假设我们希望获取某个 `Shape` 对象的 JSON 字符串。在 Java、C++ 或其他类似语言中，我们可以这样做：
+
+```java
+Shape s = // get a shape without knowing the subt
+ShapeVisitor v = new JsonVisitor();
+s.accept(v);
+String json = v.getJson();
+```
+
+我们从某个地方获取了一个 `Shape` 对象，创建了 `JsonVisitor`，然后将 `JsonVisitor` 传递给 `Shape` 对象的 `accept` 方法。`accept` 方法会多态地派发到 `Shape` 的正确子类型——假设这是一个 `Square`。`Square` 的 `accept` 方法调用 `JsonVisitor` 的 `visit(this)` 方法。此时，`this` 的类型是 `Square`，因此会调用 `JsonVisitor` 的 `visit(Square s)` 方法。这个方法生成 `Square` 的 JSON 字符串并将其保存在 `JsonVisitor` 的成员变量中，然后 `getJson()` 函数返回该成员变量的内容。
+
+你可能需要反复阅读几遍才能完全理解。这种技术称为双重派发。第一次派发分配到 `Shape` 的子类型，以确定该子类型的真实类型。第二次派发则调用访问者的相应子类型方法，传递子类型的真实类型。
+
+如果你理解了这点，那么可以看到 `ShapeVisitor` 的每一个派生类实际上都是 `Shape` 类型模型的一种新“方法”，而我们需要添加到 `Shape` 中的唯一东西就是 `accept` 方法。所以这只“部分”符合开闭原则（OCP）。你现在也应该明白为什么不能使用装饰器模式了。新的功能强烈依赖于子类型。如果你不知道对象是 `Square` 类型，就无法为 `Square` 生成 JSON 字符串。
+
+我之所以告诉你这一切，是为了接下来要讲的内容。所有这些复杂性实际上都是由语言约束引起的。是的，这正是那些反对设计模式的人真正持反对意见的地方。访问者模式之所以复杂，正是由于一种特定的语言特性。
+
+是什么特性呢？封闭类（Closed Classes）。
+
+#### 是封闭还是 Clojure
+
+在 C++ 和 Java 这样的语言中，我们创建的类是封闭的。这意味着我们不能通过在新源文件中声明一个新方法来给类添加新方法。如果想在封闭语言中给类添加新方法，就必须打开该类的源文件，并在类的定义中添加方法。
+
+Clojure 不受这一限制。某种程度上，C# 也不受此限制。实际上，许多语言允许你在不更改类声明所在源文件的情况下为类添加方法。
+
+Clojure 没有这一限制的原因是，类并不是语言的内置特性。我们通过约定而不是语法来创建类。
+
+那么，这是否意味着在 Clojure 中我们不再需要装饰器模式或访问者模式呢？并不是这样。实际上，正如我们看到的，我们在 Clojure 中仍然需要 GOF（Gang of Four）形式的装饰器模式。否则，我们又如何实现 `journaled-shape` 呢？
+
+然而，对于拥有开放类的语言来说，GOF 形式的访问者模式并非必要。更准确地说，GOF 形式中的一些细节不是必需的。
+
+接下来，让我展示如何在 Clojure 中实现这个特定的访问者模式。首先是测试：
+
+```clojure
+(ns visitor-example.core-spec
+  (:require [speclj.core :refer :all]
+            [visitor-example
+            [square :as square]
+            [json-shape-visitor :as jv]
+            [circle :as circle]]))
+            
+(describe "shape-visitor"
+  (it "makes json square"
+	(should= "{\"top-left\": [0,0], \"side\": 1}"
+			 (jv/to-json (square/make [0 0] 1))))
+
+  (it "makes json circle"
+	(should= "{\"center\": [3,4], \"radius\": 1}"
+			 (jv/to-json (circle/make [3 4] 1)))))
+
+```
+
+这不应该让人感到意外；不过，你应该特别注意源代码的依赖关系。这个测试几乎需要依赖所有内容。
+
+现在让我们回顾一下形状类型模型的样子。为了保持简单，我去掉了所有 `clojure.spec` 类型规范：
+
+```clojure
+(ns visitor-example.shape)
+
+(defmulti translate (fn [shape dx dy] (::type shape)))
+(defmulti scale (fn [shape factor] (::type shape)))
+
+
+(ns visitor-example.square
+  (:require
+	[visitor-example.shape :as shape]))
+
+(defn make [top-left side]
+  {::shape/type ::square
+   ::top-left top-left
+   ::side side})
+
+(defmethod shape/translate ::square [square dx dy]
+  (let [[x y] (::top-left square)]
+	(assoc square ::top-left [(+ x dx) (+ y dy)])
+
+(defmethod shape/scale ::square [square factor]
+  (let [side (::side square)]
+	(assoc square ::side (* side factor))))
+
+
+(ns visitor-example.circle
+  (:require
+	[visitor-example.shape :as shape]))
+
+(defn make [center radius]
+  {::shape/type ::circle
+   ::center center
+   ::radius radius})
+
+(defmethod shape/translate ::circle [circle dx dy]
+  (let [[x y] (::center circle)]
+	(assoc circle ::center [(+ x dx) (+ y dy)])))
+
+(defmethod shape/scale ::circle [circle factor]
+  (let [radius (::radius circle)]
+	(assoc circle ::radius (* radius factor))))
+```
+
+这一切应该都很熟悉了。接下来是 `json-shape-visitor`：
+
+```clojure
+(ns visitor-example.json-shape-visitor
+  (:require [visitor-example
+            [shape :as shape]
+            [circle :as circle]
+            [square :as square]]))
+
+(defmulti to-json ::shape/type)
+
+(defmethod to-json ::square/square [square]
+  (let [{:keys [::square/top-left ::square/side]} square
+	    [x y] top-left]
+	(format "{\"top-left\": [%s,%s], \"side\": %s}" x y side)))
+
+(defmethod to-json ::circle/circle [circle]
+  (let [{:keys [::circle/center ::circle/radius]}
+		[x y] center]
+	(format "{\"center\": [%s,%s], \"radius\": %s}" x y radius)))
+```
+
+> 通过命名空间关键字解构，可以为键的局部部分创建一个局部变量——这里是 `top-left`。
+>
+
+仔细看。这一 `defmulti` 在 `json-shape-visitor` 中直接为形状类型模型添加了 `to-json` 方法。到这里，你可能已经很理解这个模式了；但你能看出为什么这是一个访问者模式吗？
+
+你是否看到了从子类型到函数的“90度旋转”？
+
+就像 Java 版本的访问者一样，`to-json` 操作的所有子类型都汇集在 `json-shape-visitor` 模块中。
+
+如果你追踪所有的源代码依赖，并与 UML 图进行对比，你会发现所有依赖都已涵盖。唯一缺少的是 `ShapeVisitor` 接口和双重分派。那些只是为了解决 C++ 和 Java 等语言中的封闭类问题。
+
+这告诉我们，GOF（四人帮）在这个模式上的理解有些偏差。双重分派只是访问者模式的附加内容，仅在封闭类的语言中才有必要。
+
+**90度旋转问题**
+
+但是，等等，这种“90度旋转”带来了一个问题。每当你有一个包含类型模型的每个子类型的方法的模块时，只要类型模型发生变化，该模块也必须更改。例如，如果我们在形状层级中添加一个三角形，我们的 `json-shape-visitor` 就需要一个 `::triangle/triangle` 的 `to-json` 方法实现。这违反了开放封闭原则（OCP）。
+
+此外，这也是一个问题，因为它违反了“整洁架构[^13]”中的依赖规则，强迫高层模块在跨越架构边界[^14]时依赖低层模块。此问题在 UML 图（图 16.9）中有所体现。
+
+![](asserts/16.9.png)
+
+通常，我们希望将形状的实现作为插件提供给 `App`。但是，`json-shape-visitor` 阻碍了这一点，因为我们要让 `App` 输出 JSON 的唯一方法就是调用 `json-shape-visitor`，而它直接依赖于 `circle` 和 `square`。
+
+在 Java、C# 和 C++ 中，我们可以通过使用抽象工厂解决这一问题，这样 `App` 就可以实例化访问者对象而无需直接依赖它。
+
+在 Clojure 中，我们有另一种——并且更好的——选择。我们可以将 `json-shape-visitor` 的接口与其实现分开，如下所示：
+
+```clojure
+(ns visitor-example.json-shape-visitor
+  (:require [visitor-example
+			[shape :as shape]]))
+(defmulti to-json ::shape/type)
+
+
+(ns visitor-example.json-shape-visitor-implementation
+  (:require [visitor-example
+			[json-shape-visitor :as v]
+            [circle :as circle]
+            [square :as square]]))
+
+(defmethod v/to-json ::square/square [square]
+  (let [{:keys [::square/top-left ::square/side]}
+		[x y] top-left]
+	(format "{\"top-left\": [%s,%s], \"side\": %s}" x y side)))
+
+(defmethod v/to-json ::circle/circle [circle]
+  (let [{:keys [::circle/center ::circle/radius]} circle
+		[x y] center]
+	(format "{\"center\": [%s,%s], \"radius\": %s}" x y radius)))
+```
+
+这里的关键是确保 `json-shape-visitor-implementation` 模块被 `main` 所 `require`，以便 `defmethod` 能够正确地与 `defmulti` 注册。
+
+```clojure
+(ns visitor-example.main
+  (:require [visitor-example
+			[json-shape-visitor-implementation]]))
+```
+
+通常情况下，在应用程序的任何部分之前会先调用 `main`，因此应用程序不会在源代码上依赖 `main`。不过，我的测试无法访问真正的 `main`，所以必须包括该依赖：
+
+```clojure
+(ns visitor-example.core-spec
+  (:require [speclj.core :refer :all]
+            [visitor-example
+            [square :as square]
+            [json-shape-visitor :as jv]
+            [circle :as circle]
+            [main]]))
+            
+(describe "shape-visitor"
+  (it "makes json square"
+	(should= "{\"top-left\": [0,0], \"side\": 1}"
+			 (jv/to-json (square/make [0 0] 1))))
+
+  (it "makes json circle"
+	(should= "{\"center\": [3,4], \"radius\": 1}"
+			 (jv/to-json (circle/make [3 4] 1))))
+```
+
+就这样，一个在 Clojure 中实现的功能强大且符合架构原则的访问者模式诞生了。如图 16.10 的 UML 所示，所有的依赖关系都跨越了架构边界，指向了该边界的高层（抽象）一侧。真是太好了！
+
+![](asserts/16.10.png)
+
+因此，访问者模式是一个因当时语言的限制而被“污染”的例子。在 1995 年，GOF 书籍出版时，封闭类被认为是静态类型语言的必要属性，因此几乎是普遍存在的。
+
+### 抽象工厂
+
+DIP 建议我们避免对既不稳定又具体的事物产生源代码依赖。因此，我们通常会创建抽象结构，并尝试让依赖路由到这些抽象结构上。然而，在创建对象实例时，我们往往不得不违背这一建议；这可能导致架构上的困难，如图 16.11 所示的 UML 图展示的那样。
+
+![](asserts/16.11.png)
+
+在图 16.11 中，`App` 使用了 `Shape` 接口。它所需要的操作都可以通过这个接口完成，除了一个例外：`App` 必须创建 `Circle` 和 `Square` 的实例，这就迫使 `App` 依赖于相应模块的源代码。
+
+实际上，我们在之前的示例中已经见过这种情况。例如，回顾本章早些时候 `visitor-example` 测试中的代码。请注意，该测试由于需要调用 `make` 函数而不得不依赖于 `square` 和 `circle` 的源代码：
+
+```clojure
+(ns visitor-example.core-spec
+  (:require [speclj.core :refer :all]
+            [visitor-example
+            [square :as square]
+            [json-shape-visitor :as jv]
+            [circle :as circle]
+            [main]]))
+            
+(describe "shape-visitor"
+  (it "makes json square"
+	(should= "{\"top-left\": [0,0], \"side\": 1}"
+			 (jv/to-json (square/make [0 0] 1))))
+
+  (it "makes json circle"
+	(should= "{\"center\": [3,4], \"radius\": 1}"
+			 (jv/to-json (circle/make [3 4] 1))))
+```
+
+也许这看起来成本很小。但如果我们在这个 UML 图中添加一个架构边界，如图 16.12 所示，真正的代价就显而易见了。
+
+![](asserts/16.12.png)
+
+我们可以看到，在架构边界上出现了 `<creates>` 依赖，违背了整洁架构的依赖法则[^16]。该法则规定，所有跨越架构边界的源代码依赖必须指向该边界的更高级一侧。`Circle` 和 `Square` 模块是 `App` 的低层细节，属于插件部分。因此，为了维护架构，我们需要以某种方式处理这些 `<creates>` 依赖。
+
+抽象工厂模式提供了一个很好的解决方案，如图 16.13 所示。
+
+![](asserts/16.13.png)
+
+现在，跨越边界的所有源代码依赖都指向更高级的那一侧，从而解决了依赖法则的违背。`Circle` 和 `Square` 仍然可以作为 `App` 的独立插件。`App` 依然可以创建 `Circle` 和 `Square` 实例，但通过 `ShapeFactory` 接口间接实现，这样就反转了源代码依赖（遵循了 DIP 原则）。
+
+在 Clojure 中实现这一点很容易。我们只需要 `shape-factory` 接口及其实现：
+
+```clojure
+(ns abstract-factory-example.shape-factory)
+
+(defmulti make-circle
+  (fn [factory center radius] (::type factory)))
+
+(defmulti make-square
+  (fn [factory top-left side] (::type factory)))
+
+
+(ns abstract-factory-example.shape-factory-implementation)
+  (:require [abstract-factory-example
+            [shape-factory :as factory]
+            [square :as square]
+            [circle :as circle]]))
+  
+(defn make []
+  {::factory/type ::implementation})
+
+(defmethod factory/make-square ::implementation
+  [factory top-left side]
+  (square/make top-left side))
+
+(defmethod factory/make-circle ::implementation
+  [factory center radius]
+  (circle/make center radius))
+```
+
+这样，我们可以编写一个模拟 `App` 的测试：
+
+```clojure
+(ns abstract-factory-example.core-spec
+  (:require [speclj.core :refer :all]
+            [abstract-factory-example
+            [shape :as shape]
+            [shape-factory :as factory]
+            [main :as main]]))
+
+(describe "Shape Factory"
+  (before-all (main/init))
+  (it "creates a square"
+	(let [square (factory/make-square
+				   @main/shape-factory
+				   [100 100] 10)]
+	  (should= "Square top-left: [100,100] side: 10"
+	  		   (shape/to-string square))))
+
+  (it "creates a circle"
+	(let [circle (factory/make-circle
+				   @main/shape-factory
+				   [100 100] 10)]
+	   (should= "Circle center: [100,100] radius: 10"
+			    (shape/to-string circle)))))
+```
+
+首先要注意的是，该测试并没有对 `circle` 或 `square` 的源文件依赖。它仅依赖于两个接口：`shape` 和 `shape-factory`。这正是我们的架构目标。
+
+但是，那个 `main` 依赖是什么？注意测试开始时的 `(before-all (main/init))` 行。它指示测试运行器在任何测试开始前调用 `(main/init)`。这模拟了主模块在启动 `App` 之前初始化一切的过程。
+
+`main`：
+
+```clojure
+(ns abstract-factory-example.main
+  (:require [abstract-factory-example
+			[shape-factory-implementation :as imp
+
+(def shape-factory (atom nil))
+
+(defn init[]
+  (reset! shape-factory (imp/make)))
+```
+
+哦，瞧瞧！我们有一个名为 `shape-factory` 的全局 atom！并且该 atom 由 `init` 函数初始化为 `shape-factory-implementation`。
+
+回顾一下测试，我们可以看到 `make-circle` 和 `make-square` 方法正在传递解引用的 `atom`。这种设置全局变量的方式是处理工厂模式的常见策略。主程序创建具体的工厂实现，并将其加载到一个可供所有人访问的全局变量中。在静态类型语言中，这个全局变量会具有 `ShapeFactory` 接口的类型声明。而在动态类型语言中，则不需要这种类型声明。
+
+**再一次的 90 度转角**
+
+看看图 16.13 中的 UML 图。你能在 `ShapeFactory` 中看到 90 度转角吗？在 `shape-factory` 的代码中也可以看到。`ShapeFactory`（以及 `shape-factory`）的各方法都对应于 `Shape` 的子类型。
+
+这个问题在 Visitor 模式中也出现了，不过形式稍有不同。每当增加一个新的 `shape` 子类型时，`shape-factory` 都必须修改。这违反了开闭原则（OCP），因为我们必须修改架构边界高级别一侧的模块。如果开闭原则有任何重要性，那么尤其在跨越此类边界时最为重要。仔细研究一下该 UML 图，你就会明白我的意思。
+
+我们可以通过将 90 度旋转替换为一个接收不透明标记的单一方法来解决此问题，类似于以下方式：
+
+```clojure
+(ns abstract-factory-example.shape-factory)
+(defmulti make (fn [factory type & args] (::type factory)))
+
+
+(ns abstract-factory-example.shape-factory-implementation
+  (:require [abstract-factory-example
+            [shape-factory :as factory]
+            [square :as square]
+            [circle :as circle]]))
+
+(defn make []
+  {::factory/type ::implementation})
+
+(defmethod factory/make ::implementation
+  [factory type & args]
+  (condp = type
+    :square (apply square/make args)
+    :circle (apply circle/make args)))
+    
+
+(ns abstract-factory-example.core-spec
+  (:require [speclj.core :refer :all]
+            [abstract-factory-example
+            [shape :as shape]
+            [shape-factory :as factory]
+            [main :as main]]))
+            
+(describe "Shape Factory"
+  (before-all (main/init))
+  (it "creates a square"
+	(let [square (factory/make
+				  @main/shape-factory
+                  :square
+                  [100 100] 10)]
+  (should= "Square top-left: [100,100] side: 10"
+		   (shape/to-string square))))
+
+(it "creates a circle"
+	(let [circle (factory/make
+                  @main/shape-factory
+                  :circle
+                  [100 100] 10)]
+	  (should= "Circle center: [100,100] radius: 10"
+			   (shape/to-string circle)))))
+```
+
+注意，传递给 `shape-factory/make` 的参数是不透明的。也就是说，它未被任何其他模块定义，尤其包括 `square` 和 `circle` 模块。`:square` 和 `:circle` 关键字没有命名空间，也没有在任何地方声明。它们仅仅是不透明的、有名称的值。我本可以用 1 表示 `square`，2 表示 `circle`，或者使用 `"square"` 和 `"circle"` 字符串。
+
+这种不透明性是该解决方案的关键。如果我们需要添加一个 `triangle` 子类型，那么边界线以上的任何内容都不必更改（符合开闭原则）。
+
+### 类型安全？
+
+在像 Java 这样的静态类型语言中，这种技术会放弃类型安全。不透明值无法保证类型安全。例如，在 Java 中无法使用 `enum` 来解决这个问题。
+
+在 Clojure 中，我们不会过于担心静态类型安全，那么动态类型规范呢？在这方面我们也没有运气可言。即便使用 `clojure.spec` 也无法获得优势，因为无论是否使用 `clojure.spec`，错误都是在运行时才会捕获。
+
+例如，假设我使用 `:sqare`（故意拼错的）来调用 `shape-factory/make`。在 `shape-factory-implementation` 中的 `condp` 会直接抛出异常。如果我在 `clojure.spec` 中设置某种类型约束，强制 `shape-factory/make` 的类型参数只能是 `:square` 或 `:circle`，它依然只会抛出一个运行时异常。
+
+无论在何种语言中，均无法避免这种情况。无论是 Java、C++、Ruby、Clojure，还是 C#，如果您希望在跨架构边界时维护开闭原则（而您通常确实希望如此），那么在边界的某一点上，您必然需要放弃类型安全并依赖运行时异常。这就是所谓的软件“物理定律”。
+
+### 总结
+
+我将剩余的 GOF 设计模式以及您可能熟悉的其他模式留给您作为练习。到目前为止，我确信您已经理解，具有类似 Clojure 特性的函数式语言在面向对象方面不逊于 Java、C#、Ruby 和 Python，只要保持不变性这一限制，GOF 书中的设计模式通常都适用。
+
+至于 Singleton 模式：只需创建一个实例即可。
 
 [^1]: 这一领域的权威著作为 Erich Gamma、Richard Helm、Ralph Johnson 和 John Vlissides 所著的《设计模式：可复用面向对象软件的基础》（Addison-Wesley，1994年）。
 [^2]: `comp.object` 是在网络新闻传输协议（NNTP）下的一个新闻组，借助 Unix-to-Unix 复制协议（UUCP）和互联网传播。
@@ -715,3 +1341,6 @@ public class CompositeSwitchable implements Switchable {
 [^7]: Martin，《敏捷软件开发》，第181页。
 [^9]: James O. Coplien，《高级 C++ 编程风格与惯用法》（Addison-Wesley, 1991）。
 [^10]: 编译时可以通过开关禁用所有的断言，包括 `:pre` 和 `:post`。
+[^13]: Robert C. Martin, Clean Architecture (Pearson, 2017), p. 203.
+[^14]: Martin, Clean Architecture, p. 159.
+[^16]: Robert C. Martin, Clean Architecture (Pearson, 2017).
