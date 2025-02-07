@@ -1,5 +1,7 @@
 # PostgreSQL 代码解析
 
+## INSERT INTO xxx ON CONFLICT DO UPDATE SET xxx
+
 ```sql
 INSERT INTO auditlogs("BizId","Table","Type","Status","Message","CreateTime","UpdateTime") 
 VALUES (@BizId,@Table,@Type,@Status,@Message,@CreateTime,@UpdateTime) 
@@ -12,6 +14,8 @@ DO UPDATE SET "Status"=EXCLUDED."Status","Type"=EXCLUDED."Type","Message"=EXCLUD
 如果表中已有一条记录使得插入失败（如主键冲突），通常会抛出错误。
 
 其中 `EXCLUDED` 表示在冲突发生时的数据。你可以使用 `EXCLUDED.column_name` 来引用这些新行中的某个列的值。
+
+## WITH BATCH xxx UPDATE
 
 ```sql
 WITH batch AS (
@@ -32,6 +36,8 @@ WHERE id IN (SELECT id FROM batch);
 `SKIP LOCKED`: 如果某些行已经被其他事务加锁，则跳过这些行。
 
 这可以避免事务因为等待锁而阻塞，提高并发性能。
+
+## EXPLAIN
 
 ```sql
 EXPLAIN (analyze, buffers, costs off, timing off, summary off)
@@ -59,3 +65,15 @@ Planning:
 
 结果表明查询对 `knowledgepoints` 表执行了顺序扫描（即全表扫描）。循环一次查询返回98行数据。Buffers 显示查询访问了5个共享内存页，这说明没有发生磁盘访问（I/O）。Planning 表明在估计阶段，数据查询会访问52个共享内存页（元数据和系统缓存）。
 
+## SELECT xxx FOR UPDATE SKIP LOCKED
+
+```bash
+SELECT * FROM accounts
+ORDER BY id
+FOR UPDATE SKIP LOCKED
+LIMIT 1;
+```
+
+`SELECT ... FOR UPDATE SKIP LOCKED` 是一个**行级锁定**机制，通常用于**高并发环境下的任务调度**或**队列处理**，避免多个事务同时处理相同的数据行。
+
+当多个 worker 进程（或线程）从数据库中取出未处理的任务时，使用 `FOR UPDATE SKIP LOCKED` 可确保每个任务**只被一个 worker 取走处理**，避免重复处理。
