@@ -561,4 +561,4 @@ public class DacManager : IDisposable
 
 我们在实现 GC 时绕了一个小路，但这也是一个很好的借口，来探索 GC 模式并学习如何使用 DAC。下次，我们将最终开始研究如何实现我们自定义 GC 的标记阶段。
 
-本文的代码可以在 GitHub 上找到。
+本文的代码可以在 [GitHub](https://github.com/kevingosse/ManagedDotnetGC/tree/Part3) 上找到。
