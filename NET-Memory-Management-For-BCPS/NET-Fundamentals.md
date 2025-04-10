@@ -588,3 +588,202 @@ mov dword ptr [rbx+0Ch],4
 当将 `DOTNET_JitObjectStackAllocation` 设置为 1 时，JIT 编译代码变得更加有趣！您会清楚地看到两个对象都是在方法的栈帧中“构建”的（使用指向栈的 `rsp` 寄存器）。但它们的内存布局与堆分配的情况完全相同——包括开头的方法表指针。  
 
 **代码清单 4-14**：代码清单 4-12 中方法的 JIT 编译代码片段，启用了逃逸分析
+
+```
+...
+mov rax,7FFBF83B2B28h (MT: Vector)
+mov qword ptr [rsp+28h],rax
+mov dword ptr [rsp+30h],1
+mov dword ptr [rsp+34h],2
+lea rdx,[rsp+28h]
+mov qword ptr [rsp+18h],rax
+mov dword ptr [rsp+20h],3
+mov dword ptr [rsp+24h],4
+...
+```
+
+坦白说，只有当代码清单4-12中的 Add 方法被内联时，JIT 编译生成的代码才会如代码清单4-14所示。只有这样，.NET 8中有限的逃逸分析实现才能确定这两个对象确实不会逃逸出方法作用域。
+
+当前实现存在多项限制条件会阻止对象进行栈分配（正如官方文档所述）：
+
+- 分配对象是数组类型
+- 分配对象是字符串类型
+- 分配对象是装箱后的结构体
+- 类大小超过8KB
+- 在ReadyToRun模式下，类或其任何基类位于不同的"版本隔离区"
+- 对象在循环中被分配
+
+此外如前所述，JIT编译器目前缺乏跨过程逃逸分析能力，因此任何对象方法调用（或将其作为参数传递）都很可能阻断栈分配——除非JIT决定内联该方法。
+
+我们的测试表明，即使在内存密集型程序中，分配次数也没有显著差异。这很可能源于前文提到的诸多约束条件。不过我们仍建议您用实际应用进行测试：或许您的分配模式会更适合逃逸分析优化！
+
+### Class
+
+顶一个 class 来看下与前面的结构体有什么不同
+
+清单4-15. class 定义例子
+
+```c#
+public class SomeClass
+{
+    public int Value1;
+    public int Value2;
+    public int Value3;
+    public int Value4;
+}
+```
+
+由于.NET内存管理的设计机制，堆上的每个对象都具有严格的内存布局结构（具体大小因32位/64位运行时而异，如图4-23所示）：
+
+- **对象头（Object header）**：如.NET源码所述，这是“我们可能需要附加到任意对象的额外信息”存储区。通常该区域为零值，但最典型的用途包括存储对象锁信息或 `GetHashCode` 调用的缓存结果。该字段采用先到先得机制——如果运行时将其用于锁相关操作，哈希值就无法缓存于此，反之亦然。垃圾回收器在内部运作时也会重点使用该区域。
+
+  > - **同步锁**：当执行 `lock(obj)` 时，锁状态就记录在这里
+  > - **哈希码缓存**：首次调用 `GetHashCode()` 后结果会缓存于此（如果没有被锁占用）
+  > - **GC 标记位**：垃圾回收时用于标记对象存活状态
+
+- **方法表指针（Method table reference）**：如前所述，对象类型“显式存储在其表示中”，从实现角度看这正是MethodTable的作用。该指针也是外部对象引用的指向目标——换句话说，对象引用实际指向的是包含方法表地址的内存位置。因此我们说对象头位于“负索引”位置。方法表指针本身指向类型描述数据结构中的对应条目（存储在该类型所属域的高频堆中）。
+
+- **无字段类型的占位数据**（空对象）：当前垃圾回收器设计要求每个对象必须至少保留一个指针宽度的字段空间。该空间具有多重用途：对于普通对象用于存储首个字段（如图4-23中的`Value1`字段），对于数组则存储数组长度信息。正如前文提及且第七章将详述的，该设计对GC机制至关重要。
+
+  > 这就是为什么 `class EmptyClass {}` 仍然会占用内存空间（约12-24字节）的根本原因！
+
+![](asserts/4-23.png)
+
+因此，堆上对象的大小至少需要容纳这三个字段（参见.NET源码中的代码清单4-16）。在32位运行时环境下，没有任何字段的最小对象将占用12字节：
+
+- 4字节用于对象头
+- 4字节（指针大小）用于方法表指针
+- 4字节（指针大小）用于内部数据占位符
+
+而在64位运行时环境下则为24字节：
+
+- 8字节用于对象头——其中仅使用4字节，剩余4字节是零填充的对齐空间（因为64位架构需要8字节对齐的内存布局）
+- 8字节（指针大小）用于方法表指针
+- 8字节（指针大小）用于内部数据占位符
+
+代码清单4-16 堆分配对象的最小尺寸
+
+```
+// 分代式GC要求每个对象至少占用12字节
+#define MIN_OBJECT_SIZE (2*TARGET_POINTER_SIZE + OBJHEADER_SIZE)
+#ifdef TARGET_64BIT
+	#define OBJHEADER_SIZE (sizeof(DWORD) /* 对齐填充 */ + sizeof(DWORD) /* 同步块值 */)
+#else
+	#define OBJHEADER_SIZE sizeof(DWORD) /* 同步块值 */
+#endif
+and TARGET_POINTER_SIZE = 4 (32 bit) or 8 (64 bit)
+```
+
+其中TARGET_POINTER_SIZE = 4（32位系统）或8（64位系统）
+
+我们将在“类型数据局部性”章节对此进行基准测试，但内存开销差异已经显而易见：
+
+- 栈上分配的单字节结构体仅占1字节空间
+- 堆上分配的单字节类在64位运行时将占用24字节内存
+
+现在分析代码清单4-17的示例类（使用与之前结构体示例相同的类定义）。当Main方法创建SomeClass实例时，根据当前知识可知：
+
+1. 变量`sd`引用的数据通过引用传递给Helper方法：
+   - 仅复制内存地址（引用本身）
+   - 不复制字段数据
+   - Helper方法操作的是原始引用，修改字段会影响原对象
+2. `sd`引用的数据默认在堆上分配：
+   - 例外情况：当逃逸分析启用且确认可安全分配在栈上时
+
+代码清单 4-17 使用代码清单4-15中类的示例代码
+
+```c#
+public class ExampleClass
+{
+    public int Main(int data)
+    {
+        SomeClass sd = new SomeClass();
+        sd.Value1 = data;
+        return Helper(sd);
+    }
+    private int Helper(SomeClass arg)
+    {
+    	return arg.Value1;
+    }
+}
+```
+
+现在让我们查看`Main`方法生成的 CIL 代码（见代码清单4-18）。基于计算栈的栈式虚拟机会逐步执行以下指令：
+
+- `newobj instance void Samples.SomeClass::.ctor()`：调用分配器创建SomeClass新实例，其引用被压入计算栈（具体原理将在第6章深入探讨）
+- `stloc.0`：从计算栈顶移除引用，存入第1个局部变量槽
+- `ldloc.0`：将第1个局部变量槽的值（对象引用）压回计算栈
+- `ldarg.1`：压入第2个参数值（注意第1个参数始终是`this`引用）
+- `stfld int32 Samples.SomeClass::Value1`：将栈顶元素存入次栈顶元素（SomeClass实例）的Value1字段，完成后弹出这两个元素
+- `ldarg.0`：再次压入第1个参数（this引用）
+- `ldloc.0`：压入第1个局部变量槽的值（新建的SomeClass实例引用）
+- `call instance int32 Samples.ExampleClass::Helper(class Samples.SomeClass)`：调用方法时从计算栈获取两个参数（根据方法定义可知）
+- `ret`：方法返回
+
+## String 字符串类型
+
+为什么不可变字符串不采用结构体实现？
+虽然值类型天然适合不可变设计，但字符串的特殊性决定了引用类型更合理：
+
+- 值类型的按值传递特性会导致大字符串的复制开销剧增
+- 引用类型只需传递指针，效率提升数个数量级
+
+> 延伸思考：既然不可变性优势显著，为何不默认所有类型都不可变？这正是函数式语言的核心设计：
+>
+> - F#等语言将可变性设为“显式声明”特性（需使用mutable关键字）
+> - C#采用渐进式策略，在特定类型(如string)实施不可变设计
+
+### 字符串驻留
+
+清单4-25. 手动字符串驻留例子：
+
+```c#
+Listing 4-25. Manual string interning example
+string s4 = string.IsInterned(s3);
+Console.WriteLine(s4); // Hello world!
+Console.WriteLine(string.ReferenceEquals(s4, Global)); // True
+string message = args[0];
+string s5 = string.IsInterned(message);
+Console.WriteLine(s5); // null
+string s6 = string.Intern(message);
+Console.WriteLine(string.ReferenceEquals(s6, message)); // True
+```
+
+**驻留字符串存储在内存的哪个位置？**
+
+当代码清单4-25中动态创建的字符串被驻留后，其存储机制涉及多个内存区域（如图4-25所示）。核心组件是运行时为每个应用程序域（AppDomain）在**本机堆（Native Heap）**中创建的 `StringLiteralMap` 对象。该对象通过调用 `SystemDomain::GlobalStringLiteralMap`，将待驻留的字符串封装到一个哈希表中，哈希表按桶（Bucket）分组管理字符串。
+
+存储结构详解：
+
+1. `StringLiteralMap`（驻留在本机堆）：
+   - 每个AppDomain拥有独立的 `StringLiteralMap`
+   - 存储所有驻留字符串的元数据
+   - 每个条目包含：
+     - **哈希值**：用于快速查找
+     - **句柄表引用**：指向 `PinnedHeapHandleTable` 的地址
+2. `PinnedHeapHandleTable`（驻留在固定对象堆，Pinned Object Heap, POH）：
+   - 存储对字符串实例的引用
+   - 这些字符串实例本质上是**托管堆（Managed Heap）**中的普通字符串
+   - 固定对象堆的特点：
+     - 防止字符串实例被垃圾回收移动
+     - 确保驻留字符串的引用地址恒定
+
+![](asserts/4-25.png)
+
+图4-25 字符串驻留的内部机制，所有驻留字符串实际上都是普通的字符串实例——根据其大小分别存储在**小对象堆（Small Object Heap, SOH）**或**大对象堆（Large Object Heap, LOH）**中。对这些字符串的引用由位于**固定对象堆（Pinned Object Heap, POH）**中的 `PinnedHeapHandleTable` 持有，而关于这些引用的元信息则存储在.NET运行时的内部数据结构中。
+
+- **无独立池结构**：
+  驻留字符串并不存储在某个特殊的“字符串驻留池”中，而是通过内部字典和句柄表联合管理。
+- **生命周期与应用程序绑定**：
+  驻留字符串的引用由系统结构持有，因此始终可达（Reachable）。在垃圾回收（GC）术语中，这意味着它们：
+  - 永远不会被回收
+  - 始终位于第2代（Generation 2）
+- **托管堆分层存储**：
+  驻留字符串遵循常规对象的内存分配规则：
+  - **小对象堆（SOH）**：若字符串小于85,000字节
+  - **大对象堆（LOH）**：若字符串大于85,000字节
+  - 最终都会晋升到第2代并永久驻留
+
+> 驻留字符串的永久驻留特性可能导致内存占用累积，尤其在高频率驻留的场景下需谨慎使用。
+>
+> 适合生命周期长且频繁复用的字符串（如配置键值、常量文本），不推荐用于临时或动态生成的字符串。
