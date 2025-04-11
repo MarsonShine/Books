@@ -787,3 +787,172 @@ Console.WriteLine(string.ReferenceEquals(s6, message)); // True
 > 驻留字符串的永久驻留特性可能导致内存占用累积，尤其在高频率驻留的场景下需谨慎使用。
 >
 > 适合生命周期长且频繁复用的字符串（如配置键值、常量文本），不推荐用于临时或动态生成的字符串。
+
+## 类型数据局部性
+
+在没有元数据开销的情况下，结构体（struct）具有极高的内存紧凑性。这一特性至关重要，原因有二：
+
+- **减少数据处理量总是有益的**：这一优势不言而喻——即使内存资源充裕，处理更少的数据通常意味着更快的处理速度。
+- **最大化CPU缓存利用率**：由于结构体体积更小，单个缓存行（cache line）可容纳更多对象，从而显著提升性能。如第2章所述，通过优化数据布局使缓存行尽可能存储有效数据会带来巨大收益，而这正是结构体的优势所在。
+
+内存布局对比
+
+- **结构体数组**：构成连续内存区域，直接存储数据本身
+- **引用类型数组**：仅连续存储引用指针，实际引用的对象可能分散在托管堆各处（见图4-27）
+
+![](asserts/4-27.png)
+
+图4-27. 结构体数组（上方）以连续内存区域形式存储，因为值类型会就地存储其字段。类数组（下方）实际上只是连续的引用数组，这些引用指向堆上位置不确定的对象。
+
+清单4-42的程序通过对比测试直观展示了这种差异：该程序分别计算结构体数组和类数组中所有元素的第一个字段总和，清晰体现了不同数据局部性带来的性能差距。
+
+```c#
+public struct SmallStruct
+{
+	public int Value1;
+	public int Value2;
+}
+public class SmallClass
+{
+	public int Value1;
+	public int Value2;
+}
+// both arrays are initialized with one million elements
+private SmallClass[] classes;
+private SmallStruct[] structs;
+[Benchmark]
+public int StructArrayAccess()
+{
+	int result = 0;
+	for (int i = 0; i < items; i++)
+		result += Helper1(structs, i);
+	return result;
+}
+[Benchmark]
+public int ClassArrayAccess()
+{
+	int result = 0;
+	for (int i = 0; i < items; i++)
+		result += Helper2(classes, i);
+	return result;
+}
+public int Helper1(SmallStruct[] data, int index)
+{
+	return data[index].Value1;
+}
+public int Helper2(SmallClass[] data, int index)
+{
+	return data[index].Value1;
+}
+```
+
+这两种方法的唯一区别在于为每个辅助方法生成的 JIT 编译代码（见清单 4-43）。有趣的区别在于，`Helper1` 中的结构体数组访问使用的是单地址解引用--它通过索引乘以结构体大小来计算数组中的地址。然后将该地址的值存储到结果寄存器中。`Helper2` 则需要两次解引用地址，第一次是获取给定索引中对象的引用，第二次是获取该引用指向的值。
+
+清单 4-43. 对清单 4-36 中的辅助方法进行 JIT 后生成的汇编代码片段。在本例中，rax 寄存器包含一个数组对象的地址，rcx 包含该数组中的一个索引。
+
+```
+Helper1(Samples.SomeStruct[], Int32)
+...
+lea rax,[rax+rcx*8+10h]  // 计算元素地址
+mov eax,dword ptr [rax]  // 直接读取值
+...
+Helper2(Samples.SomeClass[], Int32)
+...
+lea rax,[rax+rcx*8+10h]  // 计算引用地址
+mov rax,qword ptr [rax]  // 获取对象引用
+mov eax,dword ptr [rax+8]  // 读取对象字段值
+...
+```
+
+> 注意：实际运行时这些辅助方法会被内联到基准测试方法中，此处展示原始形式以便理解。
+
+表4-2的基准测试结果（使用.NET 8.0的BenchmarkDotNet）显示：
+
+|       方法        | 平均耗时  | 内存分配 |
+| :---------------: | :-------: | :------: |
+| StructArrayAccess | 491.2 μs  |   0 B    |
+| ClassArrayAccess  | 2247.6 μs |   0 B    |
+
+性能差距远超单次解引用操作的开销，主要源于类实例内存分布的随机性导致缓存行利用率急剧下降。我们将在第13和14章继续探讨数据局部性优化技术，包括C# 12和.NET 8新增的固定大小缓冲区（fixed-size buffers）和内联数组（inlined arrays）等特性。
+
+## 静态数据
+
+从内存管理的角度来看，还需要补充一些说明：
+- 静态数据有每个 AppDomain 的范围--如果同一个程序集被加载到多个应用程序域中，就会有多个不同的静态数据实例。
+- 只要应用程序域存在，程序集中定义的类型的静态数据就会存在、
+因此，在程序集被卸载之前，所有静态数据及其引用的对象都是可访问的（因此不会被垃圾回收）。
+- 在没有 AppDomains 的.NET（不是.NET Framework）中，上述说明适用于 `AssemblyLoadContext`。虽然这些都是实现细节，但我们不妨注意以下几点
+  - 静态原始数据（如数字）存储在相应应用程序域的高频堆（其加载堆的一部分）中。
+  - 静态引用类型实例（对象）保存在常规的 GC 堆中，与普通对象的区别在于它们被内部 “静态表”额外引用。由于此类对象显然会长期存在，因此它们最终会进入第 2 代，并留在那里。
+  - 包含引用或从可收集程序集加载的静态用户定义值类型实例（结构体）以盒装形式存在于常规 GC 堆中。它们的处理方式与静态引用类型实例完全相同，这在上一点中已有解释。
+
+### 静态数据剖析
+
+.NET 应用程序中的每个应用域都由一组内部数据结构表示（见图 4-28）。对于加载程序集中存在的每个模块，都会维护 `DomainLocalModule` 数据结构。从内部静态数据实现的角度来看，它包含两个关键区域：
+- 引用类型字段和结构体（方框形式）： 对象[]表内部的引用，特定模块的静态引用从该表开始（图 4-28 中的 m_pGCstatics）。该 Object[] 表在加载到应用程序域的所有模块和程序集之间共享。
+- 对于原始类型的字段： 按类型分组的原始静态字段值，包括内存对齐所需的填充（图 4-28 中的静态 blob）。
+
+![](asserts/4-28.png)
+
+图 4-28. .NET 8 中静态字段存储的内部结构（从具有两个加载程序集的单个应用程序域的角度看）。静态数据确实被存储的地方被标记为灰色（而其他所有可见的结构都可以被看作是支持性的辅助数据）。在 .NET Framework 中，静态 blob 被存储在给定类型的 MethodTable 旁
+
+上述共享 Object[] 数组由内部 PinnedHeapHandleTable 数据结构维护（在有关字符串插值的章节中已经提到，该数据结构也在该章节中使用），并在 Pinned Object Heap 中进行分配（也被固定，以便安全地存储指向它的地址）。该句柄表在桶中维护数组，因此当当前使用的数组被填满时，将创建一个新的桶和新的相应数组（例如，如果需要构建一个带有静态字段的新通用类型，就会出现这种情况）。
+
+> 请注意，如果相应的应用程序域或 AssemblyLoadContext 被卸载，图 4-28 中的所有数据结构最终都将被删除（包括已加载程序集的所有静态数据）。在本章前面提到的可收集程序集的情况下，只有相应的 DomainLocalModule 会被删除，共享句柄表中的相应条目也会被删除。总之，这将导致所有静态引用类型实例（以及由它们引用的所有对象）都无法访问，因此它们最终会被垃圾回收。
+>
+
+此外，在创建静态相关数据时，所有静态字段的偏移量都会被计算并存储在相应的 MethodTable 字段描述中。当 JIT 编译器生成访问静态字段的代码时，它将以如下方式消耗这些数据：
+- 对于原始数据静态字段：知道适当的 DomainLocalModule 的地址和访问字段在其静态 blob 中的偏移量后，计算出数据的绝对地址。
+- 对于引用数据静态字段和来自可收集程序集的结构体或包含引用的结构体（以盒状堆分配）： 使用 `PinnedHeapHandleTable` 及其桶检索相应 Object[] 数组的地址。然后，根据数组的索引计算出数组中适当元素的绝对地址（这是一个引用，指向相应的对象）。
+- 对于不包含引用且不是来自可收集程序集的结构体静态字段的特殊情况：JIT 将直接从 NonGC Heap 输出指向装箱结构体的地址。之所以能做到这一点，是因为堆中的对象永远不会被移动或收集。
+
+如前所述，**不包含引用类型字段且未从可回收程序集加载的结构体**，当作为静态字段存储时，会被存放在特殊的非GC内存区域（NonGC Heap）。对此类静态字段进行读写操作时（参见代码清单4-48），JIT编译器生成的汇编代码会直接访问非GC堆中的结构体实例（参见代码清单4-49），这种处理方式具有极高的执行效率。
+
+需要特别说明的是，虽然这听起来像是特例，但实际上这种情况相当普遍——可回收程序集并不常用，默认配置都是不可回收的。因此，只要您的结构体不包含任何引用类型字段，就能自动享受这项优化带来的性能提升。
+
+清单 4-48. 访问用户定义值类型静态字段数据的简单示例
+
+```c#
+[MethodImpl(MethodImplOptions.NoInlining)]
+public void Method2()
+{
+	Console.WriteLine(ExampleClass.StaticStruct.Value);
+}
+```
+
+清单 4-49. JIT 生成的清单 4-48 的代码
+
+```
+...
+mov rcx,225779604C0h ; address in Frozen Segment
+mov ecx,dword ptr [rcx] ; access the first field of a struct
+call qword ptr [00007ffc`9c6a4750] ; System.Console.WriteLine(Int32)
+...
+```
+
+> 在.NET 7 引入冻结段（frozen segments）（非GC 堆）之前，静态结构体字段以装箱形式存储在托管堆中，访问方式与下面的引用类型静态字段描述完全相同。因此，在使用旧框架时，您应该注意静态结构字段所带来的少量额外开销。
+
+访问引用类型的静态字段数据（见清单 4-50）会生成访问句柄表（存在于固定对象堆（POH）中）的代码，以获取对象的地址（见清单 4-51）。因此，解引用这个额外的句柄会产生开销。
+
+清单 4-50. 访问用户定义引用类型静态字段数据的简单示例
+
+```c#
+[MethodImpl(MethodImplOptions.NoInlining)]
+public void Method3()
+{
+	Console.WriteLine(ExampleClass.StaticObject.Value);
+}
+```
+
+清单 4-51. JIT 生成的清单 4-50 的代码
+
+```
+mov rcx,19510002940h ; addres in POH (inside handle table)
+mov rcx,qword ptr [rcx] ; dereference handle (rcx contains object address)
+mov ecx,dword ptr [rcx+8] ; access the first field of an object
+call 00007ff9`3c9c2b60 (System.Console.WriteLine(Int32),
+```
+
+在访问未使用 NonGC 堆优化的静态结构体时，会产生与清单 4-51 类似的代码，因此，对于每个包含引用或已加载到可收集程序集的结构体（图 4-26 中的 OtherStruct 示例），都会产生类似的代码。
+
+> 如果 ExampleClass 是一个结构体，也会产生相同的代码（显然地址略有不同）。这是因为静态字段类型很重要，而不是定义字段的类型。
