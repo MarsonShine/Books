@@ -382,3 +382,686 @@ call coreclr!JIT_WriteBarrier (00007ffd`2403fae0)
 
 基于上述知识，我们现在可以深入分析前文提及的 `JIT_WriteBarrier` 函数。值得注意的是，`JIT_WriteBarrier` 代码的内存区域仅作为占位符使用，实际会运行时被替换为具体实现（显然在程序执行暂停时完成替换）。该占位符大小等于最大函数实现版本，以确保其他版本均可适配。我们将分析最简版本（见代码清单5-7），但所有版本差异极小，分析其一即可充分理解（详见下文注释说明）。
 
+在.NET Core源代码的`.\src\coreclr\vm\amd64\JitHelpers_FastWriteBarriers.asm`文件中（针对x64实现），可以找到不同的 `JIT_WriteBarrier` 实现版本，主要包括：
+
+- `JIT_WriteBarrier_PreGrow64` 与 `JIT_WriteBarrier_PostGrow64`：
+   用于工作站GC模式。前者在代际0和1处于默认内存位置时使用。运行一段时间后，运行时可能决定将其迁移到其他位置，此时会注入后者的 PostGrow 版本。
+- `JIT_WriteBarrier_SVR64`：用于服务器 GC 模式。该模式下存在多堆结构，因而会有多个代0和1。检查引用是否属于这些代会显著降低性能，因此无条件设置卡表（cards）。
+- `JIT_WriteBarrier_WriteWatch_PreGrow64`、`JIT_WriteBarrier_WriteWatch_PostGrow64` 及`JIT_WriteBarrier_WriteWatch_SVR64`：前述函数对应的“写入监视”（Write Watch）技术实现版本，该技术由CLR实现（后续将详述）。
+
+当运行时决定切换写屏障时，会调用以下方法：
+
+```cpp
+int WriteBarrierManager::ChangeWriteBarrierTo(WriteBarrierType newWriteBarrier, bool isRuntimeSuspended) {
+    ExecutableWriterHolder<void> writeBarrierWriterHolder(GetWriteBarrierCodeLocation((void*)JIT_WriteBarrier), GetCurrentWriteBarrierSize());
+    memcpy(writeBarrierWriterHolder.GetRW(), (LPVOID)GetCurrentWriteBarrierCode(), GetCurrentWriteBarrierSize());
+}
+```
+
+更多细节可参阅`.\src\coreclr\vm\amd64\jitinterfaceamd64.cpp`中的 `StompWriteBarrierResize` 和 `StompWriteBarrierEphemeral`方法。
+
+如代码清单5-7所示，写屏障的实现逻辑其实非常简洁：
+
+- 寄存器rcx存储目标地址（对应示例代码`Mutator.Write`中的`address`参数），寄存器rdx存储源引用（对应示例代码`Mutator.Write`中的`value`参数）
+- 第3行通过`mov [rcx], rdx`完成核心操作——将给定值写入目标地址。我们仅当`rdx`属于新生代时才需要操作卡表（设置卡片标记），因为运行时只关注**老生代到新生代**的跨代引用（将代际0和1视为新生代，代际2视为老生代）。
+- 因此，第6-14行用于检查源引用是否属于**临时代际**（即代际0和1）。若不属于，函数立即退出；若属于，则进一步检查卡表是否尚未标记。这部分代码是我们需要重点关注的：
+
+- 第16行将卡表地址（运行时会将常量`0F0F0F0F0F0F0F0F0h`替换为实际地址）加载到`rax`寄存器
+- 第17行将目标地址（`rcx`）右移11位（相当于除以2048）
+- 第18-22行检查卡表中对应字节是否为`FFh`，若未标记则进行设置
+
+**代码清单5-7** `JIT_WriteBarrier_PostGrow64`函数实现（部分原始注释已移除/补充）
+
+```assembly
+LEAF_ENTRY JIT_WriteBarrier_PostGrow64, _TEXT
+align 8
+mov [rcx], rdx                ; 将rdx值写入rcx地址
+NOP_3_BYTE                    ; 对齐填充
+PATCH_LABEL JIT_WriteBarrier_PostGrow64_Patch_Label_Lower
+mov rax, 0F0F0F0F0F0F0F0F0h   ; 运行时替换为新生代下界地址
+cmp rdx, rax                  ; 检查是否低于新生代下界
+jb Exit
+nop                           ; 对齐填充
+PATCH_LABEL JIT_WriteBarrier_PostGrow64_Patch_Label_Upper
+mov r8, 0F0F0F0F0F0F0F0F0h    ; 运行时替换为新生代上界地址
+cmp rdx, r8                   ; 检查是否高于新生代上界
+jae Exit
+nop                           ; 对齐填充
+PATCH_LABEL JIT_WriteBarrier_PostGrow64_Patch_Label_CardTable
+mov rax, 0F0F0F0F0F0F0F0F0h   ; 运行时替换为卡表地址
+shr rcx, 0Bh                  ; 计算卡表条目偏移（地址/2048）
+cmp byte ptr [rcx + rax], 0FFh; 检查卡表字节是否已标记
+jne UpdateCardTable
+REPRET
+UpdateCardTable:
+mov byte ptr [rcx + rax], 0FFh; 标记卡表
+ret
+align 16
+Exit:
+REPRET
+LEAF_END_MARKED JIT_WriteBarrier_PostGrow64, _TEXT
+```
+
+关键点在于：虽然理论上只需设置单个卡片位（对应256字节内存区域），但实际会设置整个字节（对应8个卡片/2048字节）。这是出于性能考量——用单条指令操作字节（如代码所示）远比位操作（需准备和操作位掩码）高效。
+
+当然这会带来额外开销：原本只需标记256字节，现在会标记2,048字节。这再次体现了性能权衡的艺术。
+
+> 需注意：当前写屏障实现（包括清单5-7）**仅检查源引用是否属于新生代**，而**不检查目标地址是否属于老生代**。因此：
+>
+> 1. 标记阶段只会检查老生代地址对应的卡表条目，新生代间的引用标记会被自动忽略
+> 2. 在写屏障中检查`rcx`是否属于老生代会显著增加复杂度，直接标记卡片比执行全套检查更高效
+>
+
+### 卡束（Card Bundles）
+
+卡表技术通过优化记忆集（remembered set）的使用来提升效率。其核心思想不是逐一追踪每个跨代引用，而是以组为单位进行追踪。如之前所述，在64位.NET版本中，每张卡（card）覆盖256字节的内存区域。若该区域内的任意对象被修改并包含指向年轻代的引用，则通过设置对应位将整个内存块标记为脏（dirty）。由于底层优化，实际会设置整个字节，对应2,048字节（2KB）的内存区域。但还存在进一步的优化空间。
+
+假设我们在服务器上运行一个典型Web应用，其内存占用约为数GB。若老年代大小为2GB，卡表中每个字节对应2KB内存，则覆盖整个老年代需要1MB的卡表。虽然这看似不大，但每次年轻代垃圾回收时都需要扫描这些字节以查找老年代到年轻代的引用。年轻代垃圾回收必须极快，而扫描如此大的卡表会带来显著开销。即使仅需几毫秒，这也可能超过垃圾回收的总耗时！此外，卡表可能非常稀疏——大量未置位的卡与置位的卡交错存在。
+
+为此，.NET引入了称为**卡束（card bundle）**的额外观察层级。如果说卡表中的一个字（word）聚合了多张卡，那么卡束中的一个字则聚合了多个卡表字。卡束被设计为密度更高，覆盖更大的内存区域（见图5-10）。卡束字中的每个位对应32个卡表字（覆盖256KB内存），因此每个字节代表2MB，而4字节的卡束字覆盖8MB。
+
+![](asserts/5-10.png)
+
+**图5-10**. .NET（64位版本）中的卡束表结构。卡束表中的每个位代表32个卡表字（256KB），这些位按字节分组（每个字节代表2,048KB内存），字节进一步组成卡束字，覆盖4倍大的内存区域（8MB）
+
+这种机制支持快速（可能缓存）扫描脏区域：首先扫描卡束表定位大块脏区域，然后仅在这些区域内精确扫描卡表。以2GB老年代为例，仅需1,024字节的卡束表即可覆盖。若某位置位，则扫描对应的32个卡表字以查找具体脏卡。
+
+但卡束的置位（标记为“脏”）由谁负责？写屏障（write barrier）代码中并未显式处理此逻辑。其底层机制依赖操作系统：
+
+- **Windows（.NET 5之前）**：通过`MEM_WRITE_WATCH`标志预留卡表内存页，利用`GetWriteWatch` API获取脏页列表，并在`gc_heap::update_card_table_bundle()`方法中更新卡束表。
+- **Linux**：因缺乏系统级写监视机制，.NET Core在写屏障中手动实现（见代码清单5-8）。自.NET 5起，Windows与Linux采用统一实现。
+
+**代码清单5-8**. Linux版.NET运行时中写屏障汇编代码片段（手动实现卡束脏标记）
+
+```asm
+#ifdef FEATURE_MANUALLY_MANAGED_CARD_BUNDLES 
+    // rcx已右移0xB位，需再右移0xA位
+    shr rcx, 0Ah 
+    NOP_2_BYTE // 对齐填充
+PATCH_LABEL JIT_WriteBarrier_PreGrow64_Patch_Label_CardBundleTable 
+    mov rax, 0xF0F0F0F0F0F0F0F0 
+    // 检查卡束是否已脏
+    cmp byte ptr [rcx + rax], 0FFh 
+    jne UpdateCardBundleTable 
+REPRET 
+UpdateCardBundleTable:
+    mov byte ptr [rcx+rax], 0FFh 
+#endif  
+```
+
+此处同样以字节粒度标记脏状态，因此Linux版卡表以2MB为粒度操作。
+
+> 还有一个有趣的话题需要讨论，那就是卡片表对数组的处理。试想一下，在上一代中存储了一个大型对象表。这个数组足够大，可以跨越许多卡片，甚至是卡束。再假设我们将一个新创建的对象赋值给该表的一个元素。结果会怎样呢？只有卡片字中的一个对应字节以及卡束字中的一个对应位会被弄脏。但是，标记阶段将如何使用这些信息呢？将扫描表中的哪些元素？是只扫描相应卡片的一部分，还是扫描整个数组？答案很简单--只扫描数组中已设置卡片的部分。 
+
+在 .NET 运行时中，您已经学到了很多关于记忆集、卡表和卡束的知识。我们花了很多篇幅来讨论这个主题，因为它是.NET GC 运行的关键机制之一。然而，在.NET文档或文章中，对这一机制的描述却较少。其中一个原因可能是它是一个隐藏很深的实现细节。它经过了高度优化，这意味着它不会造成问题，也不需要为大众所知。不过，我们相信，没有比这本关于 .NET 内存管理的书更适合解释和让你理解这个主题的了。了解了到目前为止所学到的所有知识后，我们还可以讨论本章末尾介绍的规则--避免不必要的堆引用。 
+
+## 分区类别
+
+### 非GC堆（NonGC Heap）
+
+在早期文档和部分源代码中，该堆被称为冻结堆（Frozen heap）。如第4章所述，长度小于64K的只读字面量字符串会被存储在这个特殊的非GC堆中。除了这些永驻内存的字符串外，通过`typeof()`或`GetType()`返回的运行时类型等只读对象也会驻留于此。由于这些对象永久存活且不受垃圾回收器监管，该堆因此得名。
+
+若对非GC堆中的对象调用`GC.GetGeneration()`会返回什么？在.NET 8之前会返回2，但在.NET 8中会返回`0x7FFFFFFF`（即int.MaxValue）。
+
+### 固定对象堆（Pinned Object Heap）
+
+分散存在的长期固定对象会加剧GC的工作负担，尤其会在压缩过程中引发内存碎片化。对于那些分配后立即需要固定的场景，更高效的做法是直接在内存的特殊区域（而非常规的gen 0代）分配它们。这正是`GC.AllocateArray`和`GC.AllocateUninitializedArray`方法的设计目标——这两个方法通过末位的布尔参数告知分配器是否需要固定数组。
+
+在设计固定对象堆（POH）时，决策层决定“仅”支持对纯值类型（即不含引用类型字段的类型）数组的分配。这意味着开发者无法分配包含类或引用的数组。该设计旨在支持 `P/Invoke` 调用中固定缓冲池的场景，例如ASP.NET Core的Kestrel服务器或System.Net.Sockets中异步本地缓冲区的优化实现（这类缓冲区通常是字节数组）。
+
+若尝试分配非纯值类型的固定数组，代码虽能通过编译，但会抛出`System.ArgumentException`异常，提示："Cannot use type 'ReferenceType'. Only value types without pointers or references are supported."。该检查由`System.Private.CoreLib` 中的托管代码通过调用`System.Runtime.CompilerServices.RuntimeHelpers.IsReferenceOrContainsReferences<T>()`实现。不过在.NET 8中移除了此限制——CLR的本地分配代码不再校验类型，完全支持分配引用数组（如第4章所述 PinnedHeapTable 的案例）。
+
+### 固定对象堆与CLR内部数据
+
+除开发者分配的固定缓冲区外，POH还被.NET框架内部用于存储特定数据。第4章在讨论字符串驻留和静态字段时曾两次提及这些场景，其核心是`PinnedHeapHandleTable`结构。下面深入探讨其实现细节。
+
+#### PinnedHeapHandleTable
+
+该数据结构由.NET运行时维护，用于管理为内部用途分配的POH对象数组。其内部采用分桶结构（.NET Core中的数据结构示意图见图5-11），每个桶对应一个在POH中分配的`Object[]`数组。这些数组被固定以防止垃圾回收器移动——因为CLR的非托管模块可能持有数组元素的指针，移动它们会迫使GC执行大量指针更新操作。
+
+每个桶存储着对应数组的固定句柄，并额外维护了数组数据起始指针（`m_pArrayDataPtr`）和当前可用元素的索引（`m_currentPos`，这些数组会预分配冗余空间）。当数组元素耗尽时，运行时将创建新桶（即在POH中分配新`Object[]`数组）。桶之间通过单向链表连接（每个桶的`m_pNext`指针指向下一桶，末位桶则为null）。
+
+如图5-11所示，`PinnedHeapHandleTable`主要有两种用途：
+
+- 全局字符串字面量映射表（即字符串驻留池）对应的一个或多个`Object[]`——由至少包含一个桶的独立`PinnedHeapHandleTable`管理
+- 各应用域静态字段对应的一个或多个`Object[]`——由BaseDomain中的`PinnedHeapHandleTable`管理（每个实例至少包含一个桶）
+
+![](asserts/5-11.png)
+
+图 5-1 PinnedHeapHandleTable 结构
+
+> 尽管SystemDomain（系统域）通常是一个应用程序域，并且继承自BaseDomain因而包含 `m_pPinnedHeapHandleTable` 字段，但该字段实际并未被使用。由于系统域不包含任何托管模块，因此不需要在其中存储静态成员。
+
+您可以使用 WinDbg 查看句柄表数组。附加到.NET进程后，首先通过SOS扩展的 `!eeheap` 命令列出所有与GC相关的内存区域（参见清单5-9）。在获取到POH（固定对象堆）对应的地址范围后，使用 `!dumpheap` 命令列出其中的所有对象。以一个简单的"Hello world"控制台程序为例，其结果如清单5-9所示。可以看到，在此简单程序中仅存在三个 `Object[]` 数组（值为`7ff7c58dc470` 的列对应 `Object[]` 的方法表）。
+
+清单5-9 使用 WinDbg 和 SOS 扩展列出固定对象堆中的句柄表
+
+```
+> !eeheap
+...
+Pinned object heap
+segment 		begin 		allocated 	committed allocated 	size		committed size
+0257b989ec40  0217a5c00028 0217a5c07ff0 	0217a5c11000 	0x7fc8(32712) 	0x11000 (69632)
+```
+
+```
+!dumpheap 217a5c00028 0217a5c07ff0
+Address 		MT 		  Size
+0217a5c00028 7ff7c58dc470 8,184
+0217a5c02020 7ff7c58dc470 8,184
+0217a5c04018 7ff7c58dc470 16,344
+```
+
+这三个数组分别是：
+
+1. 域1的句柄表（包含大多数库模块及程序自身）
+2. 字符串驻留池
+3. 共享域的句柄表（在简单控制台程序中可能仅包含 `System.Private.CoreLib.dll` 模块）
+
+目前尚无直接方法判断各数组的具体用途——您需要通过 `!dumparray` 命令查看每个数组的内容来推断。
+
+字符串驻留池显然会包含被驻留的字符串引用。另外两个数组则主要存储所用库和代码中的各种静态成员，以及因 NGEN 程序集启用 `NoStringInterning` 选项而未经驻留处理的字符串字面量解析结果。
+
+句柄表还有另一用途——运行时使用它们存储反射相关数据。当调用 `GetType、typeof` 或其他反射API时，底层的 RuntimeType 及其他信息也会通过句柄保存在表中。因此您可能在这些数组中看到大量类型相关的对象引用。
+
+`PinnedHeapHandleTable` 通常不会成为应用程序的性能瓶颈。除非动态创建大量静态成员、频繁加载动态应用程序域，或驻留巨量字符串。若在固定对象堆中发现大量仅被固定句柄引用的超大 Object 数组，则可能表明您遇到了上述罕见场景。但由于这些数组仅存储引用，您通常会先在其他内存区域注意到被引用对象的存在。
+
+## 物理分区
+
+您已经知道托管内存被划分为不同的内存区域：大对象堆（LOH）用于存储超过85,000字节的对象（及某些特殊例外），小对象堆（SOH）存储较小对象并进一步分代，而固定对象堆（POH）则存放永远不会移动的对象（大小可能超过85,000字节）。从操作系统视角看，这些区域都被视为“堆”（如图5-1所示）。但尚未阐明的是GC托管堆如何具体组织非GC堆（NGCH）、POH、LOH及分代的SOH。现在我们将结合已有知识，剖析GC堆的物理组织结构。
+
+需要特别注意的是，微软实现的垃圾回收器可能以两种截然不同的模式运行：
+
+- **工作站模式**：仅包含单个托管堆
+- **服务器模式**：默认包含与.NET应用可用逻辑核心数相等的多个托管堆
+
+后续章节将深入探讨这两种模式的其他差异，目前只需关注托管堆数量的区别即可。
+
+物理实现因.NET版本而异：
+
+- **.NET 7之前**：托管堆由一组堆段（segment）构成。每个堆段属于LOH或SOH（.NET 5后包含POH）。对于SOH段，若存在多个段，则除一个称为“暂时代段”（ephemeral segment）的段外，其余均为第2代段。暂时代段存放第0代和第1代对象（可选包含第2代）。
+- **.NET 7及更高版本（64位）**：堆段被区域（region）取代（尽管API和内部实现仍沿用“段”术语）。这些区域分别属于NGCH、POH、LOH、第2代、第1代或第0代。不再存在暂时代段——单个区域不能存储多个代的对象。
+
+通过描述.NET运行时启动过程中各元素的创建过程，最能清晰阐释这些概念。
+
+### 段实现（Pre-.NET7）
+
+让我们从预分配区域（pre-region）的实现开始讲起。图5-12展示了最简单场景（工作站模式运行）下托管堆创建的三个阶段，更复杂的场景将在后文讨论。
+
+在该场景中，会发生以下步骤：
+
+- .NET运行时首先尝试分配（保留）一个连续的初始内存块（见图5-12a），这是将所有段保持在一起的优化措施。若虚拟地址空间不足，这些段将会分散存储。
+- 随后需要为小对象堆（SOH）和大对象堆（LOH）创建两个独立段。它们通过逻辑划分的方式在新保留的内存块中创建（见图5-12b）。
+- 在SOH段中通过提交指定内存量来创建第0、1、2代，LOH段也会提交相应内存量（见图5-12c）。
+
+![](asserts/5-12.png)
+
+图5-12展示了最简单场景下的块与段表示——单个内存块同时包含SOH和LOH段
+
+> 在.NET运行时中，段和区域由 `heap_segment` 对象表示（后续章节将深入探讨）。这些对象跟踪内存地址信息、已保留/提交的内存量等关键数据。如后文所述，堆段从低地址向高地址消耗，对象分配越多，段内需要提交的内存就越多。
+
+通过 `VMMap` 工具观察简单控制台程序，可以直观验证图5-12的示意图。展开图5-1所示的“GC托管堆”条目后，可见内存布局（图5-13）与前述描述完全吻合：
+
+- 约260KB专用于第0代（259KB）、第1代（24字节）和第2代（24字节）
+- 近256MB保留内存用于SOH段剩余空间
+- 72KB专用于大对象堆（LOH）
+- 近128MB保留用于LOH段剩余空间
+
+![](asserts/5-13.png)
+
+图 5-13. 简单控制台 .NET 应用程序中的单个程序块包含两个程序段（SOH 和 LOH），在 `VMMap` 中可见
+
+如前所述，包含第0代和第1代的堆段称为临时段（ephemeral segment）。这一重要概念在垃圾回收器的实现中频繁出现，因此本书后续章节会多次提及。
+
+通过WinDbg的SOS插件执行`!eeheap`命令（见清单5-10）可列出所有堆段与代际信息。该命令输出的两个独立堆段信息与图5-13所示内容对应。细心的读者会发现，各代起始地址实际上与堆段起始位置存在`0x1000`偏移量，这一设计原理将在“堆段、内存区域与堆结构剖析”章节详细阐述。
+
+清单5-10 WinDbg中SOS插件`!eeheap`命令显示的堆段与代际信息（对应图5-13进程状态）
+
+```assembly
+> !eeheap
+Number of GC Heaps: 1
+generation 0 starts at 0x0000026700001030
+generation 1 starts at 0x0000026700001018
+generation 2 starts at 0x0000026700001000
+ephemeral segment allocation context: none
+segment begin allocated size
+0000026700000000 0000026700001000 0000026700033b18 0x32b18(207640)
+Large object heap starts at 0x0000026710001000
+segment begin allocated size
+0000026710000000 0000026710001000 0000026710005480 0x4480(17536)
+Total Size: Size: 0x36f98 (225176) bytes.
+------------------------------
+GC Heap Size: Size: 0x36f98 (225176) bytes.
+```
+
+ 默认堆段大小取决于多重因素，其中最关键的是垃圾回收器运行模式，其次是运行时环境的位数架构。表5-3对此进行了系统总结。例如图5-13所示的控制台应用程序运行于64位工作站模式运行时环境，其小对象堆（SOH）段大小为256MB，而大对象堆（LOH）段为128MB。值得注意的是，在服务器模式下，默认SOH段大小与逻辑核心数成反比（核心数越多，单个堆段越小）。
+
+表5-3 不同运行条件下的默认堆段大小
+
+|      | 工作站模式 |       | 服务器模式      |                |
+| ---- | ---------- | ----- | --------------- | -------------- |
+|      | 32位       | 64位  | 32位            | 64位           |
+| SOH  | 16MB       | 256MB | 64MB(#CPU<=4)   | 4 GB (#CPU<=4) |
+|      |            |       | 32 MB (#CPU<=8) | 2 GB (#CPU<=8) |
+|      |            |       | 16 MB (#CPU>8)  | 1 GB (#CPU>8)  |
+| LOH  | 16MB       | 128MB | 32MB            | 256MB          |
+
+ 图5-14通过 `VMMap` 工具展示了ASP.NET 4.5应用在8核64位服务器模式下的堆段分布。可见一个连续的巨型内存块被保留（reserved），其中包含8个SOH段与8个LOH段，其尺寸完全符合表5-3的默认值（SOH段2GB，LOH段256MB）。
+
+至此我们更能理解第2章所述“保留内存”与“提交内存”区别的重要性。虽然图5-14中Web应用的托管堆看似占用了惊人的18GB保留内存，实际仅消耗8MB提交内存。
+
+![](asserts/5-14.png)
+
+图5-14. 在 `VMMap` 工具中可见，ASP.NET应用程序内部存在一个巨大的连续内存块，其中包含八个堆段（SOH与LOH）。该应用运行于支持超线程的四核八线程机器，采用64位服务器模式的运行时环境。
+
+目前为止展示的两种场景具有一个共同特性——所有内存段都是在单个连续内存块中创建的。这是最常见的初始场景，称为“一次性分配”模式（如图5-15a和5-16a所示）。但还存在另外两种可能的分配模式：
+
+- **两阶段式**：存在两个独立内存块——分别用于小对象堆（SOH）和大对象堆（LOH）段（见图5-15b和5-16b）。
+- **逐段式**：每个段都有独立的内存块（见图5-16c）。
+
+这种情况可能发生在.NET运行时无法保留单个连续虚拟内存块时。若发生此情况，将尝试采用两阶段式模式。若仍失败，在服务器模式下会选择更细粒度的逐段式模式。
+
+![](asserts/5-15.png)
+
+ 图5-15 工作站GC可能的初始段配置：(a)一次性配置，(b)两阶段式配置（与逐段式配置相同）
+
+![](asserts/5-16.png)
+
+ 图5-16 服务器GC可能的初始段配置（以4核机器为例）：(a)一次性配置，(b)两阶段式配置，(c)逐段式配置
+
+当应用程序运行并分配大量对象时，临时段或大对象堆可能被填满。此时将分配额外内存段。第6章将介绍处理此类情况的典型方法。请注意，此处描述的段配置在.NET Core的Windows和Linux版本中保持一致。
+
+> 在Mono（当前6.12版本）中，代的物理组织方式略有不同：
+>
+> - 小对象存储在两种内存区域中。新生代（Nursery）是4MB大小的连续内存块，其大小在Mono启动时通过配置设定且不会动态变化，此处采用快速指针推进分配技术。老年代被组织成16KB的块（但会以更大块分配以避免碎片化），统称为主堆（Major Heap）。
+> - 大对象空间中的大对象被组织成1MB的区段，而更大的对象则直接通过 `VirtualAlloc` 调用分配，并以单向链表形式记录。
+
+内存段可分为四种类型：
+
+- 小对象堆
+- 大对象堆
+- 只读堆
+- 固定对象堆（自.NET 5起）
+
+第三种类型（只读堆）自.NET Framework 3.5和.NET Core起已被弃用。但其他框架（目前仅有.NET Native）可能仍在使用，因此在各种资料——包括.NET源代码、CLR事件和文档中仍可见其踪迹。第3章提及ETW事件时已注意到这点：当创建新段时会触发 `GCCreateSegment` 事件，其类型在有效载荷中以 `GCSegmentType` 给出，可能值包括 `ReadOnlyHeapMapMessage` 枚举值（以及 `SmallObjectHeapMapMessage`、`LargeObjectHeapMapMessage` 和 `PinnedObjectHeapMapMessage`）。只读堆段用于对象冻结功能，该功能可通过用 `StringFreezingAttribute` 标记程序集启用。
+
+当此类程序集通过原生映像生成器（Ngen.exe）序列化为原生映像时，所有字符串字面量将以托管形式预编译到生成的映像中。该映像内包含这些字符串（或广义对象，尽管没有处理它们的API）的内存区域可注册为只读段，并立即投入使用（因为对象已以托管形式存在）。
+
+注意与第4章描述的字符串驻留的区别——后者需要在运行时进行常规字符串分配。此外如微软文档所述：“请注意，公共语言运行时（CLR）无法卸载任何包含冻结字符串的原生映像，因为堆中的任何对象都可能引用该冻结字符串。因此，仅当包含冻结字符串的原生映像被大量共享时，才应使用 `StringFreezingAttribute`类。”
+
+自.NET 8起，只读段正式称为非GC堆（NonGC Heap）。第4章已描述字符串字面量如何存储在 NGCH 中。您可能注意到在描述POH、LOH和SOH的GC段初始化时未提及NGCH——NGCH没有全局初始化：当首次分配只读对象时，会延迟创建全局 `FrozenObjectHeapManager` 原生对象，该对象负责创建用于分配只读对象的段。每个只读段由 `FrozenObjectSegment` 原生实例标识，这些实例由 `FrozenObjectHeapManager` 存储在列表中，每个段都映射到垃圾回收器管理的标准 `heap_segment`，如图5-17所示。
+
+![](asserts/5-17.png)
+
+ 图5-17 显示 `SystemDomain` 唯一的 `FrozenObjectHeapManager` 维护着非GC堆的只读段
+
+当只读段填满时，会创建大小是前一个段两倍的新段。初始保留4MB的只读段空间，每个段首次提交64KB。借助这些永不移动的字符串字面量和只读运行时类型对象，JIT可以编写优化代码直接访问其地址，而无需添加任何写屏障调用。
+
+### .NET 7+ 区域化实现
+
+ 图5-18展示了.NET 8采用区域（region）而非段（segment）的初始化方式。
+
+![](asserts/5-18.png)
+
+ 图5-18：.NET 8应用程序地址空间初始状态，其中区域从POH延伸到LOH，中间依次为 `gen2`、`gen1` 和 `gen0`
+
+- 在地址空间中会保留一个连续的巨型内存块。
+- 该保留块内部会创建五个区域：`POH、gen2、gen1、gen0` 及 `LOH` 各占一个区域。其中 `LOH` 和 `POH` 区域的尺寸是 `SOH` 区域的八倍。
+- NGCH 区域则按需创建在地址空间的另一部分
+- 每个区域初始会提交一个内存页。
+
+图5-19中VMMap工具展示了简单控制台应用程序的托管堆地址空间状态：
+
+- 保留的256GB内存块中创建了POH（32MB）、多个SOH（各4MB）及LOH（32MB）区域
+- 地址空间另一部分创建了4MB区域用于存储NGCH
+
+![](asserts/5-19.png)
+
+图5-19：VMMap 显示的.NET 8简单控制台程序各区域分布
+
+通过WinDbg的 `!eeheap` SOS命令也可查看相同区域列表（见清单5-11）。
+清单5-11：WinDbg中SOS !eeheap命令列出的区域与代际，对应图5-19进程状态
+
+```
+Number of GC Heaps: 1
+----------------------------------------
+Small object heap
+segment begin allocated committed allocated size committed size
+generation 0:
+02882991f320 024818400028 024818415740 024818421000 0x15718 (87832) 0x21000 (135168)
+generation 1:
+02882991f270 024818000028 024818000028 024818001000 0x1000 (4096)
+generation 2:
+02882991f1c0 024817c00028 024817c00028 024817c01000 0x1000 (4096)
+Frozen object heap
+segment begin allocated committed allocated size committed size
+024813709030 0288aa620008 0288aa6209f0 0288aa630000 0x9e8 (2536) 0x10000 (65536)
+Large object heap
+segment begin allocated committed allocated size committed size
+02882991f3d0 024818800028 024818800028 024818801000 0x1000 (4096)
+Pinned object heap
+segment begin allocated committed allocated size committed size
+02882991ec40 024815c00028 024815c04018 024815c11000 0x3ff0 (16368) 0x11000 (69632)
+------------------------------
+GC Allocated Heap Size: Size: 0x1a0f0 (106736) bytes.
+GC Committed Heap Size: Size: 0x45000 (282624) bytes.
+```
+
+值得注意的是，NGCH在此被命名为“冻结对象堆”，且仍沿用“段”而非“区域”的术语——未来SOS版本可能会调整命名。
+
+内部称为大区域的POH和LOH，其尺寸是基础区域（SOH）的八倍。基础区域大小取决于地址空间中保留块的尺寸：若设置了`GCHeapHardLimit`，则保留块与限制值同大；否则保留尺寸取以下两者的较小值：
+
+- 虚拟地址空间的一半（Windows 64位系统为128TB的一半）
+- 物理内存两倍与256GB间的较大值
+
+以当前Windows Server 2022支持的48TB物理内存上限为例，实际仅会采用第二种计算方式。例如64GB内存机器取256GB，256GB内存机器则取512GB。
+
+基础区域尺寸通过以下代码计算：
+
+```c
+#define LARGE_REGION_FACTOR (8)
+// = 19
+const int min_regions_per_heap = ((ephemeral_generation_count+1) + (total_generation_
+count - uoh_start_generation)*LARGE_REGION_FACTOR);
+size_t max_region_size = gc_heap::regions_range / min_regions_per_heap;
+
+if (max_region_size >= (4 * 1024 * 1024)) {
+    gc_region_size = 4 * 1024 * 1024;
+} else if (max_region_size >= (2 * 1024 * 1024)) {
+    gc_region_size = 2 * 1024 * 1024;
+} else {
+    gc_region_size = 1 * 1024 * 1024;
+}
+```
+
+计算逻辑分为两步：
+
+1. 先确定若将区域尺寸乘以19倍堆数后，能否填满保留块的一半空间
+2. 根据该尺寸设定基础区域大小：
+   - 大于4MB则取4MB
+   - 大于2MB则取2MB
+   - 否则取1MB
+
+按此计算，在未覆盖GC设置的情况下，除非机器核心数超过1724个，否则基础区域始终为4MB。例如4核服务器的Server模式下，CLR会创建4个32MB POH区域，4个4MB的gen2/gen1/gen0 SOH区域，4个32MB LOH区域。如图5-20所示，VMMap显示此时托管堆虽保留256GB（占128TB地址空间），实际仅提交272KB内存——这再次印证了第2章所述保留内存与提交内存区别的重要性。
+
+![](asserts/5-20.png)
+
+图5-20：VMMap显示的4核机器Server模式应用区域分布，四个托管堆中的POH/SOH/LOH区域呈分组排列
+
+若需在 .NET 7+ 中使用旧版内存段（segment）实现，请在 Windows 系统设置环境变量 `DOTNET_GCName` 为 "clrgc.dll"，在 Linux/MacOS 系统设为 "libclrgc.so"。
+
+如你所见，区域（region）比内存段小得多（尤其在服务器模式下内存段通常非常庞大），且代际内存不再强制要求连续布局——旧版中第2代、第1代和第0代必须共存于临时段的限制已被取消。这两项改进使得垃圾回收器能在不同代际或固定对象堆（UOH）间复用区域：空闲区域会被保留在池中，因此第1代的空闲区域可按需作为第0代重新启用。对于超过大区域尺寸的分配请求，GC会创建特殊的“巨型区域”（仍归类为LOH）。
+
+总结如下：
+
+基础区域（通常4MB，根据配置可能为1MB或2MB）：用于第0/1/2代大区域（基础区域的8倍尺寸）：用于大对象堆（LOH）和固定对象堆（POH）巨型区域（任意尺寸）：用于超过大区域尺寸的LOH分配。
+
+如前所述，由于第0、1（及2）代不再需要共存于临时段（每个代拥有相同尺寸的独立区域），这使得诸如动态晋升与降级（DPAD，详见第8章）等优化成为可能。
+
+### 非GC堆（NonGC Heap）
+
+非GC堆的分配机制与其他内存区域截然不同。它不像POH、LOH和SOH那样预分配固定区域，而是由`FrozenObjectHeapManager` 类的唯一实例按需分配冻结段。具体表现为：当需要向NGCH分配对象时，若当前不存在冻结段，则会创建首个4MB大小的段；当现有冻结段空间不足时，系统会创建容量翻倍的新段，以此类推。
+
+### 场景5-2——nopCommerce内存泄漏？
+
+**场景描述**：我们获取了nopCommerce（基于ASP.NET开发的开源电商平台）的基础安装包。根据官方文档说明，该ZIP包“适用于需要部署到生产环境的最小文件集”。安装过程非常简单：“若使用IIS，只需将解压后的nopCommerce文件夹内容复制到IIS虚拟目录（或站点根目录）”。现在我们需要验证nopCommerce的性能表现，包括内存使用模式。我们已使用JMeter 3.2（流行的开源负载测试工具）构建了一个简易测试场景：循环执行三个操作——访问首页、商品分类页（“电脑”）和标签页（"awesome"），各请求间设置了思考时间（暂停）来模拟真实用户行为，持续测试1小时。
+
+**特别说明**：本场景演示时间较长，旨在展示多种分析手段。选择nopCommerce作为测试对象是因为其稳定性和成熟度。文中刻意保留了一些设计缺陷用于演示问题排查方法，请勿据此评价nopCommerce的产品质量。
+
+**分析过程**：本场景与场景5-1类似，可采用相同的分析起点。我们首先通过性能监视器（实时或数据收集器集）观察以下计数器：
+
+- \Process(Nop.Web)\Working Set - Private
+- \Process(Nop.Web)\Private Bytes
+- \Process(Nop.Web)\Virtual Bytes
+- .NET CLR Memory(Nop.Web) # Total committed Bytes
+- .NET CLR Memory(Nop.Web)\Gen 0 heap size
+- .NET CLR Memory(Nop.Web)\Gen 1 heap size
+- .NET CLR Memory(Nop.Web)\Gen 2 heap size
+- .NET CLR Memory(Nop.Web)\Large Object Heap size
+
+测试开始20分钟内，可明显观察到托管内存的"#Total committed Bytes"快速增长，随后突然下降又急速回升，这种锯齿状模式循环出现。各代堆大小变化如下图所示（图5-21）：
+
+- **第0代**（长虚线）：在4,194,300至6,291,456字节间稳定波动。虽然这不是真实代际大小，但该“分配预算（allocation budget）”指标稳定，可排除问题。
+- **第1代**（短虚线）：动态变化但整体平稳，无增长趋势，判断正常。
+- **第2代**（细实线）：呈现异常锯齿状波动，峰值达1,314,381,592字节，明显存在内存问题。
+- **大对象堆**（粗实线）：缓慢增长至约38MB（偶现46MB峰值），与第2代超1GB的波动相比可暂不优先处理。
+
+![](asserts/5-21.png)
+
+图5-21. ASP.NET Core应用程序一小时负载测试期间各代堆大小的性能监视器视图（perfmon）
+
+若在测试过程中使用VMMap查看Nop.Web.exe进程状态，我们会发现首个线索：存在大量Domain 1低频与高频堆（图5-22a仅展示其中一小部分）。如此多的堆段可能表明应用程序正在创建大量动态类型，例如通过反射或加载多个程序集。这让人联想到场景4-4中 `XmlSerializer` 引发的同类问题。
+
+![](asserts/5-22a.png)
+
+图5-22a. 测试期间Nop.Web.exe进程的VMMap视图局部（显示大量Domain 1低频/高频堆）
+
+但切勿急于定论。如场景4-4所述，应通过添加以下计数器验证猜测：
+
+- .NET CLR Loading(Nop.Web)\Bytes in Loader Heap
+- .NET CLR Loading(Nop.Web)\Current Classes Loaded
+- .NET CLR Loading(Nop.Web)\Current Assemblies
+- .NET CLR Loading(Nop.Web)\Current appdomains
+
+令人意外的是，这些计数器在数小时测试中数值毫无变化。线索失效——事实上，即便存在大量低频/高频堆也未必代表问题。通过 `VMMap` 定期观察可发现其数量恒定，我们被表象误导了。这些堆段数量庞大可能仅因 nopCommerce 框架动态创建了大量类型，现阶段深入调查并无意义。
+
+放弃这条线索后，让我们聚焦主要怀疑对象——第2代堆。再次使用 `VMMap` 时，可通过"Details"排序使所有GC托管堆相邻排列（图5-22b）。观察可见大量仅包含第2代的堆段，并注意到三个关键现象：
+
+1. 内存地址较短（前半部分为零）——表明进程运行在32位.NET运行时环境（本应通过部署流程知晓）
+2. 仅存在单个包含第0/1代的临时段——暗示GC可能处于工作站模式
+3. 第2代堆段大小均为16MB——根据表5-3，此现象仅出现在32位工作站GC模式，印证了前两个发现
+
+![](asserts/5-22b.png)
+
+图5-22b. 测试期间Nop.Web.exe进程的VMMap局部视图，显示大量包含第2代对象的GC托管堆
+
+在32位.NET运行时上以工作站GC模式运行此Web应用程序可能并非最优配置，尽管这个发现很重要，但它仍无法解释观察到的内存泄漏问题。我们需要继续深入调查。
+
+本场景中引入 `VMMap` 工具主要是为了展示.NET应用程序的物理内存结构，与本章所述知识形成呼应。同时它也揭示了使用该工具时可能存在的误区（例如将高频出现的多个堆误判为问题）。在故障排查工具箱中配备 `VMMap` 是有益的，但对于此类问题，通常不应将其作为首要调查手段。查看性能计数器后，我们或许应该直接使用 `WinDbg` 或 `PerfView` 展开分析。
+
+现在我们必须借助其他工具。首选方案可能是搭载SOS扩展的 `WinDbg`。我们已使用 `ProcDump` 工具获取了Nop.Web.exe的完整内存转储文件。将其载入 `WinDbg` 后，应先通过执行`.loadby sos clr` 命令加载 SOS 扩展，随后可运行两个关键命令：`!eeversion`（显示.NET运行时信息）和 `lmf`（列出所有加载模块）——详见清单5-12。如你所见，该进程正在使用.NET Framework 4.7和工作站GC模式，加载的是32位版本的 clr.dll（64位版本位于 `C:\Windows\Microsoft.NET\Framework64` 目录）。这最终验证了我们先前的发现。
+
+清单5-12. 在加载SOS扩展的 WinDbg 中，通过 `eeversion` 和 `lmf` 命令确认进程使用32位.NET Framework及工作站GC模式
+
+```
+> !eeversion
+4.7.2117.0 retail
+Workstation mode
+SOS Version: 4.7.2117.0 retail build
+> lmf
+...
+72f70000 73656000 clr C:\Windows\Microsoft.NET\Framework\v4.0.30319\clr.dll
+...
+```
+
+要开始调查第2代堆，我们执行命令`!heapstat`和`!eeheap`（见清单5-13）。可以看到第2代堆非常庞大（1,217,024,356字节），且剩余空间很小（10,981,728字节）。碎片化可能不是问题所在。`!eeheap`命令列出了大量段（segment）的详细信息，这些内容我们之前在 `VMMap` 工具中也看到过。
+
+清单5-13：在加载了SOS的WinDbg中，`!heapstat`和`!eeheap`命令揭示了GC托管堆的细节。`!eeheap`命令的输出经过精简，仅显示部分关键内容。
+
+```
+> !heapstat
+Heap Gen0 Gen1 Gen2 LOH
+Heap0 9719400 280232 1217024356 38826368
+Free space: Percentage
+Heap0 7042304 1152 10981728 12587408SOH: 1% LOH: 32%
+> !eeheap
+segment begin allocated size
+024c0000 024c1000 034bffe4 0xffefe4(16773092)
+0a070000 0a071000 0b06ffe0 0xffefe0(16773088)
+0fb20000 0fb21000 10b1ffdc 0xffefdc(16773084)
+122b0000 122b1000 132affe0 0xffefe0(16773088)
+142f0000 142f1000 152effe0 0xffefe0(16773088)
+...
+41820000 41821000 4281ffec 0xffefec(16773100)
+43820000 43821000 4410ea14 0x8eda14(9361940)
+42820000 42821000 431aa510 0x989510(9999632)
+```
+
+通过了解各段的地址范围，我们可以用`!dumpheap`命令调查其内容。由于内存泄漏似乎很严重且对象存活时间较长，我们选择调查最早创建的段之一（通常意味着最老的段）。清单5-14展示了针对第四个段执行`!dumpheap`命令后统计的对象数据结果。输出内容经过大幅精简，仅显示最后几行。可以看到存在大量来自`Microsoft.Extensions.Caching.Memory`命名空间的对象，其中特别值得关注的`CacheEntry`类暗示了缓存可能存在问题。
+
+清单5-14：在加载了SOS的WinDbg中，`!dumpheap`命令显示某个段内对象的统计数据（输出内容经过大幅精简）。
+
+```
+> !dumpheap -stat 122b1000 132affe0
+MT Count TotalSize Class Name
+...
+04aa58e4 33795 946260 Microsoft.Extensions.Primitives.IChangeToken[]
+0b542680 33808 946624 Microsoft.Extensions.Caching.Memory.
+PostEvictionCallbackRegistration[]
+089f26fc 33818 1082176 Microsoft.Extensions.Caching.Memory.PostEvictionDelegate
+71f91d64 34858 4327314 System.String
+089e2b70 33786 4459752 Microsoft.Extensions.Caching.Memory.CacheEntry Total 431540 objects
+```
+
+接下来我们可以开始逐一检查不同的 `CacheEntry` 对象实例。其方法表（`MethodTable`）地址为089e2b70，因此可以修改`!dumpheap`命令，仅列出第四个段中`Microsoft.Extensions.Caching.Memory.CacheEntry`的实例（见清单5-15）。输出将包含33,786个实例的庞大列表，这里仅展示其中几行。
+
+清单5-15：在加载了SOS的WinDbg中，`!dumpheap`命令列出指定段内具有给定方法表的所有对象。
+
+```
+> !dumpheap -mt 089e2b70 122b1000 132affe0
+Address MT Size
+...
+132af460 089e2b70 132
+132af64c 089e2b70 132
+132af98c 089e2b70 132
+132afd08 089e2b70 132
+Statistics:
+MT Count TotalSize Class Name
+089e2b70 33786 4459752 Microsoft.Extensions.Caching.Memory.CacheEntry Total 33786 objects
+```
+
+通过`!DumpObj`命令配合实例地址，我们可以检查每个实例的详细信息（见清单5-16）。其中一个字段名为`<Key>k__BackingField`，这表明我们可以查看缓存条目的键值（同样参见清单5-16）。结果显示该键为`Nop.pres.widget-79740-1-left_side_column_after_category_navigation-DefaultClean`，似乎是某个页面小部件的缓存数据。
+
+清单5-16：在加载了SOS的WinDbg中，`!DumpObj`命令展示了清单5-14所列某个实例的详细信息。
+
+```
+> !DumpObj 132afd08
+Name: Microsoft.Extensions.Caching.Memory.CacheEntry
+MethodTable: 089e2b70
+EEClass: 089c4f2c
+Size: 132(0x84) bytes
+File: F:\IIS\nopCommerce\Microsoft.Extensions.Caching.Memory.dll
+Fields:
+...
+71f81404 400000b 34 ...ffset, mscorlib]] 1 instance 132afd3c _absoluteExpiration
+...
+71f92104 4000012 20 System.Object 0 instance 132afc18 <Key>k__BackingField
+...
+> !DumpObj 132afc18
+Name: System.String
+...
+String: Nop.pres.widget-79740-1-left_side_column_after_category_navigation-DefaultClean
+```
+
+逐个检查段内所有`CacheEntry`实例的方式会非常枯燥耗时。幸运的是，我们可以使用第3章提到的 `netext` 扩展插件。其`wfrom`命令允许我们以类SQL（或类LINQ）语法查询对象。我们可以要求仅列出特定方法表对象中的`_Key_k__BackingField`字段，并筛选出目标地址段范围内的实例（见清单5-17）。
+
+> 注意：Netext以略微不同的格式显示字段名，因此使用`_Key_k__BackingField`而非`<Key>k__BackingField`。
+
+清单5-17：在加载 `netext` 的WinDbg中，展示 `!wfrom` 命令的部分输出结果——该命令筛选 `089e2b70` 方法表对象在指定地址范围内的 `_Key_k__BackingField` 字段。
+
+```
+> !wfrom -mt 089e2b70 where (($addr() > 122b1000) && ($addr() < 132affe0)) select _Key_k__
+BackingField
+...
+_Key_k__BackingField: Nop.pres.widget-74954-1-mob_header_menu_after-DefaultClean
+_Key_k__BackingField: Nop.pres.widget-76130-1-header_menu_before-DefaultClean
+_Key_k__BackingField: Nop.pres.widget-75965-1-body_start_html_tag_after-DefaultClean
+_Key_k__BackingField: Nop.pres.widget-75369-1-searchbox_before_search_button-DefaultClean
+_Key_k__BackingField: Nop.pres.widget-75965-1-searchbox_before_search_button-DefaultClean
+_Key_k__BackingField: Nop.pres.widget-75867-1-header_selectors-DefaultClean
+_Key_k__BackingField: Nop.pres.widget-75965-1-header_menu_before-DefaultClean
+_Key_k__BackingField: Nop.pres.widget-75573-1-body_start_html_tag_after-DefaultClean
+_Key_k__BackingField: Nop.pres.widget-75680-1-mob_header_menu_after-DefaultClean
+...
+```
+
+从结果中可以快速发现明显规律：几乎所有键名都以`Nop.pres.widget`开头，后接数字和（可能）部件名称。现在我们可以确信部件数据缓存机制存在问题。但疑问随之而来——为什么会有这么多相似的缓存条目？为何仅首组数字不同的条目会被重复缓存？这不禁让人怀疑是否每个请求都会生成新缓存。
+
+通过`!gcroot`命令查看若干引用关系图后（见清单5-18），我们注意到这些条目被`ProductTagService`等组件中的`MemoryCacheManager`持有。
+
+清单5-18：在加载SOS的WinDbg中，`!gcroot`命令展示某个`CacheEntry`实例的引用链（因路径较长，仅显示关键节点）。
+
+```
+> !gcroot 132afd08
+Thread 6d5c:
+0bc8f128 71ec99fa System.Threading.ExecutionContext.RunInternal(System.Threading.
+ExecutionContext, System.Threading.ContextCallback, System.Object, Boolean)
+ebp+4c: 0bc8f13c
+    -> 0348777c System.Threading.Thread
+    -> 025416d8 System.Runtime.Remoting.Contexts.Context
+    -> 024c12e0 System.AppDomain
+    ...
+    -> 0ac5df50 Nop.Services.Catalog.ProductTagService
+    -> 033dbacc Nop.Core.Caching.MemoryCacheManager
+    -> 033db504 Microsoft.Extensions.Caching.Memory.MemoryCache
+    ...
+    -> 132afd08 Microsoft.Extensions.Caching.Memory.CacheEntry
+```
+
+这是整个谜题中最难解答的部分——若无法访问源代码，几乎无从下手。幸运的是，大多数情况下我们分析的是自己开发的应用程序，因此可以随时查阅熟悉的代码。在本案例场景中，我们会发现缓存键（cache key）包含了一个取自匿名用户 cookie 的客户标识符。但我们的 JMeter 测试脚本中偏偏漏掉了管理 cookie 的 HTTP Cookie Manager 组件！这意味着每个 HTTP 请求都被视为来自未设置 cookie 的新客户。这显然是由于负载测试脚本配置错误导致的非预期场景。
+
+由于nopCommerce是开源项目，我们也能迅速定位问题根源：
+
+- 通过搜索缓存键中的名称（如 `mob_header_menu_after` 标识符），可以在 `./src/Presentation/Nop.Web/Views/Shared/Components/TopMenu/Default.cshtml` 文件中找到这行代码：
+
+  ` @await Component.InvokeAsync("Widget", new { widgetZone = "mob_header_menu_after" })`
+
+-  而定义在 `./src/Presentation/Nop.Web/Components/Widget.cs` 文件中的 Widget 组件，其 Invoke 方法会调用widget工厂：
+
+  `var model = _widgetModelFactory.PrepareRenderWidgetModel(widgetZone, additionalData);`
+
+-  `WidgetModelFactory` 中的 `PrepareRenderWidgetModel` 方法构建缓存键的方式如下：
+
+  ```
+  var cacheKey = string.Format(ModelCacheEventConsumer.WIDGET_MODEL_KEY,
+   _workContext.CurrentCustomer.Id,
+   _storeContext.CurrentStore.Id,
+   widgetZone,
+   _themeContext.WorkingThemeName);
+  ```
+
+由此可见，小部件系统使用了 `CurrentCustomer.Id` 作为标识——对于未登录用户，该 ID 由 cookie 管理。若 cookie 不存在，系统就会生成新的整数值。
+
+本案例旨在演示：通过理解内存代际（generations）和段（segments）的概念，我们能够发现问题，并借助底层工具追根溯源。当然，实际遇到问题的成因可能千差万别，像这种负载测试配置错误反而属于较罕见的情况。这个练习的重点不在于展示特定问题的解决方案，而是传授方法论思路。后续案例中我们也会采用更便捷的工具（如PerfView或商业内存分析工具）来诊断内存泄漏问题。
+
+### 场景 5-3 ——大对象堆浪费？
+
+描述：在我们的64位工作站应用程序中，我们正在处理庞大的对象列表——可以将其视为某种“大数据”处理流程。但不幸的是，经过一段时间后，程序会抛出 `OutOfMemoryException` 异常，导致无法处理全部数据。流程始于预处理阶段——我们会创建一组由预处理对象构成的大型数组列表。每个数组块包含10,000,000个指向其他位置对象的引用。这些数组在分配时就会触发内存异常。我们开始研究如何避免这类异常。
+
+分析：首先值得在即将发生内存异常时，使用 `VMMap` 工具观察进程状态（参见图5-22）。可以看到确实存在巨大的内存消耗。进程的私有工作集（Private Working Set）占用了约15GB，几乎耗尽所有可用物理内存（该机器配置为16GB RAM）。此外，如果检查系统页面文件，会发现 `pagefile.sys` 已占用近32GB——这是系统管理员设置的最大上限值。这意味着系统已无剩余内存可供分配新数组，我们对此束手无策（除非通过增加物理内存或扩大页面文件上限来修改系统配置）。
+
+然而，有个值得警惕的内存段消耗现象。存在大量LOH（大对象堆）段，每个段中仅约一半空间是实际提交的（size-committed）区域，其余部分仅为保留状态。为何会出现这种情况？回顾表5-3可知，在64位工作站GC模式下，LOH段大小为128MB。我们的处理流程需要创建包含10,000,000个引用的数组。每个引用占8字节，因此整个数组需要约76MB空间。当分配新数组时，现有LOH段的剩余空间（约52MB）无法满足需求，因此必须为每个新数组创建全新段。这导致每个LOH段中都有约52MB空间被“浪费”（假设应用程序没有频繁创建能利用这部分空间的小型LOH对象）。
+
+但细心的读者可能发现我们的推理存在谬误。请回忆第二章的要点：保留的虚拟内存不会直接消耗物理内存。仔细观察图5-23会发现，LOH段的保留部分并未计入已提交字节（Committed）或私有字节（Private）。这些空间实际上并未造成内存浪费。我们不要被测量数据误导。事实上，我们确实耗尽了所有可用内存，对此无能为力（除非减少单次分配的数组数量）。
+
+![](asserts/5-23.png)
+
+图5-23　OutOfMemoryException 抛出前片刻的进程VMMap视图片段
+
+不过，虽然LOH段中的未使用保留空间不会造成实际内存浪费，但这确实会导致虚拟地址空间的浪费。在64位运行时环境中这不是问题，因为虚拟地址空间非常充裕。但在32位.NET运行时环境中，这可能成为严重问题，因为其虚拟地址空间非常有限。若是这种情况，应考虑将处理数据拆分为更小的数组，以提高单个LOH段的利用率并避免碎片化。
+
+### 段、区域与堆内存结构
+
+在早期版本的.NET（引入区域之前）中，段（segment）是托管堆的物理表现形式，其内部结构较为简单（见图5-24）。如代码清单5-10所示，示例程序中的临时段地址为 `0x0000026700000000`，但实际“起始”于地址 `0x0000026700001000`。开头的4,096字节（十六进制0x1000）专用于存储运行时管理的段信息，对象在此之后的地址中创建。每个小对象堆（SOH）和大对象堆（LOH）段具有以下结构：
+
+- 起始部分存储段信息（`heap_segment类`的实例）。虽然该类仅有十几个字节大小，但大多数情况下会为此提交整个内存页，这是后台GC的性能优化策略（第11章详述）。该结构的起始位置（即整个段的起始地址）在先前 `!eeheap` 命令输出中显示为段地址。
+- 对象分配起始于.NET源代码中 `mem` 字段存储的地址，但在 `!eeheap` 命令输出中记为 `begin` 字段。如第6章所述，段的保留内存是以多个页为单位提交的，而非仅针对单个对象，因此提交的内存会略多于当前对象所需空间。
+- 当前已分配对象的结束地址存储在 `allocated` 字段中。
+
+![](asserts/5-24.png)
+
+图5-24展示了堆段的内部结构。
+
+在区域机制下，`heap_segment` 类名虽未改变（仍表示区域），但其 `gen_num` 字段存储代别信息，`flags` 字段用于区分SOH、LOH和POH（固定对象堆）区域。`heap_segment` 实例不再存储在每个区域起始处，而是位于地址空间的其他区域。`mem` 等其他字段保持不变。
+
+虽然这些知识对日常.NET开发帮助有限，但在分析.NET代码时，了解这些基础类之间的关系至关重要，这将为有志探索.NET源代码的开发者铺平道路。
+
+以下是表示垃圾回收核心功能的几个关键类（见图5-25a和5-25b）：
+
+- `GCHeap`：这个高层类始终存在单一实例，作为垃圾回收器与执行引擎之间的接口（二者分别维护全局实例 `g_pGCHeap` 和 `g_theGCHeap`）。包含 `Alloc、GarbageCollect` 等方法。在服务器模式下，每个托管堆对应一个额外的 `GCHeap` 实例，因此工作站模式有1个实例，服务器模式有（1+核心数）个实例。
+- `gc_heap`：单个托管堆的低级API，被 `GCHeap` 调用。包含垃圾回收的核心方法，如 `allocate、garbage_collect、make_heap_segment` 等。服务器模式下每个 `GCHeap` 实例操作对应的 `gc_heap` 实例；工作站模式下所有 `gc_heap` 方法均为静态，无需实例化。因此工作站模式无实例，服务器模式实例数与核心数相同。
+- `generation`：表示单个代别。包含代别对应的段/区域信息、分配相关数据及其他元数据。
+- `heap_segment`：如前所述表示单个段/区域信息。所有段/区域通过单向链表连接，每个段可指向同代别的下一个段。
+
+![](asserts/5-25a.png)
+
