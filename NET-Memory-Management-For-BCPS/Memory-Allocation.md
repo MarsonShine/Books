@@ -618,3 +618,403 @@ Detail: LOH: Failed to reserve memory (1090519040 bytes)
 
 > 注意：在抛出内存不足异常前，CLR需要先分配异常对象实例。但在内存耗尽的情况下，运行时采用了巧妙的机制：系统启动时会预分配 `OutOfMemoryException` 实例（通过 `SystemDomain::CreatePreallocatedExceptions` 函数），当无法新建异常对象时直接复用该预分配实例。该机制同样适用于 `StackOverflowException` 和 `ExecutionEngineException` （具体实现可参考  `GetBestOutOfMemoryException`函数代码）。
 
+## 栈分配
+
+到目前为止，我们只讨论了在GC托管堆上分配对象的情况。这是最流行和最常用的方式。你已经看到我们付出了多大努力来使堆分配尽可能快。然而，正如前面章节所述，栈上的分配和释放默认就快得多——只需要移动栈指针，而且不会给GC带来任何开销。
+
+如前所述，值类型在某些情况下可能会被分配在栈上。在特定条件下，你也可以显式要求进行栈分配。考虑到规则14——在热点路径上避免堆分配，这将是个非常有用的选项。
+
+要在C#中显式进行栈分配，需要使用 `stackalloc` 运算符（见代码清单6-11）。它会返回一个指向栈上内存区域的指针。由于使用了指针类型，这类代码必须放在 `unsafe` 上下文中（除非像后文所示使用 `Span<T>` 类型）。新分配的内存内容未定义，因此不应做任何假设（比如认为内存会被清零）。
+
+代码清单6-11 使用stackalloc显式栈分配
+
+```c#
+static unsafe void Test(int t)
+{ 
+	SomeStruct* array = stackalloc SomeStruct[20];
+}
+```
+
+`stackalloc` 在C#领域非常罕见。主要因为许多开发者要么不了解这个特性，要么由于缺乏接受指针的API而未能完全掌握其用法。随着第14章将介绍的 `Span<T>` 类型的出现，这一现状已有所改变。例如当需要极高数据处理效率且不希望在大堆上分配大型数组时，就可以使用它。这种方案有两个优势：
+
+- 如前所述，这类对象的释放只需移动栈指针——没有堆分配辅助机制，没有慢速路径，完全不涉及GC。
+- 这类对象的地址隐式固定（不会移动），因为栈帧永远不会移动——你可以将指针传递给非托管代码而无需引入固定开销（但需确保非托管代码不会在函数返回后继续使用该对象）。
+
+`stackalloc` 运算符会被编译为CIL的 `localloc` 指令（见代码清单6-12）。ECMA标准对其的描述是（部分省略）“从本地动态内存池分配size字节。当前方法返回时，本地内存池可被重用”。注意它没有明确提及栈，而是使用更通用的“本地内存池”概念（第4章已提及）。如第4章所述，ECMA标准力求技术中立，避免使用栈或堆这类具体概念。
+
+代码清单6-12 代码清单6-11生成的CIL代码片段，展示 `stackalloc` 如何被转换为 `localloc` 指令
+
+```
+ldc.i4.s 20
+conv.u
+sizeof SomeStruct
+mul.ovf.un
+localloc
+```
+
+但通过这种方式能在栈上分配什么？ECMA标准对 `localloc` 指令没有具体说明，只承诺会分配指定字节数。由于CIL只保证内存块，CLR目前只能将其用作简单数据类型的容器。C#语言规范对 `stackalloc`运算符的定义详细描述了这些限制：只能用于“非托管类型(`unmanaged_type`)”数组。非托管类型包括：
+
+- 基本类型：`sbyte, byte, short, ushort, int, uint, long, ulong, char, float, double, decimal` 或 `bool`
+- 任何枚举类型
+- 任何指针类型
+- 任何用户定义的结构体（非构造类型且仅包含非托管类型字段）
+
+需注意无法显式释放 `stackalloc` 分配的内存。方法结束时内存会被隐式释放。当密集使用栈时需特别注意，大量长时间运行的方法可能最终导致 `StackOverflowException`。
+
+> `localloc` 指令会被JIT编译为一系列汇编 `push` 和 `sub rsp [size]` 指令来扩展栈帧。在32位和64位框架下，扩展大小会分别按8字节和16字节对齐。因此即使 `stackalloc` 两个整数的数组（通常占8字节），栈帧也会被扩展16字节（64位下）。因为在x64架构上，栈需要16字节对齐。更多细节可参考https://github.com/MicrosoftDocs/cpp-docs/blob/main/docs/build/stack-usage.md文档。
+
+与代码清单6-11不同，使用 `stackalloc` 时不必强制使用 `unsafe` 代码。自C#7.2和.NET Core 2.1起，可以通过 `Span<T>` 类型（第15章详解）安全地编写代码，如代码清单6-13所示。
+
+代码清单6-13 借助 `Span<T>` 支持，在安全代码中使用 `stackalloc` 进行显式栈分配
+
+```c#
+ static void Test(int t)
+ { 
+   Span<SomeStruct> array = stackalloc SomeStruct[20];
+ }
+```
+
+## 避免内存分配
+
+前文已详细探讨了内存分配及其底层机制。现在你应该充分认识到，在.NET中“内存分配很廉价”的说法有时成立（得益于分配上下文中的指针碰撞技术），但实际情况要复杂得多：
+
+- 当走快速路径时，内存分配确实廉价。但分配上下文有时会不可预测地耗尽，此时必须切换上下文，触发更复杂（因而更慢）的分配路径
+
+- 这些复杂分配路径会不时触发垃圾回收
+
+- 大对象堆(LOH)上的大对象分配较慢，主要因为内存清零的成本
+
+  > **内存清零**是指在分配新对象时，将分配给该对象的内存区域中的每个字节都设置为0的过程。在底层，这通常通过类似于`memset()`这样的函数实现，或使用专门的CPU指令（如Intel的 `REP STOSB`或AVX指令集中的向量操作）来填充内存。
+  >
+  > .NET必须清零内存的原因有三个：
+  >
+  > 1. **安全性**：防止新对象能够访问到之前对象留下的可能敏感的数据
+  > 2. **语言规范需求**：C#规范要求所有字段必须有确定的初始值（引用类型为`null`，数值类型为`0`等）
+  > 3. **简化开发**：开发人员可以假设对象字段已初始化为默认值
+  >
+  > 大对象堆(LOH)上的清零操作特别昂贵：
+  >
+  > 1. 内存体积因素
+  >
+  >    - 大对象堆用于存储大于85KB的对象（在标准.NET配置中）
+  >
+  >    - 清零时间与内存大小成正比，清零1MB内存比清零1KB内存大约需要1000倍时间
+  >
+  > 2. 硬件架构限制
+  >
+  >    - **内存带宽瓶颈**：清零大量连续内存受限于系统内存总线带宽
+  >
+  >    - **CPU缓存影响**：大对象远超L1/L2/L3缓存大小，导致大量缓存未命中
+  >
+  >    - **内存页面处理**：大对象可能跨越多个物理内存页面，增加TLB（转译后备缓冲器）未命中
+  >
+  > 3. 没有分配上下文优化
+  >
+  >    - 小对象堆(SOH)通常可以利用线程本地分配缓冲区(TLAB)和预先清零的内存块
+  >
+  >    - 大对象堆由于对象尺寸，无法有效利用这些优化
+  >
+  > 4. 处理器执行特性
+  >
+  >    - 清零大内存块时，CPU流水线可能会受到影响
+  >
+  >    - 分支预测和指令级并行性在重复的内存操作中效率降低
+  >
+  >    - NUMA架构下，跨节点的大内存分配会进一步降低性能
+  >
+  > 举个例子：假设分配一个大小为100MB的数组：
+  >
+  > - 系统必须清零约104,857,600个字节
+  > - 在3GB/s的内存写入带宽下，理论上最快需要约35毫秒
+  > - 实际上，考虑到其他开销，可能需要50-100毫秒
+  > - 相比之下，分配一个小对象可能只需几十纳秒
+
+- 大量分配对象会增加GC的工作量——这个显而易见的道理却至关重要。若分配大量临时对象，后续必须清理。创建的对象越多，打破对象生命周期分代假设的概率就越高
+
+因此，.NET中最有效的内存优化方法之一就是避免分配，或至少保持分配意识。少量分配意味着：
+
+- 给GC的内存压力小
+- 内存访问成本低
+- 与操作系统的交互少
+
+性能敏感的.NET开发者需要掌握的核心知识是：了解内存分配的来源，以及如何消除或最小化它们。
+
+本节列举常见分配来源及应对方案。但请注意一个重要原则——必须谨慎对待最小化分配这件事。有句常被滥用的名言：“过早优化是万恶之源”。确实没必要逐行分析代码中的每个分配点，这只会降低效率却收效甚微。每分钟执行一次的代码分配200字节还是800字节有区别吗？很可能没有。关键取决于代码需求。因此，从性能关键路径开始分析分配总是明智的，这些优化能带来最大收益。
+
+首先需要了解常见分配来源以避免明显错误，至少清楚所写代码的内存开销。结合应用整体需求和具体场景，就能判断是否可接受。其次，掌握分配来源知识有助于应用规则5——尽早测量GC。只有通过测量才能避免对错误代码的过早优化，才能判断是否需要最小化分配，才能确定优化重点。
+
+下文列出常见分配来源（有些显而易见，有些则不然），包括其发生条件及规避方法。
+
+> 本章后续展示C#编译器机制时，使用 dnSpy 工具反编译代码有助于理解底层原理。建议读者通过修改代码、反编译观察运行时最终执行的代码变化来加深理解。
+
+### 引用类型的显式分配
+
+大多数分配场景显而易见——显式创建对象时。此时可以考虑是否真的需要创建堆上的引用类型对象。以下是不同场景的解决方案。
+
+#### 通用场景——考虑使用结构体
+
+开发者可能习惯使用类而忽略替代方案。实际上多数场景下，可以通过结构体在方法参数和返回值间传递少量数据。第4章代码清单4-7展示了这种情况，清单4-8和4-9则显示相比在堆上创建小对象，使用结构体生成的代码更优。表4-1的基准测试显示两者性能差异显著。
+
+因此，当方法间传递的少量数据不存储在堆数据结构中时，应优先考虑结构体。许多业务逻辑都符合这个特点——获取数据、本地处理、返回结果。以代码清单6-14为例，该代码返回指定位置半径内所有雇员的完整姓名，展示了从外部服务获取集合的典型用法，但这种方式显式创建了大量对象：
+
+- `PersonDataClass` 对象列表及对象本身
+- 外部服务返回的 `Employee` 对象
+
+```c#
+[Benchmark]
+public List PeopleEmployeedWithinLocation_Classes(int amount, LocationClass location)
+{
+    List result = new List();
+    List input = service.GetPersonsInBatchClasses(amount);
+    DateTime now = DateTime.Now;
+    for (int i = 0; i < input.Count; ++i)
+    {
+        PersonDataClass item = input[i];
+        if (now.Subtract(item.BirthDate).TotalDays > 18 * 365)
+        {
+            var employee = service.GetEmployeeClass(item.EmployeeId);
+            if (locationService.DistanceWithClass(location, employee.Address) < 10.0)
+            {
+                string name = string.Format("{0} {1}", item.Firstname, item.Lastname);
+                result.Add(name);
+            }
+        }
+    }
+    return result;
+}
+
+internal List GetPersonsInBatchClasses(int amount)
+{
+    List result = new List(amount);
+    // 从外部源填充列表
+    return result;
+}
+```
+
+若改用结构体实现（见代码清单6-15），由于人员数据仅在方法内使用，可安全存储在栈上。`GetPersonsInBatch` 方法返回结构体数组能提高数据局部性、降低开销（如第4章所述）。外部服务如 `GetEmployeeStruct` 可返回小结构体，`DistanceWithStruct` 等方法可通过引用传递值类型参数避免复制。
+
+代码清单6-15 尽可能使用结构体的业务逻辑示例
+
+```c#
+[Benchmark]
+public List PeopleEmployeedWithinLocation_Structs(int amount, LocationStruct location)
+{
+    List result = new List();
+    PersonDataStruct[] input = service.GetPersonsInBatchStructs(amount);
+    DateTime now = DateTime.Now;
+    for (int i = 0; i < input.Length; ++i)
+    {
+        ref PersonDataStruct item = ref input[i];
+        if (now.Subtract(item.BirthDate).TotalDays > 18 * 365)
+        {
+            var employee = service.GetEmployeeStruct(item.EmployeeId);
+            if (locationService.DistanceWithStruct(ref location, employee.Address) < 10.0)
+            {
+                string name = string.Format("{0} {1}", item.Firstname, item.Lastname);
+                result.Add(name);
+            }
+        }
+    }
+    return result;
+}
+
+internal PersonDataStruct[] GetPersonsInBatchStructs(int amount)
+{
+    PersonDataStruct[] result = new PersonDataStruct[amount];
+    // 从外部源填充数组
+    return result;
+}
+```
+
+相比清单6-14，清单6-15代码因引用传递略显复杂，但仍保持可读性。实测内存分配量减半（见表6-2），高频调用时差异显著。
+
+表6-2 处理1000个对象/结构体时的基准测试结果
+
+| 方法                                  | 平均耗时  | Gen 0回收 | 内存分配 |
+| ------------------------------------- | --------- | --------- | -------- |
+| PeopleEmployeedWithinLocation_Classes | 348.8微秒 | 15.1367次 | 62.60 KB |
+| PeopleEmployeedWithinLocation_Structs | 344.7微秒 | 9.2773次  | 39.13 KB |
+
+> 注意：`record`（底层是类）与 `record struct`（底层是结构体）具有相同的性能特性。虽然 `record struct` 在`GetHashCode` 和相等比较实现上有优势，但从内存管理角度看与普通结构体无异。
+
+#### 元组——使用ValueTuple替代
+
+通常需要返回或传递一个非常简单的数据结构，该结构只有几个字段。如果该类型仅使用一次，可能会倾向于使用元组或匿名类型，而不是定义一个类（见代码清单6-16）。然而，需要理解的是，`Tuple` 和匿名类型都是引用类型，因此总是在堆上分配内存。
+
+代码清单6-16. 为仅使用一次的数据创建的元组和匿名类型
+
+```csharp
+var tuple1 = new Tuple<int, double>(0, 0.0);  
+var tuple2 = Tuple.Create(0, 0.0);  
+var tuple3 = new { A = 1, B = 0.0 };  
+```
+
+根据前文所述，在这种情况下应考虑使用用户定义的结构体。然而，自C# 7.0起，引入了一种新的值类型——值元组（`ValueTuple`），由 `ValueTuple` 结构体表示（见代码清单6-17）。这可以很好地替代之前使用的类，在某些场景下无需创建自定义结构体。
+
+代码清单6-17. C# 7.0中引入的值元组
+
+```csharp
+var tuple4 = (0, 0.0);  
+var tuple5 = (A: 0, B: 0.0);  
+tuple5.A = 3;  
+```
+
+典型用例包括从方法返回多个值。相比于使用 `Tuple`（或自定义类）来包含所有结果（如代码清单6-18中的 `ProcessData1` 方法），可以使用值元组结构体，其中仅包含其他结构体（如代码清单6-18中的 `ProcessData2` 方法）。
+
+代码清单6-18. 值元组与元组用于从方法返回多个值的对比
+
+```csharp
+public static Tuple<ResultDesc, ResultData> ProcessData1(IEnumerable<SomeClass> data)  
+{  
+    // 进行一些处理  
+    return new Tuple<ResultDesc, ResultData>(new ResultDesc() { ... }, new ResultData() { ... });  
+    // 或使用：  
+    // return Tuple.Create(new ResultDesc() { ... }, new ResultData() { Average = 0.0, Sum = 10.0 });  
+}  
+
+public static (ResultDescStruct, ResultDataStruct) ProcessData2(IEnumerable<SomeClass> data)  
+{  
+    // 进行一些处理  
+    return (new ResultDescStruct() { ... }, new ResultDataStruct() { ... });  
+}  
+
+public class ResultDesc  
+{  
+    public int Count;  
+}  
+
+public class ResultData  
+{  
+    public double Sum;  
+    public double Average;  
+}  
+
+public struct ResultDescStruct  
+{  
+    public int Count;  
+}  
+
+public struct ResultDataStruct  
+{  
+    public double Sum;  
+    public double Average;  
+}  
+```
+
+这可以显著减少从方法返回多个值时的开销（见表6-3）。由于使用了结构体，`ProcessData2` 运行时无需任何内存分配！整个函数的性能提升了四倍以上。
+
+表6-3. 代码清单6-18的DotNetBenchmark结果
+
+| 方法         | 平均时间  | 内存分配 |
+| ------------ | --------- | -------- |
+| ProcessData1 | 18.380 ns | 88 B     |
+| ProcessData2 | 4.472 ns  | 0 B      |
+
+值元组还引入了一个称为解构（deconstruction）的特性，允许从元组中提取值并直接分配给单独的变量。还可以使用丢弃符（discards）明确表示对元组中的某些元素不感兴趣（见代码清单6-19）。这在某些场景中非常有用，因为编译器和JIT可以利用这些信息进一步优化底层结构的使用。
+
+代码清单6-19. 使用丢弃符解构元组
+
+```csharp
+(ResultDescStruct desc, _) = ProcessData2(list);  
+```
+
+> ORM中计划并可能即将推出更改，以允许将数据库查询结果具体化为值元组和结构体。这将使它们的使用更加实用。请关注您使用的ORM或自行投票支持此类更改！
+
+#### 小型临时本地数据——考虑使用 stackalloc
+
+前文已经展示了使用结构体替代对象可以为本地临时数据带来显著的好处。相比于创建对象列表，可以使用结构体数组。然而，需要注意的是，结构体数组仍然在堆上分配——唯一的好处是数据更紧凑。但可以通过使用 `stackalloc` 进一步消除堆分配。
+
+假设有一个简单的方法，接收一个对象列表，将其转换为临时列表，并处理该列表以计算某些统计数据。典型的基于 LINQ 的方法如代码清单6-20所示，但希望您可以将其推广到更复杂的情况。这种方法会分配大量内存——包含许多临时对象的列表。
+
+代码清单6-20. 完全基于类的简单列表处理示例
+
+```csharp
+public double ProcessEnumerable(List<BigData> list)  
+{  
+    double avg = ProcessData1(list.Select(x => new DataClass() { Age = x.Age, Sex = Helper(x.Description) ? Sex.Female : Sex.Male }));  
+    _logger.Debug("Result: {0}", avg / _items);  
+    return avg;  
+}  
+
+public double ProcessData1(IEnumerable<DataClass> list)  
+{  
+    // 对列表项进行一些处理  
+    return result;  
+}  
+
+public class BigData  
+{  
+    public string Description;  
+    public double Age;  
+}  
+```
+
+可以像前面的示例一样使用结构体数组。但这里我们使用 `stackalloc` 和 `Span<T>`（不安全代码）（见代码清单6-21）。
+
+代码清单6-21. 完全基于结构体和 `stackalloc` 的简单列表处理示例
+
+```csharp
+public double ProcessStackalloc(List<BigData> list)  
+{  
+    // 危险但无需不安全代码！  
+    Span<DataStruct> data = stackalloc DataStruct[list.Count];  
+    for (int i = 0; i < list.Count; ++i)  
+    {  
+        data[i].Age = list[i].Age;  
+        data[i].Sex = Helper(list[i].Description) ? Sex.Female : Sex.Male;  
+    }  
+    double result = ProcessData2(data);  
+    return result;  
+}  
+
+// 将Span作为只读传递，明确表示不应修改  
+public double ProcessData2(ReadOnlySpan<DataStruct> list)  
+{  
+    // 对list[i]项进行一些处理  
+    return result;  
+}  
+```
+
+新版本的代码带来了巨大的差异（见表6-4）。改进后的版本完全不分配内存，且速度提升了约四倍！如果此类代码位于热路径上，这绝对值得考虑。
+
+表6-4. 代码清单6-20和6-21的DotNetBenchmark结果——处理100个元素
+
+| 方法              | 平均时间   | 内存分配 |
+| ----------------- | ---------- | -------- |
+| ProcessEnumerable | 1,169.9 ns | 3272 B   |
+| ProcessStackalloc | 443.2 ns   | 0 B      |
+
+然而，请注意，`stackalloc` 应仅用于小型缓冲区（例如不超过1 kB）。使用 `stackalloc` 方法的主要风险是触发`StackOverflowException`，这在栈空间不足时可能发生。`StackOverflowException` 是一种无法捕获的异常，会直接终止整个应用程序而无法缓解。因此，分配过大的缓冲区是有风险的。代码清单6-21中的栈分配行尤其危险，因为元素数量事先未知。为了更安全，可以考虑一种模式，即检查元素数量，仅在足够小时使用 `stackalloc`，如代码清单6-22所示。
+
+代码清单6-22. 基于结构体的简单列表处理示例，更安全地使用 `stackalloc`
+
+```csharp
+public double ProcessStackalloc(List<BigData> list)  
+{  
+    Span<DataStruct> data = list.Count < 100 ? stackalloc DataStruct[list.Count] : new DataStruct[list.Count];  
+    for (int i = 0; i < list.Count; ++i)  
+    {  
+        data[i].Age = list[i].Age;  
+        data[i].Sex = Helper(list[i].Description) ? Sex.Female : Sex.Male;  
+    }  
+    double result = ProcessData2(data);  
+    return result;  
+}  
+
+// 将Span作为只读传递，明确表示不应修改  
+public double ProcessData2(ReadOnlySpan<DataStruct> list)  
+{  
+    // 对list[i]项进行一些处理  
+    return result;  
+}  
+```
+
+在栈上分配大型数据甚至从性能角度来看也不太好，因为在线程栈上填充大块内存区域会引入大量内存页到进程工作集中（导致页面错误）。这些页面不与其他线程共享，因此可能是一种浪费的方法。
+
+> 栈是一种快速分配和释放内存的结构，主要用作函数调用的局部变量存储。当一个函数被调用时，局部变量会在栈上分配内存，函数返回时，这些内存会自动释放。
+>
+> 当栈上分配大型数据的时候（比如一个几MB的数组），需要大量的内存页。如果这些内存页还没有被加载到内存中，就会触发大量页面错误，页面错误会导致内核模式的上下文切换，并消耗CPU时间来完成内存映射。这时候性能就会极具下降。
+>
+> 这里的**工作集**指的是程序在一段时间内频繁访问的内存页集合。栈上的数据是线程局部的，**不能被其他线程共享**。如果一个线程在栈上分配了大型数据，这些内存页只属于这个线程的工作集。如果程序有多个线程，每个线程都在栈上分配大块内存，内存页的需求会迅速膨胀，导致内存使用效率低下。
+
+如果决定使用 `stackalloc` 并希望100%确保不会发生 `StackOverflowException`，可能会想使用 `RuntimeHelpers.TryEnsureSufficientExecutionStack()` 或 `RuntimeHelpers.EnsureSufficientExecutionStack()` 方法。如文档所述，这些方法“确保剩余的栈空间足够执行平均的.NET Framework函数”。当前值在32位和64位环境中分别为64 kB和128 kB。换句话说，如果`RuntimeHelpers.TryEnsureSufficientExecutionStack()` 返回 `true`，则 `stackalloc` 大小低于128 kB的缓冲区可能是安全的。我们说的是“可能”，因为这些值是实现细节，并不保证——仅确保“平均.NET Framework函数”的空间，这可能不包括大型 `stackalloc`。换句话说，仅 `stackalloc` 非常小的缓冲区是安全的（如前所述，1 kB似乎是安全值）。
