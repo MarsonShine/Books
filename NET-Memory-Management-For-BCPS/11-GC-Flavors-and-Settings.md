@@ -454,3 +454,546 @@ SomeApplication.runtimeconfig.json
 - 在高负载Web服务器中，当多个应用的并发线程导致CPU核心资源激烈争用时，此模式比后文所述更耗资源的“后台服务器GC”更合适。通过 `GCHeapCount` 可进一步限制线程数量。
 - 由于所有GC（包括完全回收）都可能执行压缩操作，该模式相比并发版本能更有效对抗内存碎片，从而减小工作集内存占用。
 - 所有GC操作均为阻塞式，因此在并发标记阶段不会产生浮动垃圾（floating garbage），这进一步降低了工作集大小。
+
+### 后台服务器 GC
+
+自.NET Framework 4.5起，这成为服务器应用程序的默认模式。这是目前最复杂的垃圾回收机制（GC）。不过只要了解非并发服务器GC（Non-concurrent Server GC）和后台工作站GC（Background Workstation GC），你就会发现它实际上是两者的结合体。
+
+后台服务器GC模式具有以下特征（见图11-11）——与后台工作站GC高度相似：
+
+- 每个托管堆都有两个专用于GC的线程——它们大部分时间处于挂起状态等待工作：	
+  -  服务器GC线程：与非并发服务器GC相同，负责执行所有阻塞式GC（包括前台GC）。
+  -  后台GC线程：每个堆额外分配的线程，专门执行后台GC。
+- 短暂代回收（Ephemeral collections）采用非并发GC机制——其执行速度足够快，无需并发处理。这种机制在必要时可进行压缩处理，由多个前台GC线程并行执行——每个线程负责各自的托管堆。
+- 完全GC（Full GC）有两种执行模式：
+  -  非并发GC：因其“全局暂停”特性，可进行堆压缩。与短暂代回收类似，所有服务器GC线程并行工作。
+  -  后台GC：在执行过程中允许托管线程继续运行。此模式不进行堆压缩，与后台工作站GC类似，由专用后台GC线程并行执行。
+
+- 后台完全GC还具有以下特性：
+  - 托管线程在其执行期间仍可分配对象——这些分配可能触发短暂代回收（前台GC）。
+  - 一个后台GC过程中可能发生多次前台GC。
+  - 后台完全GC机制包含两次短暂的“全局暂停”阶段——分别出现在GC开始阶段和中间阶段。
+
+![](asserts/11-11.png)
+
+图11-11 后台服务器GC模式示意图
+
+若要完整描述后台服务器GC（Background Server GC），基本上需要复述后台工作站GC（Background Workstation GC）的大部分内容。二者的核心区别在于：后台服务器GC会为每个CPU核心分配一个额外的GC线程，而非仅使用单个线程。
+
+这种设计通过结合后台工作站GC（短暂停顿、宽松的线程分配限制）和非并发服务器GC（并行回收带来的可扩展性）的优势，显著增加了实现复杂度。就线程资源占用而言，这是最耗费资源的GC模式——在16核机器上，将会有32个线程专用于垃圾回收。
+
+典型应用场景：
+
+- 多数服务器应用的默认GC模式：若同一台服务器上运行着数十个.NET应用程序，则不宜全部采用后台服务器GC。
+- 运行在专用设备上的高资源消耗桌面应用：在医疗设备或工业控制站等单一应用环境中，可考虑启用该模式——这套最精密的GC机制能充分利用硬件资源，实现最佳运行效果。
+
+## 延迟模式
+
+除了四种GC模式外，系统还提供了一套正交配置用于控制垃圾回收的延迟（即暂停）行为。通过延迟模式设置，开发者可以调节GC的侵入性——即其执行阻塞暂停的倾向程度。与前文介绍的GC模式不同，延迟模式支持在程序运行时动态调整，这为实现特殊场景优化创造了可能。
+
+虽然可通过环境变量（在.NET Core中设置 `COMPlus_GCLatencyMode` 或 `DOTNET_GCLatencyMode`）配置延迟模式，但官方推荐的做法是通过代码设置 `GCSettings.LatencyMode` 静态字段。该字段可接受 `GCLatencyMode` 枚举值（见代码清单11-4），对应本节将介绍的各类模式。
+
+代码清单11-4 延迟模式枚举定义
+
+```csharp
+public enum GCLatencyMode 
+{
+    Batch = 0,          // 批处理模式
+    Interactive = 1,    // 交互模式  
+    LowLatency = 2,     // 低延迟模式
+    SustainedLowLatency = 3, // 持续低延迟模式
+    NoGCRegion = 4      // 无GC区域模式
+}
+```
+
+如后文所述，延迟模式同时具备控制GC并发行为的能力。各模式特性将在后续章节简要说明。
+
+### 批处理模式(Batch)
+
+批处理模式适用于对GC暂停时长不敏感的场景。该模式允许GC从吞吐量或内存利用率等维度进行优化，是所有非并发GC（即通过 `System.GC.Concurrent` 或 `gcConcurrent` 设置禁用的GC）的默认延迟模式。
+
+实际应用中，该模式可用于动态关闭后台GC功能。换言之，即使应用程序启动时启用了并发GC，仍可通过此设置临时禁用。关于后台GC线程在此模式下的行为，不同GC模式存在差异：
+
+- **服务器GC**：线程将被无限期挂起，直至恢复延迟模式设置
+- **工作站GC**：线程会在超时后（当前版本为20秒）自动销毁，并触发 `GCTerminateConcurrentThread ETW/EventPipe` 事件
+
+### 交互模式(Interactive)
+
+交互模式下，垃圾回收器会竭力缩短单次暂停的持续时间，即便以牺牲内存使用率为代价（这对于需要快速响应的UI应用程序尤为重要）。该模式会启用后台GC，是所有并发GC的默认设置。因此，在.NET中交互模式是默认启用的，因为无论是工作站GC还是服务器GC模式，默认都采用并发机制。
+
+与批处理模式形成互补，交互模式可用于动态启用并发GC——此时若后台GC线程尚未创建，系统将生成专用线程并触发 `GCCreateConcurrentThread ETW/EventPipe` 事件。
+
+此外，当工作站GC与交互模式（即默认配置）配合使用时，将启用第7章“回收调优”章节所述的GC时间调节机制。
+
+### 低延迟模式(LowLatency)
+
+低延迟模式适用于不计代价追求最短GC暂停时间的场景，仅在工作站GC模式下可用。该模式会禁用所有常规的（包括并发与非并发的）第2代垃圾回收——这是非常严苛的限制！完全GC仅会在收到系统内存不足通知或显式触发时（如调用 `GC.Collect` 方法）执行。
+
+该模式对应用程序运行具有显著影响：
+
+- **暂停时间极短**：仅执行快速的短暂代回收
+- **内存占用激增**：第2代堆和大对象堆中的对象将完全不被回收
+
+这种高强度延迟模式仅应在对延迟有极端要求的短时场景中使用，例如用户密集交互阶段。需特别注意：退出该模式后迟早会触发高强度垃圾回收——最佳实践是在可控时机尽快手动触发GC。
+
+设置低延迟模式时，必须确保其能及时恢复。在.NET Framework中，常规 `try/finally` 结构可能不足以保证，因为 `finally` 块仍有极小概率无法执行。建议采用约束执行区域（Constrained Execution Region, CER）机制——如.NET文档所述：“CER是编写可靠托管代码的机制，该区域内CLR会抑制可能阻止代码完整执行的带外异常”。例如，CLR会延迟中止正在CER内执行的线程。其使用方式简单，只需在 `try` 块前调用 `PrepareConstrainedRegions` 方法（见代码清单11-5）。
+
+代码清单11-5 通过约束执行区域安全设置低延迟模式
+
+```csharp
+GCLatencyMode oldMode = GCSettings.LatencyMode;
+RuntimeHelpers.PrepareConstrainedRegions();
+try
+{
+    GCSettings.LatencyMode = GCLatencyMode.LowLatency;
+    // 在此执行时间敏感的短期任务
+}
+finally
+{
+    GCSettings.LatencyMode = oldMode;
+}
+```
+
+在.NET Core中，由于运行时已确保 `finally` 块必定执行（不存在线程中止或应用域卸载），CER机制已被弃用。
+
+> `finally` 块真的一定会执行吗？
+>
+> 在C#和.NET的大多数日常场景下，`finally`块**“几乎总是”**会执行——无论`try`块内是否抛出了异常，或者是否提前`return`。
+> **但这不是绝对保证。** 有极少数情况下，`finally`块可能不会被执行，比如：
+>
+> - 进程崩溃或被强制终止（如`Environment.FailFast()`、操作系统kill进程、严重硬件故障等）。
+> - 机器掉电。
+> - 发生CLR的“灾难性异常”（如 `OutOfMemoryException` 在某些极端条件下、`StackOverflowException`、`Thread.Abort`等）。
+>
+> `Thread.Abort` 是.NET早期版本里比较典型的例子：它会在线程任意时刻抛出一个异常，中断线程执行，理论上可能导致`finally`块未被执行（或者只执行了一部分）。
+>
+> 要最大可能的保证代码执行怎么办？
+>
+> **CER**（约束执行区域）是.NET提供的一个机制，用来尽最大可能保证某一段关键代码——尤其是`finally`块——**不会被中断、能完整地执行完**。
+> 原理是：
+>
+> - CLR会在进入CER前预先加载好所有可能会用到的代码和资源，尽量避免在关键区域里发生“带外异常”。
+> - CLR会延迟线程中止（`Thread.Abort`），直到CER块结束。
+>
+> 所以，在**极端高可靠性场景**（比如非托管资源回收、安全关键操作等），可以通过如下方式编写：
+>
+> ```c#
+> RuntimeHelpers.PrepareConstrainedRegions();
+> try
+> {
+>     // 临界操作
+> }
+> finally
+> {
+>     // 关键清理代码
+> }
+> ```
+
+### 持续低延迟模式(SustainedLowLatency)
+
+鉴于低延迟模式的严苛要求可能导致堆内存过快增长，.NET Framework 4.5 引入了该模式的改良版本——持续低延迟模式（SustainedLowLatency）。此模式在工作站和服务器GC模式下均可使用，是短暂停时间与内存占用量之间的折中方案：仅禁用非并发的完全GC，仍允许执行短暂代回收和后台垃圾回收。需注意，该模式仅在运行时已启用并发GC设置时有效（即便后续通过批处理或交互模式动态修改过延迟设置）。与低延迟模式类似，完全阻塞式GC仅会在系统内存不足或显式调用 `GC.Collect()` 时触发。
+
+持续低延迟模式通过抑制堆内存增长速度，能在较长时间内维持低延迟状态，同时提供相对较短的暂停时间（因后台GC引入的暂停，其响应速度略逊于标准低延迟模式）。这一特性使其成为处理用户输入场景的理想选择——例如当用户进行UI操作时启用该模式提升交互体验。Visual Studio的Roslyn语法解析器源码中就应用了此策略：在编辑器检测到用户输入时切换至持续低延迟模式，并通过超时机制自动恢复原始设置（见代码清单11-6）。
+
+代码清单11-6 Roslyn源码中持续低延迟模式设置示例
+
+```csharp
+/// <summary>
+/// 此类用于管理GC模式切换至SustainedLowLatency
+/// 
+/// 可安全跨线程调用，但设计初衷是当UI线程接收到用户键盘/鼠标输入时调用
+/// </summary>
+internal static class GCManager
+{
+    /// <summary>
+    /// 在无法接受高延迟的场景（如处理键盘输入）中调用此方法，
+    /// 以抑制耗时的阻塞式第2代垃圾回收
+    /// 
+    /// 除非再次调用本方法，否则阻塞式GC将在短时延迟后自动恢复
+    /// </summary>
+    internal static void UseLowLatencyModeForProcessingUserInput()
+    {
+        var currentMode = GCSettings.LatencyMode;
+        var currentDelay = s_delay;
+        if (currentMode != GCLatencyMode.SustainedLowLatency)
+        {
+            GCSettings.LatencyMode = GCLatencyMode.SustainedLowLatency;
+            // 在最后一次调用本方法后，延迟指定时间恢复原始延迟模式
+            currentDelay = new ResettableDelay(s_delayMilliseconds);
+            currentDelay.Task.SafeContinueWith(
+                _ => RestoreGCLatencyMode(currentMode), 
+                TaskScheduler.Default);
+            s_delay = currentDelay;
+        }
+        currentDelay?.Reset();
+    }
+}
+```
+
+### 无GC区域模式(NoGCRegion)
+
+这是迄今为止要求最为严苛的模式，随.NET Framework 4.6引入。正如微软文档所述，该模式“尝试在关键路径执行期间禁止垃圾回收——前提是有指定量的可用内存”。换言之，它试图完全禁用GC，但无法永久实现。因此不能简单地通过设置 `GCSettings.LatencyMode` 字段来启用（将其设为 `GCLatencyMode.NoGCRegion` 无效），而需调用专用方法：
+
+```csharp
+bool GC.TryStartNoGCRegion(long totalSize)
+bool GC.TryStartNoGCRegion(long totalSize, bool disallowFullBlockingGC)  
+bool GC.TryStartNoGCRegion(long totalSize, long lohSize)
+bool GC.TryStartNoGCRegion(long totalSize, long lohSize, bool disallowFullBlockingGC)
+```
+
+这些方法都要求指定期望在不触发GC的情况下可分配的内存总量（totalSize，字节）。当GC确认有足够可用内存时， `TryStartNoGCRegion` 返回true表示已进入无GC延迟模式。可选参数 `lohSize` 可指定大对象堆(LOH)的专用配额。若不指定，总配额将分别应用于小对象堆(SOH)和大对象堆（实际可分配双倍内存）。
+
+当可用内存不足时，`TryStartNoGCRegion` 内部会触发完全非并发GC来尝试释放内存。通过设置 `disallowFullBlockingGC` 参数为false可禁止此行为。
+
+> 在传统基于内存段的GC实现中，指定大小不得超过所有短暂代内存段总容量（服务器GC模式下需乘以对应段数）：
+>
+> - 指定 `lohSize` 时，(`totalSize - lohSize`)必须≤短暂代段容量。
+> - 仅指定 `totalSize` 时，该值必须≤单个短暂代段容量（保守策略）。
+>
+> 这是因为短暂代段空间耗尽时将强制触发GC。若指定大小超出限制，会抛出 `ArgumentOutOfRangeException`。
+
+进入无GC模式后，程序可正常执行。只要SOH和LOH的分配量未超限，就不会触发GC。但必须显式调用 `GC.EndNoGCRegion()` 来终止该模式！虽然GC机制本身不依赖于此（分配超限时会自动恢复原模式），但API层面要求严格配对调用——否则后续 `TryStartNoGCRegion` 调用将抛出“无GC区域模式已在进行中”的 `InvalidOperationException`。即使因超限已自动恢复，仍需调用 `EndNoGCRegion`，此时会抛出"分配内存超出无GC区域模式指定限制"异常。
+
+由于无GC区域本身有分配量限制，其终止操作不像低延迟模式那样需要约束执行区域(CER)保护。最坏情况不过是触发GC。但建议在调用 `TryStartNoGCRegion` 前检查并终止之前的无GC区域，避免异常。
+
+综合这些考量，使用无GC区域的典型代码如清单11-7所示：
+
+清单11-7 无GC区域创建示例
+
+```csharp
+// 防止之前finally块未执行的情况
+if (GCSettings.LatencyMode == GCLatencyMode.NoGCRegion) 
+    GC.EndNoGCRegion();
+    
+if (GC.TryStartNoGCRegion(1024, true))
+{
+    try 
+    {
+        // 执行关键操作
+    }
+    finally
+    {
+        try { GC.EndNoGCRegion(); } 
+        catch (InvalidOperationException ex) 
+        { 
+            // 记录异常信息
+        }
+    }
+}
+```
+
+> 在.NET Core源码中，可通过 `GCHeap::StartNoGCRegion` 方法入手研究该模式。该方法由 `GC.TryStartNoGCRegion` 的内部实现 `GCInterface_StartNoGCRegion` 调用，可能触发 `GCHeap::GarbageCollect`，并通过 `gc_heap::prepare_for_no_gc_region` 检查短暂代段条件及设置配额限制。程序运行期间，当满足GC条件时会调用 `gc_heap::should_proceed_for_no_gc` 来检测分配限制。
+
+### 延迟优化目标
+
+回顾第7章“静态数据”章节，其中介绍了另一种延迟控制机制——延迟优化目标（层级），该机制会影响静态数据的处理策略。如.NET源码注释所述：“延迟模式要求用户具备特定GC知识（如预算、完全阻塞GC）。我们正逐步转向更直观的优化目标，让用户直接声明最关注的性能维度（包括内存占用量、吞吐量和暂停可预测性）”。因此在未来.NET版本中，可能会从现有延迟模式过渡到更面向维度的优化目标。目前已规划四个目标层级：
+
+- **内存占用量优先（层级0）**：允许较长且较频繁的暂停，但保持较小堆大小。
+- **暂停与吞吐量平衡（层级1）**：暂停更可预测且更频繁，最长暂停时间短于层级0。
+- **吞吐量优先（层级2）**：暂停不可预测但频率较低（可能持续时间较长）。
+- **短暂停优先（层级3）**：暂停高度可预测且频繁，最长暂停时间短于层级1。
+
+如第7章所述，当前（.NET Framework 4.8和.NET 8时期）仅支持层级0和1，且其在运行时和GC中的应用仍非常有限。
+
+可通过 `GCLatencyLevel` 配置项设置延迟层级，使用 `COMPlus_GCLatencyLevel/DOTNET_GCLatencyLevel` 环境变量，取值0或1（默认值）。
+
+### GC模式选择指南
+
+您已经了解了垃圾回收器（GC）的各种运行模式，以及通过延迟设置实现的侵入性控制。尽管前文已讨论过各模式的优缺点，但我们尚未明确回答一个问题：哪种GC模式最适合您的场景？
+
+简单答案是使用默认GC模式！多数情况下，这个答案完全够用，您无需纠结其他选项。但仍有若干可调节参数值得关注，某些场景下可能需要调整。最常见的两种例外情况是：
+
+- 运行在多应用共享服务器上的Web应用：此时默认的“后台服务器模式”（Background Server）可能资源占用过高。可通过 `GCHeapCount` 参数微调，或切换至其他模式。
+- 执行大量处理的Windows服务：默认的“后台工作站模式”（Background Workstation）可能扩展性不足，建议改用某种服务器模式。
+
+表11-1汇总了目前所介绍的GC模式特性概要。
+
+表11-1 GC模式对照表
+
+|             | 工作站模式                                                   |                                                              | 服务器模式                                                   |                                                       |
+| ----------- | ------------------------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------ | ----------------------------------------------------- |
+| CPU使用     | 非并发                                                       | 后台                                                         | 非并发                                                       | 后台                                                  |
+|             | 无专用GC线程                                                 | 单GC线程                                                     | GC线程数=逻辑CPU核心数                                       | GC线程数=2×逻辑CPU核心数                              |
+| 批处理模式  | 支持（默认）                                                 | 支持（禁用后台GC）                                           | 支持（默认）                                                 | 支持（禁用后台GC）                                    |
+| 交互模式    | 支持（启用后台GC）                                           | 支持（默认）                                                 | 支持（启用后台GC）                                           | 支持（默认）                                          |
+| 低延迟模式  | 支持                                                         | 支持                                                         | 不支持                                                       | 不支持                                                |
+| 持续低延迟  | 不支持                                                       | 支持                                                         | 不支持                                                       | 支持                                                  |
+| GCHeapCount | 不支持                                                       | 不支持                                                       | 支持                                                         | 支持                                                  |
+| 典型场景    | 单机运行多个轻量应用，可接受较长暂停（可通过低延迟模式短期控制） | 要求严格响应速度的交互应用（配合低延迟/持续低延迟模式控制长暂停） | 当前较少使用，作为资源消耗型后台服务器与工作站模式的折中方案 | 大多数请求处理型应用（如IIS托管Web应用、Windows服务） |
+
+## 其他GC配置选项
+
+除本章详述的设置外，还有其他配置选项可自定义GC行为。如第15章所述，通过 `GC.GetConfigurationMethods` 方法可获取部分配置值，这些值源自 `.\src\coreclr\gc\gcconfig.h` 文件定义的内部变量。
+
+本节介绍的设置需通过 `DOTNET_xxx` 环境变量启用（.NET 6之前使用 `COMPlus_xxx` 前缀）。数值需采用十六进制格式，但无需添加 `0x` 前缀。
+
+由于这些设置大多已在微软官方文档中说明（详见https://learn.microsoft.com/en-us/dotnet/core/runtime-config/garbage-collector），本文将不赘述有效值范围，仅聚焦适用场景。
+
+### 调整堆内存限制
+
+在容器环境中运行时，GC会自动检测内存限制。由于GC仅控制应用程序使用的托管内存（不包括JIT编译方法或原生代码分配的内存），它会将所有堆的总大小限制为容器内存的百分比，默认比例为75%。例如在1GB内存限制的容器中，GC最多使用750MB，超限时将抛出 `OutOfMemoryException`，剩余250MB供其他用途。
+
+根据场景需求，您可能需调整该限制：若默认值过高（如原生代码或其他进程需要超过250MB导致OOM终止），或过低（希望进程能使用800MB-900MB），可通过 `GCHeapHardLimitPercent` （调整百分比）或 `GCHeapHardLimit` （设置绝对值，如800MB）手动配置。
+
+少数高级场景中，可能需要更精细的控制。`GCHeapHardLimitSOH`/`GCHeapHardLimitLOH`/`GCHeapHardLimitPOH`（及其相对百分比版本）可分别限制特定堆的大小。自.NET 8起，还可通过第15章介绍的 `GC.RefreshMemoryLimit()` 运行时动态调整这些值。
+
+### 调整堆数量
+
+服务器GC模式下，默认会为每个可用核心创建一个堆。若需减少堆数量（通常为降低内存占用），可通过 `GCHeapCount` 设置实现。
+
+### 调整GC线程亲和性
+
+服务器GC模式下，每个GC堆对应一个固定绑定CPU核心的GC线程。以下情况可能需要修改默认亲和性：
+
+- 当减少堆数量时（通过前述 `GCHeapCount`），剩余GC线程会按序绑定前几个CPU核心（如设置3个堆则绑定前3个核心）。若同一机器运行多个.NET进程，可能导致核心竞争不均，此时可通过 `GCHeapAffinitizeMask` 或 `GCHeapAffinitizeRanges` （语法不同）指定目标核心。
+- 当进程仅间歇性使用资源时，固定核心可能造成浪费。若并发进程长时间占用核心且OS调度器无法重新分配被固定的GC线程，建议通过 `GCNoAffinitize` 完全禁用线程亲和性。
+
+Windows系统还需注意CPU组限制：多CPU组系统中，GC默认仅使用进程所属组的核心。如需使用全部核心，需设置`GCCpuGroup`。该限制已在.NET 7（Windows 11/Windows Server 2022及以上版本）中解除。
+
+> 在 .NET 程序中，可以通过新建 `runtimeconfig.json` 配置文件来设置：
+>
+> ```
+> {
+>   "configProperties": {
+>     "System.GC.Server": true,
+>     "System.GC.HeapCount": 3,
+>     "System.GC.HeapAffinitizeMask": 1023,
+>     "System.GC.NoAffinitize": false,
+>     "System.GC.CpuGroup": true
+>   }
+> }
+> ```
+>
+> [Garbage collector config settings - .NET | Microsoft Learn](https://learn.microsoft.com/en-us/dotnet/core/runtime-config/garbage-collector#ways-to-specify-the-configuration)
+
+### 内存负载阈值
+
+当系统处于高负载状态时，GC会主动调整行为以更积极地回收内存，从而减少内存占用。默认情况下，当物理内存总使用量（包含所有进程）达到90%时触发此机制。对于内存超过80GB的机器，默认阈值会根据核心数动态调整（始终保持在90%-97%之间）。通过 `GCHighMemPercent` 可手动调整该阈值。典型应用场景包括：若进程本身内存占用较低，此时强制GC激进回收（实际可释放内存有限）反而会影响性能，此时适当提高阈值更为合理。
+
+### GC保守模式
+
+如前几章所述，垃圾回收频率取决于各代预算（budget），而预算又根据回收后存活对象的比例动态调整。这种机制的核心目标是最小化GC开销，而非最小化内存占用。但在某些场景下（如单台服务器运行多个应用），可能需要优先控制内存使用量。为此引入的 `GCConserveMemory` 设置，允许以性能开销为代价换取更低的内存占用。
+
+该设置自.NET Framework 4.8和.NET 5起可用，可通过多种方式配置：
+
+- 在.NET Framework 4.8及以上版本中，可通过 `app.config` 文件（设置 `Configuration > Runtime > GCConserveMemory` 键）或环境变量（`COMPlus_GCConserveMemory`）启用
+-  在.NET 5及以上版本中，可通过 `runtimeconfig.json`文件（在 `configProperties` 中设置 `System.GC.ConserveMemory` 键）或环境变量（`DOTNET_GCConserveMemory`）启用
+
+启用 `GCConserveMemory` 时需设置0-9的数值，0表示禁用。数值越大GC策略越激进，其实际含义是碎片率上限的计算公式为`(10–GCConserveMemory)/10`。例如设为7时得到0.3，表示GC会将堆碎片率控制在30%以内。
+
+实际运行中，每次执行第2代回收时，GC会计算第2代堆与LOH（大对象堆）的累计碎片量。若超过阈值，GC将执行压缩回收以尝试回收空闲空间。特别地，若LOH单独碎片率超过阈值，则会触发LOH压缩——这是少数能自动触发LOH压缩的场景之一。
+
+需注意LOH压缩条件仅在总碎片率超阈值时才会评估。举例说明：若第2代堆2GB（碎片率10%），LOH堆1GB（碎片率90%），由于第2代堆体积是LOH的两倍，累计碎片率仅约36%。此时只有将 `GCConserveMemory` 设为7及以上（碎片率上限≤30%）才会触发LOH压缩。
+
+### 动态适配模式
+
+保守模式虽能有效降低.NET应用内存占用，但动态适配模式（DATAS）可更进一步。通过设置 `GCDynamicAdaptationMode` 启用该模式时（其基于保守模式构建，会默认将 `GCConserveMemory` 设为5，但可手动调整），将产生两种效果：
+
+- 其一，根据其他代的大小动态调整第0代预算。与常规模式仅依据对象存活率决定第0代预算不同，`DATAS` 模式下 GC 会确保在进程内存使用量较低时保持第0代小型化，从而进一步降低总内存占用。
+
+- 其二，在服务器GC模式下更为显著。默认情况下服务器GC会为每个CPU核心创建独立堆，若小型应用运行在多核机器上会导致堆数量过多而浪费内存。虽然可通过 `GCHeapCount` 手动设置堆数量，但精准设定困难且应用负载可能随时间波动（高峰期适用的值在空闲期会造成浪费）。`DATAS` 模式下，GC会根据工作负载动态调整堆数量：基于最近三次垃圾回收收集的指标（如GC耗时、分配锁竞争时间等）进行启发式判断——当过多线程竞争分配锁时，表明需要增加堆数量。
+
+### 大内存页支持
+
+第二章曾简要提及大内存页（Linux称为huge pages），即大于默认4KB的页面（x64架构支持2MB和1GB页面）。.NET通过 `GCLargePages` 设置提供实验性支持，启用后可通过两种方式提升性能：
+
+- **减少TLB未命中**：更大的页面意味着更少的页表项，从而降低转换检测缓冲区（TLB）的使用压力。
+- **减少缺页中断**：当应用分配大缓冲区时，GC提交并清零内存可能耗时。使用大内存页时内存已预先提交，可消除此开销。
+
+使用大内存页时，内存不会被交换到磁盘。这会影响同主机上其他应用，因此操作系统会限制其使用。Windows要求进程用户具备 `SeLockMemoryPrivilege` 权限。Linux需管理员预先分配大页池。
+
+启用 `GCLargePages` 时必须同时设置堆硬限制，否则进程初始化将失败（错误码0x8013200E）。因为GC会在启动时提交所有大内存页，必须预先知晓内存用量上限。
+
+通过 `GCHeapHardLimit` 设置堆硬限时，GC会提交两倍于设定值的内存（但不使用超额部分）。目前原因不明，可能属于bug。建议改用 `GCHeapHardLimitSOH、GCHeapHardLimitLOH和GCHeapHardLimitPOH` 分别设置各堆限制（必须同时设置三项，否则报错0x8013200D），此时GC会按预期仅提交实际所需内存。
+
+### 场景11-1：验证GC配置
+
+**场景描述**：在维护.NET应用时，需要确认生产环境当前GC配置（例如怀疑配置错误）。虽然可检查配置文件，但无法100%确认——文件配置可能被环境变量或注册表覆盖，也可能存在拼写错误。唯一可靠方式是直接检查.NET进程的运行时设置。
+
+**分析方法**：最简便无侵入的方式是利用 `ETW/EventPipe` 机制。每次 `ETW/EventPipe` 会话启停时，.NET运行时会发送诊断事件（供诊断工具使用），需关注 `MicrosoftWindows-DotNETRuntimeRundown/Runtime/Start` 事件（在运行时启动及 `ETW/EventPipe` 会话启停时触发）。
+
+因此，只需启动并结束ETW/EventPipe会话，查看包含目标字段StartupFlags的事件即可获取配置信息：
+
+- **.NET Framework** 使用PerfView采集ETW事件
+- **.NET Core 5+** 使用命令：`dotnet trace collect --providers Microsoft-Windows-DotNETRuntimeRundown:0x80000000001:5 -p <进程ID>`
+
+StartupFlags字段的含义直观明了，重点关注以下三个值：
+
+- **CONCURRENT_GC**：表示启用并发GC（未列出则启用非并发GC）。
+- **SERVER_GC**：表示启用服务器GC（未列出则启用工作站GC）。
+- **HOARD_GC_VM**：表示启用VM驻留机制（参见第5章）。
+
+这些值可能组合出现，例如后台服务器GC会同时显示 `CONCURRENT_GC` 和 `SERVER_GC`，非并发工作站GC则不会显示任何标志。
+
+![](asserts/11-12.png)
+
+图11-12. Microsoft-Windows-DotNETRuntimeRundown/Runtime/Start事件显示的CLR运行时设置
+
+作为PerfView的替代方案，您可以使用 Sasha Goldshtein 开发的 `etrace` 工具。该工具允许通过命令行控制ETW会话，并提供多种筛选条件。在您的场景中，您只需关注单个进程的特定事件。由于 `etrace` 会启动.NET相关的ETW会话，Runtime/Start事件将被触发。具体命令及其输出如代码清单11-8所示。
+
+代码清单11-8. 用于列出指定ETW提供程序事件并应用筛选条件（如进程ID）的 `etrace` 命令
+
+```
+.\etrace.exe --other Microsoft-Windows-DotNETRuntimeRundown --event Runtime/Start
+ --pid=21316
+ Processing start time: 30/04/2018 10:21:51
+Runtime/Start [PNAME= PID=21316 TID=14648 TIME=30/04/2018 10:21:51]
+ClrInstanceID = 9
+Sku = 1
+BclMajorVersion = 4
+BclMinorVersion = 0
+BclBuildNumber = 0
+BclQfeNumber = 0
+VMMajorVersion = 4
+VMMinorVersion = 0
+VMBuildNumber = 30319
+VMQfeNumber = 0
+StartupFlags = 1
+StartupMode = 1
+CommandLine = F:\IIS\nopCommerce\Nop.Web.exe
+ComObjectGuid = 00000000-0000-0000-0000-000000000000
+RuntimeDllPath = C:\Windows\Microsoft.NET\Framework\v4.0.30319\clr.dll
+```
+
+这种方法的唯一不便之处在于 `StartupFlags` 以数值形式呈现，需要您自行参照对应的枚举类型进行解析（见代码清单11-9）。在代码清单11-8中，`StartupFlags` 值为1，表示仅设置了 `CONCURRENT_GC` 标志。
+
+代码清单11-9. 运行时StartupFlags枚举
+
+```c#
+public enum StartupFlags
+{
+    None = 0,
+    CONCURRENT_GC = 0x000001,
+    LOADER_OPTIMIZATION_SINGLE_DOMAIN = 0x000002,
+    LOADER_OPTIMIZATION_MULTI_DOMAIN = 0x000004,
+    LOADER_SAFEMODE = 0x000010,
+    LOADER_SETPREFERENCE = 0x000100,
+    SERVER_GC = 0x001000,
+    HOARD_GC_VM = 0x002000,
+    SINGLE_VERSION_HOSTING_INTERFACE = 0x004000,
+    LEGACY_IMPERSONATION = 0x010000,
+    DISABLE_COMMITTHREADSTACK = 0x020000,
+    ALWAYSFLOW_IMPERSONATION = 0x040000,
+    TRIM_GC_COMMIT = 0x080000,
+    ETW = 0x100000, ARM = 0x400000,
+    SINGLE_APPDOMAIN = 0x800000,
+    APPX_APP_MODEL = 0x1000000,
+    DISABLE_RANDOMIZED_STRING_HASHING = 0x2000000
+}
+```
+
+另一方面，托管在IIS上的ASP.NET Web应用程序会显示StartupFlags值为208919（十六进制33017），对应以下标志组合：
+ CONCURRENT_GC（并发GC）、
+ LOADER_OPTIMIZATION_SINGLE_DOMAIN（加载器单域优化）、
+ LOADER_OPTIMIZATION_MULTI_DOMAIN（加载器多域优化）、
+ LOADER_SAFEMODE（加载器安全模式）、
+ SERVER_GC（服务器模式GC）、
+ HOARD_GC_VM（GC虚拟机保留模式）、
+ LEGACY_IMPERSONATION（传统身份模拟）、
+ DISABLE_COMMITTHREADSTACK（禁用线程堆栈提交）。
+
+### 场景11-2：不同GC模式的基准测试
+
+**问题描述**：关于不同GC运行模式的探讨最终归结为一个核心问题——哪种模式最适合您的应用程序？表面上看答案很明确：默认模式在多数情况下已经足够。服务器端Web应用采用后台服务器GC模式？交互式UI应用采用后台工作站GC模式？禁用并发模式的情况通常缺乏合理性。但每个应用都有其特殊性，无法保证默认模式就是最优解。此时，唯一可靠的验证方法就是实际测量各选项的影响效果。
+
+**关键问题**：如何准确测量这种影响？需要使用哪些工具？应该关注哪些指标？这正是本场景要解决的问题。我们将使用之前提到的nopCommerce电商系统作为分析对象。请注意，测试结果仅反映该应用当前开发阶段的特性，切勿直接套用结论到您的项目中。本场景的核心价值在于演示分析方法论，帮助您在具体场景中实施类似评估。
+
+**分析方法**：如何量化不同GC设置的效果？“GC暂停与开销”章节已做过基础讨论。测试将在Docker容器化环境中运行nopCommerce应用，通过多维度指标进行全面评估：
+
+- GC开销将通过 `dotnet-counters` 会话记录的“CPU使用率(%)”和“自上次GC后的GC时间占比(%)”指标进行测量（保存为CSV文件）。
+
+- 内存占用情况通过观察 `dotnet-counters` 会话中的“GC堆大小(MB)”指标获取。
+- 暂停时间将通过分析 `dotnet-trace` 的 `gc-collect` 会话中记录的 `PauseMSec` 测量值进行深入研究（导出为CSV文件）。
+- 客户端视角的响应时间由JMeter工具的汇总报告记录（保存为CSV文件）。
+
+由于需要处理所有这些数据，此类基准测试相当繁琐。由于缺乏能够自动化记录、合并和处理这些结果的工具，该流程目前主要依靠人工操作。若您发现合适的工具，请务必使用！但我们仍强烈建议您以这种全面的方式审视GC设置测量结果，否则实验观察将不完整，可能导致错误结论。
+
+测试场景包含以下步骤：
+
+1. 运行docker化部署的nopCommerce并使用默认样本数据初始化——每个待测试的GC设置都需要重复此步骤。
+2. 使用JMeter运行负载测试，模拟网站典型用户流量（始终确保可重复的初始条件——重启应用程序池、进行适当预热、禁用其他后台程序等）。
+3. 立即在容器内启动 `dotnet-trace` 会话——使用开销极低的gc-collect配置。
+4. 同时立即在容器内启动 `dotnet-counters` 会话（使用collect选项将结果保存为CSV文件）。
+5. 让负载测试持续运行指定时长。
+6. 停止所有进程。
+7. 在PerfView中打开生成的nettrace会话，将所有GC相关事件转换为CSV格式（通过GCStats报告中的“ndividual GC Events/View in Excel”选项实现）。
+8. 至此，每个GC设置应生成三个CSV文件——分别来自dotnet-counters、dotnet-trace和JMeter。 
+9. 开始分析——包括生成后文所示的各类图表。这项繁琐的工作已通过若干Python脚本实现自动化，这些脚本主要依赖 `pandas` 和 `matplotlib` 库进行数据处理与可视化。
+
+这种方法的主要优势在于其极低侵入性。您可随时启动测试，甚至在生产环境中进行。也无需专门执行负载测试——只要确保条件可重复，在具有相似用户流量（每日/每周/每月相同时段等）时进行观察即可。
+
+此类测量还有另一个重要方面（第3章已提及）：警惕平均值！平均值作为统计量虽能营造“有价值信息”的假象，实则可能掩盖诸多关键事实。因此在测量前文指标时，务必关注其随时间的变化趋势。例如若GC堆大小未显著波动，平均值或许足够；但对于应用程序响应时间（或本例中的GC暂停时间）等关键参数，平均值往往缺乏代表性。
+
+对于关键指标，百分位数才能提供真正有价值的信息。因此无论是GC暂停时间还是应用响应时间，都需基于CSV数据生成百分位图。百分位数与业务需求高度相关——例如要求99%用户响应时间低于2秒、99.99%用户低于10秒。本场景中，我们通过Python脚本对 `dotnet-trace` 和JMeter的采样数据进行百分位计算。某些工具（如.NET Aspire的仪表盘）或Azure等托管环境可辅助此过程。实验中需回答的核心问题是：四种GC配置中哪种最合适——
+
+- 工作站非并发后台 (Workstation Non-concurrent Background)。
+- 工作站模式 (Workstation)。
+- 服务器非并发后台 (Server Non-concurrent Background)。
+- 服务器模式 (Server)。
+
+“合适性”应由业务需求驱动——无论是响应时间SLA、资源消耗（CPU/内存）还是其他可量化指标。需注意，GC开销本身并非业务核心指标——您能想象管理层会直接要求“GC时间占比低于10%”吗？实际上，我们更应关注GC开销对其他业务指标的影响。
+
+每次测试前都通过环境变量配置正确的运行时设置。每种模式均进行多次测试以降低外部因素干扰。
+
+首先讨论CPU开销。图11-13清晰显示：服务器模式GC的CPU使用率显著高于工作站模式。这符合预期，因为服务器模式会积极利用多核CPU资源，而工作站模式则相对保守。
+
+![](asserts/11-13.png)
+
+图11-13. 各类GC的CPU使用率
+
+通过使用“自上次GC以来在GC中花费的时间百分比(%)（% Time in the GC since last GC (%)）”计数器指标（见图11-14），您可能会得到具有误导性的结果——工作站模式的GC开销实际上比服务器模式大得多。回顾图11-1可知，“GC时间百分比（% Time in GC）”衡量的是从上次GC到本次GC期间，GC持续时间所占的比例。在服务器模式下，虽然单次GC耗时较短，但由于需要在多个托管堆（多核）上并行处理，因此尽管单次时间缩短，总体CPU使用率却与工作站模式相当，而这一关键信息无法通过“GC时间百分比”指标准确体现。这个观察结论非常重要：在使用“GC时间百分比”计数器时，必须结合当前GC模式进行解读——对于工作站模式，您应该比服务器模式更能容忍较高的百分比值。
+
+![](asserts/11-14.png)
+
+图11-14. GC时间百分比测量
+
+> 如前所述，测量“GC时间百分比”指标（GCStats报告中提供）需要使用包含CPU采样的重量级 `dotnet-trace` 会话，这会引入显著开销。在此类检测下应用程序可能变慢数倍，因此无法进行有意义的性能比较。故本场景中未采用该测量方式。
+
+内存使用量则更能体现不同GC模式间的差异（见图11-15）。与工作站模式相比，两种服务器模式的托管堆内存占用明显更大。而同一模式下，非并发版本与后台版本之间的内存差异则微乎其微。若内存使用量是您的核心考量指标，这些数据将有助于决策。
+
+![](asserts/11-15.png)
+
+图11-15. 内存使用结果
+
+关于各GC模式产生的暂停时间数据可能更具参考价值，尤其是针对各待回收代际的细分数据。这些结果也符合预期（见图11-16）。短期代（ephemeral generations）的回收速度在所有GC模式下都极快，真正的差异体现在完全GC（full GC）上。表现最差的是非并发工作站模式——该模式下仅使用单个阻塞线程执行全量垃圾回收。非并发服务器模式由于支持多托管堆并行回收而相对较快，但仍明显慢于两种并发版本。
+
+![](asserts/11-16.png)
+
+图11-16. 各代GC暂停时间均值结果
+
+但如前所述，对于如此重要的指标，平均值并不具备足够代表性。观察百分位数数据时（见图11-17），后台服务器模式表现最优，而非并发工作站模式明显最差（尤其在超过99%的高百分位区间出现严重劣化）。这才是评估应用暂停时间的正确方式——实际测量您自己的应用，结果可能会出乎意料！
+
+![](asserts/11-17.png)
+
+图11-17. GC暂停时间百分位结果
+
+但正如前文所述，GC开销（包括GC暂停）对业务核心指标的影响更为关键。从应用视角看这些测试结果如何？图11-18展示了通过JMeter测量的响应时间，对应负载测试场景中的各个操作步骤（如添加购物车、展示商品分类等）。
+
+可见在本场景中，无论是否启用并发，服务器GC模式的响应时间均显著优于工作站模式。值得注意的是，由于请求处理耗时本身较长，非并发模式产生的长暂停在客户端视角的最大响应时间中并未显著体现——因为常规处理耗时本就远超最长的GC暂停时间。若您的请求处理时间在几十毫秒级别，GC暂停对应用的影响将更为显著。
+
+![](asserts/11-18.png)
+
+图11-18. 响应时间结果
+
+但平均值仍不足够，我们来看选定场景步骤（购物车商品详情设置）的响应时间百分位数（见图11-19）。数据显示该特定端点受非并发工作站GC模式的严重影响，相比其他模式产生显著延迟。其他端点未呈现如此明显的延迟，这可能表明该端点存在较重处理逻辑。这也印证了进行细粒度测量的必要性——不同GC模式下响应时间的百分位分布。
+
+![](asserts/11-19.png)
+
+图11-19. 响应时间百分位结果
+
+本场景的最终结论是：建议采用任一服务器GC版本，但需注意其CPU和内存消耗显著增加。这完全符合预期，并清晰表明您可以通过这些模式控制GC的“激进程度”。需特别强调，这些结论基于特定前提条件——模拟的用户负载、特定环境（CPU核心数、内存容量、其他运行中的应用程序）。因此，在近生产环境（而非开发机）执行此类测试至关重要。
+
+> 虽然本场景以适合负载测试的Web应用为例，但桌面/移动应用同样可通过自动化测试进行评估。若采用MVVM等架构实现业务逻辑分离，也可仅测试通过API暴露的逻辑层。但请注意，隔离测试组件与完整应用测试的结果可能存在显著差异。
+
+为简洁起见，本文省略了各类延迟模式的类似基准测试。其测试流程基本一致，结论也应符合预期。但唯有针对您具体应用的实测数据，才能最终判定采用这些模式的实际价值。
+
+## 本章总结
+
+本章介绍了多种调整.NET垃圾回收器(GC)行为的方法。您已从实现原理和实践应用两个维度，深入理解了工作站模式与服务器模式的差异；同时掌握了非并发GC与并发GC（现称为后台GC）的特性，并简要了解了并发标记与清除等核心机制的实现原理。
+
+章节最后探讨了模式选择策略——包括工作站与服务器GC的决策指南。一方面，这些模式差异属于常识范畴；另一方面，开发者往往不会主动修改默认配置。这正是.NET团队的卓越成就：默认配置在大多数场景下表现优异，通常无需人工干预。
+
+但总会存在默认配置无法满足需求的场景，因此本章末节通过完整案例，详细演示了如何基于严谨的性能基准测试做出科学的配置决策。
+
+以下两条规则浓缩了本章核心知识。下一章我们将探讨与对象生命周期相关的重要机制：终结(finalization)。
+
