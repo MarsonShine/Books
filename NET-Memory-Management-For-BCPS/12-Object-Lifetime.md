@@ -1169,3 +1169,568 @@ public static class Unmanaged {
 若某些非托管代码必须使用`IntPtr`，可通过 `DangerousGetHandle` 获取原始句柄，但需手动调用 `DangerousAddRef` 和 `DangerousRelease` 来更新引用计数。
 
 关于终结器的认知存在一个反常识：开发者应该极少需要编写自定义终结器。大多数场景都能通过 `SafeHandle` 优雅解决。
+
+## 弱引用
+
+有一种尚未介绍的句柄类型——即所谓的弱句柄（weak handle）。从概念上讲，弱句柄非常简单——它存储对对象的引用，但不被视为根引用（不会使对象保持可达状态）。换句话说，在标记阶段，垃圾回收器（GC）不会扫描弱句柄来决定对象的生命周期。弱句柄在其目标对象可达时保持“存活”，但当目标对象不可达时会被清零。
+
+实际上有两种类型的弱句柄：
+
+- 短弱句柄（Short weak handles）：当GC判定对象死亡时，在终结器运行前被清零。例如，即使终结器使对象复活，这类句柄仍会保持清零状态。
+- 长弱句柄（Long weak handles）：当对象因终结被提升时，其目标仍然有效。例如，如果终结器使对象复活，这类句柄将保持有效（仍指向同一对象）。因此，它们被称为跟踪复活（track resurrection）。
+
+让我们创建一个简单的类用于后续示例，其中包含可选的复活实现（见代码清单12-34）。
+
+代码清单12-34 在终结器中实现复活的类
+
+```c#
+public class LargeClass
+{
+    private readonly bool _resurrect;
+    public LargeClass(bool resurrect) => _resurrect = resurrect;
+    ~LargeClass()
+    {
+        if (_resurrect)
+        {
+        	GC.ReRegisterForFinalize(this);
+        }
+    }
+}
+```
+
+通过调用 `GCHandle.Alloc` 并传入 `GCHandleType.Weak` 或 `GCHandleType.WeakTrackResurrection` 类型参数来创建弱句柄（见代码清单12-35和12-36）。其 `Target` 属性指向目标对象，如果目标已被回收（考虑或不考虑复活情况）则为 null。
+
+代码清单12-35 短弱句柄使用示例
+
+```c#
+var obj = new LargeClass(resurrect: true);
+GCHandle weakHandle = GCHandle.Alloc(obj, GCHandleType.Weak);
+GC.Collect();
+GC.WaitForPendingFinalizers();
+GC.Collect();
+Console.WriteLine(weakHandle.Target ?? "<null>"); // 输出 <null>
+```
+
+代码清单12-36 长弱句柄使用示例
+
+```c#
+var obj = new LargeClass(resurrect: true);
+GCHandle weakHandle = GCHandle.Alloc(obj, GCHandleType.WeakTrackResurrection);
+GC.Collect();
+GC.WaitForPendingFinalizers();
+GC.Collect();
+Console.WriteLine(weakHandle.Target ?? ""); // 输出 LargeClass
+```
+
+但为什么会需要弱引用这种看似奇怪的东西呢？主要有两种典型场景：
+
+- 各种观察者和监听器（如事件）：希望在对象被其他代码使用时保持引用，但又不希望这种观察影响对象状态。
+- 缓存：可以创建存储强引用的缓存，当对象长时间未使用时转为弱引用。这样不是主动清理缓存，而是让它们保留到下一次特定代（通常是第2代）的GC。通过控制这种“弱缓存淘汰”的时机，可以在内存使用（可能保留缓存项更久）和对象创建开销（淘汰后重新创建）之间取得平衡。
+
+.NET核心库中有个有趣的弱引用示例—— `Gen2GcCallback` 类（见代码清单12-37）。这是一个关键可终结对象，带有可选的复活功能。它通过短弱引用观察目标对象，在每次第2代GC时执行回调（根据代码注释，也可能在前两次短暂代GC时执行）。当弱句柄被清零时终止复活——这样目标对象死亡后回调就会停止。如果没有弱引用，这种情况永远不会发生，因为回调对象会使目标对象保持存活。
+
+`Gen2GcCallback` 在 `PinnableBufferCache` 内部用于每次第2代GC时调用 `TrimFreeListIfNeeded`。
+
+清单 12-37. System 库中弱引用与复活机制的有趣用法示例
+
+```c#
+/// <summary>
+/// Schedules a callback roughly every gen 2 GC (you may see a Gen 0 an Gen 1 but only once)
+/// (We can fix this by capturing the Gen 2 count at startup and testing, but I mostly
+don't care)
+/// </summary>
+internal sealed class Gen2GcCallback : CriticalFinalizerObject
+{
+    private Gen2GcCallback(Func callback) { _callback0 = callback; }
+    private Gen2GcCallback(Func<object, bool> callback, object targetObj)
+    {
+        _callback1 = callback;
+        _weakTargetObj = GCHandle.Alloc(targetObj, GCHandleType.Weak);
+    }
+    public static void Register(Func<bool> callback)  
+    {  
+        // 创建不可达对象来保存回调函数  
+        new Gen2GcCallback(callback);  
+    }  
+
+    public static void Register(Func<object, bool> callback, object targetObj)  
+    {  
+        // 创建不可达对象来保存回调函数和目标对象  
+        new Gen2GcCallback(callback, targetObj);  
+    }  
+
+    private Func<bool>? _callback0;  
+    private Func<object, bool>? _callback1;  
+    private GCHandle _weakTargetObj;  
+
+    ~Gen2GcCallback()  
+    {  
+        if (_weakTargetObj.IsAllocated)  
+        {  
+            // 检查目标对象是否存活  
+            object? targetObj = _weakTargetObj.Target;  
+            if (targetObj == null)  
+            {  
+                // 目标对象已失效，无需保留此回调对象  
+                _weakTargetObj.Free();  
+                return;  
+            }  
+
+            // 执行回调方法  
+            try  
+            {  
+                Debug.Assert(_callback1 != null);  
+                if (!_callback1(targetObj))  
+                    // 若回调返回false，则无需保留此回调对象  
+                    _weakTargetObj.Free();  
+                return;  
+            }  
+            catch  
+            {  
+                // 确保即使回调抛出异常，仍有机会复活此对象  
+                // DEBUG模式下除外，此处本不应出现任何异常  
+                throw;  
+            }  
+        }  
+        else  
+        {  
+            // 执行回调方法  
+            try  
+            {  
+                Debug.Assert(_callback0 != null);  
+                if (!_callback0())  
+                    // 若回调返回false，则无需保留此回调对象  
+                    return;  
+            }  
+            catch  
+            {  
+                // 确保即使回调抛出异常，仍有机会复活此对象  
+                // DEBUG模式下除外，此处本不应出现任何异常  
+                throw;  
+            }  
+        }  
+
+        // 通过重新注册终结器实现自我复活  
+        GC.ReRegisterForFinalize(this);  
+    }  
+}
+```
+
+相较于手动创建弱引用 `GCHandle`，.NET引入了专用的 `WeakReference` 和 `WeakReference` 类型（见清单12-38和12-39）。它们逻辑完全相同，但作为强类型的弱引用句柄，是更推荐的使用方式。`WeakReference` 针对对象实例提供三个重要成员：
+
+- `IsAlive`：检查目标是否存活。
+- `Target`：获取目标实例的引用。
+- `TrackResurrection`：指示 `WeakReference` 是否跟踪对象在终结后的状态。
+
+但该API存在一个小问题（如清单12-38所示）。在调用 `weakReference.IsAlive` 和 `weakReference.Target` 之间可能发生GC回收目标对象，导致条件检查失效。此外，丢失类型信息（保留为 `System.Object` 引用）是糟糕的设计实践，使用时需要额外类型转换。
+
+清单12-38. `WeakReference` 类型用法示例
+
+```c#
+var obj = new LargeClass(resurrect: true);
+WeakReference weakReference = new WeakReference(obj, trackResurrection: false);
+if (weakReference.IsAlive)
+{
+    GC.Collect(); // 模拟其他代码触发GC
+    Console.WriteLine(weakReference.Target ?? "<null>"); // 输出 <null>
+}
+```
+
+.NET Framework 4.5引入了改进版本。除了泛型特性外，其API也经过优化，新增的 `TryGetTarget` 方法能原子性地返回目标存活状态（见清单12-39）。
+
+清单12-39. `WeakReference` 类型用法示例
+
+```c#
+var obj = new LargeClass(resurrect: true);
+WeakReference weakReference = new WeakReference(obj, trackResurrection: false);
+if (weakReference.TryGetTarget(out var target))
+	Console.WriteLine(target);
+```
+
+注意：通过将弱引用目标赋值给可达根，可轻松将其转为强引用。`System.StrongToWeakReference` 内部类（见清单12-40）即采用此方案。这是可选择性保持强引用的弱引用类型，将强引用设为 null 即可转为弱引用。若弱引用目标仍存活，也可尝试恢复为强引用（但目标可能已被回收，因此更推荐使用 `bool TryMakeStrong()` 而非示例中的 `MakeStrong` 方法）。
+
+清单12-40. 强引用与弱引用转换示例：`StrongToWeakReference`类
+
+```c#
+internal sealed class StrongToWeakReference : WeakReference where T : class
+{
+    private T? _strongRef;
+    public StrongToWeakReference(T obj) : base(obj) { _strongRef = obj; }
+    public void MakeWeak() => _strongRef = null;
+    public void MakeStrong() { _strongRef = WeakTarget; }
+    public new T? Target => _strongRef ?? WeakTarget;
+    private T? WeakTarget => base.Target as T;
+}
+```
+
+接下来简要介绍弱引用在缓存和事件监听器中的两种典型应用场景。
+
+> 弱引用和强引用的作用很容易搞混，这里通过简单的例子和对象引用的变化来说明：
+> 普通引用（强引用）：
+>
+> ```c#
+> var obj = new SomeClass();
+> var list = new List<SomeClass>();
+> list.Add(obj);
+> ```
+>
+> 只要有任何变量（如`obj`、`list`）引用这个对象，GC就不会回收它（即便你不用它了，只要引用存在，对象就“活着”）。你必须手动清理（移除/设null）所有引用，对象才会被GC。
+>
+> 弱引用：
+>
+> ```c#
+> var obj = new SomeClass();
+> var weak = new WeakReference<SomeClass>(obj);
+> ```
+>
+> 只有 `WeakReference` 引用对象，而你没有其他变量指向 `obj`时，GC会把它视为“可回收”。`WeakReference` 本身不会阻止GC，对象“死没死”，取决于是否还有别的强引用。
+>
+> 并且强引用它是稳定的，弱引用引用的对象存活状态是不稳定，它是否被清空，取决于当前系统的内存状态。举个例子：
+>
+> ```c#
+> var cache = new Dictionary<string, SomeClass>();
+> cache["k"] = obj; // 只要cache里有引用，obj永远不会被GC
+> ```
+>
+> 这里的强引用只要根对象还在引用，哪怕内存压力大，对象也不会回收，最后可能导致“OOM”。
+>
+> ```c#
+> var cache = new Dictionary<string, WeakReference<SomeClass>>();
+> cache["k"] = new WeakReference<SomeClass>(obj);
+> ```
+>
+> 这里的弱引用，如果程序别处没用到 obj，在内存紧张的情况下，对象可能很快就会被GC。
+>
+> 换句话说：`WeakReference`像是“只是偷偷看着你”，不会保护你不被GC带走。
+
+### 缓存机制
+
+当人们听到或读到弱引用时，缓存往往会立即浮现在脑海中。开发者很容易想到用这种“弱缓存”来持有内存中的对象——这些对象可被正常使用，但额外的弱引用存在使得缓存对象时不会延长其生命周期。当目标对象存活时，缓存中的弱引用也保持有效；但由于仅是弱引用，当应用程序不再使用时，对象仍会正常消亡。这种方式可以缓存当前被应用程序使用的对象（例如避免其他代码需要时重复创建副本），这本身就具有实用价值。
+
+然而更常见的情况是，缓存需要基于时间机制来保持最近使用的资源——即使它们暂时未被使用也会保留一段时间。显然，这需要弱引用之外的其他机制。此时通常需要实现标准缓存：用强引用存储对象，设定绝对时间段或最后使用后的时间窗口，过期后直接移除（驱逐）引用。
+
+但我们可以构思一种“弱驱逐缓存”：经过特定时间后，将缓存中的强引用转为弱引用。这种策略柔化了缓存规则——通常在指定时间内保留缓存项，之后仅在该对象仍被使用时保持缓存。换言之，若缓存过期时对象仍然存活，就不会被过早清除。而常规缓存到期后会无条件移除对象，因为缺乏弱引用机制就无法检测对象是否存活。假设我们对代码清单12-40中的 `StrongToWeakReference` 类进行扩展，添加记录转为强引用时间的 `StrongTime` 字段。基于此辅助类，代码清单12-41展示了一个极简的弱驱逐缓存设计：仅用字典存储混合强/弱引用对象，初始保存为强引用，定期调用 `DoWeakEviction` 方法将引用转为弱引用（并清除已消亡对象的缓存项）。
+
+代码清单12-41 使用弱引用的定时弱驱逐缓存实现
+
+```csharp
+public class WeakEvictionCache<TKey, TValue> where TValue : class  
+{
+    private readonly TimeSpan _weakEvictionThreshold;  
+    private Dictionary<TKey, StrongToWeakReference<TValue>> _items;  
+
+    public WeakEvictionCache(TimeSpan weakEvictionThreshold)  
+    {
+        _weakEvictionThreshold = weakEvictionThreshold;  
+        _items = new Dictionary<TKey, StrongToWeakReference<TValue>>();  
+    }  
+
+    public void Add(TKey key, TValue value)  
+    {
+        ArgumentNullException.ThrowIfNull(value);  
+        _items.Add(key, new StrongToWeakReference<TValue>(value));  
+    }  
+
+    public bool TryGet(TKey key, out TValue result)  
+    {
+        result = null;  
+        if (_items.TryGetValue(key, out var value))  
+        {  
+            result = value.Target;  
+            if (result != null)  
+            {  
+                // 对象被使用时尝试恢复强引用  
+                value.MakeStrong();  
+                return true;  
+            }  
+        }  
+        return false;  
+    }  
+
+    public void DoWeakEviction()  
+    {
+        List<TKey> toRemove = new List<TKey>();  
+        foreach (var strongToWeakReference in _items)  
+        {  
+            var reference = strongToWeakReference.Value;  
+            var target = reference.Target;  
+            if (target != null)  
+            {  
+                if (DateTime.Now.Subtract(reference.StrongTime) >= _weakEvictionThreshold)  
+                {  
+                    reference.MakeWeak();  
+                }  
+            }  
+            else  
+            {  
+                // 清除已失效的弱引用  
+                toRemove.Add(strongToWeakReference.Key);  
+            }  
+        }  
+
+        foreach (var key in toRemove)  
+        {  
+            _items.Remove(key);  
+        }  
+    }  
+}
+```
+
+需要强调的是，这个弱驱逐缓存的实现仅是雏形，若要在实际应用中使用还需大量改进（包括优化API和线程安全等至少两个方面)。
+
+
+
+### 弱事件模式
+
+弱引用的另一个典型应用场景是弱事件。.NET中的事件虽然易于使用，但同时也是最常见的内存泄漏来源之一。我们将首先探究其原因，然后再讨论弱事件解决方案。
+
+首先介绍两个模拟UI库（无论是Windows Forms、WPF还是其他框架）的简单类（见代码清单12-42）。它们展示了这类库常用的层次结构方法——几乎每个元素都与其他元素存在父子关系。元素之间通过事件订阅也很常见。因此我们准备了 `SettingsChanged` 事件用于实验，另一个组件中的 `RegisterEvents` 方法则用于订阅该事件。
+
+代码清单12-42 模拟UI库的两个简单类，用于后续实验
+
+```csharp
+public class MainWindow   
+{ 
+    public delegate void SettingsChangedEventHandler(string message); 
+    public event SettingsChangedEventHandler SettingsChanged;   
+}   
+
+public class ChildWindow   
+{ 
+    private MainWindow parent; 
+    public ChildWindow(MainWindow parent) 
+    { 
+        this.parent = parent; 
+    } 
+    
+    public void RegisterEvents(MainWindow parent) 
+    { 
+        // ChildWindow为目标对象，MainWindow为事件源
+        parent.SettingsChanged += OnParentSettingsChanged; 
+    } 
+    
+    private void OnParentSettingsChanged(string message) 
+    { 
+        Console.WriteLine(message); 
+    } 
+}
+```
+
+代码清单12-43演示了这些类型的使用方式，模拟了基于UI的应用程序典型工作流程——存在一个主窗口和若干执行工作的子窗口。子窗口会订阅父窗口的某些事件。每次迭代后主动触发GC进行彻底清理。出于诊断目的，还维护了一个弱引用列表来追踪所有创建的子窗口（注意 `WeakReference` 在此类实验性用途中的巧妙运用）。
+
+代码清单12-43 展示未注销事件导致内存泄漏的实验
+
+```csharp
+public void Run()   
+{
+    List<WeakReference> observer = new List<WeakReference>();
+    MainWindow mainWindow = new MainWindow();
+    
+    while (true) 
+    {
+        Thread.Sleep(1000);
+        ChildWindow childWindow = new ChildWindow(mainWindow);
+        observer.Add(new WeakReference(childWindow));
+        childWindow.RegisterEvents(mainWindow); // 取消注释这行会导致子窗口内存泄漏
+        childWindow.Show();
+        
+        GC.Collect();
+        foreach (var weakReference in observer) 
+        {
+            Console.Write(weakReference.IsAlive ? "1" : "0");
+        }
+        Console.WriteLine();
+    }
+}
+```
+
+如果注释掉 `RegisterEvents` 调用，由于早期根对象回收技术（别忘了禁用分层编译才能看到此现象），子窗口实例在 `GC.Collect` 调用前就会变成不可达状态。因此结果符合预期（见代码清单12-44），每次迭代后子窗口都会被回收。
+
+代码清单12-44 代码清单12-43程序的运行结果（当 `RegisterEvents` 调用被注释时）
+
+```markdown
+ChildWindows showed
+0
+ChildWindows showed
+00
+ChildWindows showed
+000
+ChildWindows showed
+0000
+ChildWindows showed
+00000
+```
+
+但注册事件会导致内存泄漏（见代码清单12-45），内存中存活的子窗口数量会持续增长。
+
+代码清单12-45 代码清单12-43程序的运行结果（当调用 `RegisterEvents` 时）
+
+```markdown
+ChildWindows showed
+1
+ChildWindows showed
+11
+ChildWindows showed
+111
+ChildWindows showed
+1111
+ChildWindows showed
+11111
+```
+
+这个问题有个非常简单的解决方案——调用对应的 `UnregisterEvents` 方法。该方法使用 `-=` 操作符来取消对父窗口事件的订阅。虽然简单，但要求开发者必须具备显式清理的思维模式，需要记住注销每个已订阅的事件。我们稍后会再讨论这个问题，现在先深入探究内存泄漏的原因。
+
+事件注册是个复杂的过程。当在类中定义委托时，其内部会被表示为一个继承自 `System.MulticastDelegate` 类型的嵌套类（见代码清单12-46）。如您所见，其构造函数同时接收对象和方法——因为委托需要跟踪应该调用什么（方法）以及在哪个目标上调用（对象实例）。对于静态方法目标为null，但对于实例方法，它对应方法中用于访问实例字段的“this”引用。在底层，委托会将实例存储在其 `_target` 字段中，这意味着委托会成为监听事件对象的根引用。
+
+代码清单12-46 `SettingsChangedEventHandler` 内部实现
+
+```cil
+.class public auto ansi beforefieldinit MainWindow extends [System.Runtime]System.Object
+{
+    // 嵌套类型
+    .class nested public auto ansi sealed SettingsChangedEventHandler extends [System.Runtime]System.MulticastDelegate
+    {
+        // 方法
+        .method public hidebysig specialname rtspecialname 
+        	instance void .ctor(
+        		object 'object', 
+        		native int 'method') runtime managed 
+        {} // end of method SettingsChangedEventHandler::.ctor
+        ...
+        .method public hidebysig newslot virtual 
+        	instance void Invoke(
+        		string message
+        	) runtime managed 
+        {} // end of method SettingsChangedEventHandler::Invoke
+    } } // end of class SettingsChangedEventHandler
+}
+```
+
+`RegisterEvents` 方法会构建委托（见代码清单12-47）。将“this”值（`ChildWindow`引用）传递给`SettingsChangedEventHandler` 构造函数，并调用 `add_SettingsChanged` 方法将该委托合并到 `MainWindow` 的 `SettingsChanged` 事件当前委托调用列表中（见代码清单12-48）。
+
+代码清单12-47 `RegisterEvents` 的CIL表示
+
+```cil
+.method public hidebysig instance void RegisterEvents(class MainWindow parent) cil managed
+{
+    .maxstack 8
+    IL_0000: ldarg.1    // parent
+    IL_0001: ldarg.0    // this
+    IL_0002: ldftn instance void ChildWindow::OnParentSettingsChanged(string)
+    IL_0008: newobj instance void MainWindow/SettingsChangedEventHandler::.ctor(object, native int)
+    IL_000D: callvirt instance void MainWindow::add_SettingsChanged(class CoreCLR.Finalization.MainWindow/SettingsChangedEventHandler)
+    IL_0012: ret
+}
+```
+
+代码清单12-48 `SettingsChanged` 事件内部实现（为简洁起见大幅简化，省略了线程安全处理）
+
+```csharp
+public event MainWindow.SettingsChangedEventHandler SettingsChanged
+{
+    [CompilerGenerated]
+    add
+    {
+        // value是SettingsChangedEventHandler类型（在我们的示例中包含ChildWindow引用，因为这是非静态方法需要存储"this"指针）
+        this.SettingsChanged = (MainWindow.SettingsChangedEventHandler)Delegate.Combine(this.SettingsChanged, value);
+    }
+    remove {}
+}
+```
+
+因此，`ChildWindow` 实例会被存储在 `SettingsChanged` 事件维护的调用列表的每个委托中。换句话说，事件成为这些实例的唯一根引用，即使应用程序其他部分已不再引用它们，这些实例仍会被强制存活。即使 `ChildWindow` 被关闭，对应的实例仍被 `SettingsChanged` 事件引用着。这显然是个会导致内存泄漏的缺陷——具体取决于事件源比目标实例存活的时间长多少。最糟糕的情况是静态事件（或静态类中的事件等），它们的生命周期与 `AppDomain` 相同（通常是整个应用程序生命周期），因此GC永远无法回收这些对象。
+
+当事件源比监听目标存活时间越长，且目标对象内存占用越大时，内存泄漏问题就越严重。我们见过因未注销静态事件导致微小对象持续泄漏数天的案例，也见过同样原因使大型对象在几小时内拖垮应用程序的情况。
+
+> 请注意我们的示例事件是特意采用非标准方式定义的。通常事件会以事件源作为首个参数（通常命名为sender）：
+>
+> ```c#
+> public delegate void SettingsChangedEventHandler(object sender, string message);
+> ```
+>
+> 但这并不会改变内存泄漏的本质，因为 `sender` 是存储 `MulticastDelegate` 实例的事件源（本例中的 `MainWindow`）而非监听目标。特别说明这点是为了确保您理解：内存泄漏的根源并非是这个参数的存在导致源与目标之间产生强绑定。
+
+那么解决方案是什么？了解弱引用后答案应该很明确了——事件源与监听目标之间的关系应该是弱引用，前者无需在后者的生命周期结束后仍维持引用。
+
+然而完整正确的“弱事件”模式实现并不简单，详细描述会占用过多篇幅。我们简要看看Windows Presentation Foundation框架的实现方式。
+
+遗憾的是，C#中优雅简洁的事件处理语法（通过+=和-=运算符表示）无法自定义来实现同等优雅的弱事件语法。因此所有弱事件模式实现都采用基于普通方法调用的类似API。例如，若我们的模拟UI应用采用WPF编写，可以如代码清单12-49所示在 `RegisterEvents` 方法中注册弱事件。WPF提供多种实现方式，首选方案是使用泛型 `WeakEventManager` 的静态AddHandler方法，该方法会隐式从底层委托获取目标对象，表示我们需要监听parent实例的 `SettingsChanged` 事件，并调用 `OnParentSettingsChanged` 处理程序。
+
+代码清单12-49 WPF中的弱事件模式用法
+
+```csharp
+public void RegisterEvents(MainWindow parent)
+{
+    WeakEventManager<MainWindow, string>.AddHandler(parent, "SettingsChanged", OnParentSettingsChanged);
+}
+```
+
+研究 `WeakEventManager` 的实现非常有启发性。甚至 `WeakEventManager` 类的开篇注释就包含重要细节（见代码清单12-50）。
+
+代码清单12-50 `WeakEventManager.cs` 源文件的开篇注释
+
+```csharp
+// 通常A通过向B的Foo事件添加处理程序来监听：
+// B.Foo += new FooEventHandler(OnFoo);
+// 但该处理程序包含对A的强引用，因此B实际上持有对A的强引用。(...)
+// 这类泄漏的解决方案是引入具有以下特性的中间"代理"对象P：
+// 1. P实际监听B的事件
+// 2. P使用弱引用维护"真实监听者"（如A）列表
+// 3. P收到事件时将其转发给仍存活的真实监听者
+// 4. P的生命周期预期与应用（或Dispatcher）相同
+```
+
+> 若您想实践弱引用，强烈建议研究WPF中的弱事件模式实现。核心组件 `WeakEventTable` 类以及包含目标弱引用的 `Listener` 结构体、包含源弱引用的 `EventKey` 结构体都值得深入分析。
+
+为什么.NET中的事件默认实现不采用弱事件模式？如果不需要显式清理事件，不是更符合自动内存管理的精神吗？
+
+弱事件模型可能反直觉——开发者通常期望注册事件处理程序会保持目标对象存活。此外，使用弱事件需要弱引用，这会带来性能和内存开销。事件的使用场景是无界的——虽然通常只涉及少量UI事件，但设计上必须能处理数百个实例。因此，使用常规实例成员（本质上事件就是如此）比引入弱引用开销更安全。
+
+特别是，所有这些设计只是为了减轻那些懒得思考何时注销事件的开发者的负担。在大多数情况下，事件注销的时机是明确定义的。微软文档关于WPF弱事件的说明指出：“通常在事件源对象的生命周期独立于事件监听器时使用弱事件模式。利用 `WeakEventManager` 的集中事件分发能力，即使源对象持续存在，监听器的处理程序也可以被垃圾回收。”这种源与监听器生命周期独立的情况并不常见，因此默认采用显式清理是更好的设计决策。不过，如果能选择性地使用简洁的事件语法（如C#的+=/-=）来实现弱事件，那会更好。
+
+> 如果你想研究.NET源码中的弱引用实现，可以从 `src/libraries/System.Private.CoreLib/src/System/WeakReference.T.cs`文件开始。注意，在.NET 8中，WeakReference的实现已移植到托管代码。对于早期版本，你应该查看原生代码文件 `src/coreclr/vm/weakreferencenative.cpp`。在标记阶段，`GCScan::GcShortWeakPtrScan` 会将未被提升的短弱引用的目标置空。然后，在扫描完终结器根之后，通过调用 `GCScan::GcWeakPtrScan` 将长弱引用的目标置空。
+
+### 场景12-2：由事件引起的内存泄漏
+
+**问题描述**：您的应用程序内存使用量随时间持续增长。经过反复检查（例如使用内存计数器确认），可以确定是托管堆（Managed Heap）在不断增大。越来越多的对象被存入第2代堆（generation 2），但其碎片化程度保持稳定（例如通过PerfView工具验证）。显然，您遇到了内存泄漏问题——由于某些尚未识别的根引用（root），导致对象持续处于可达状态。
+
+我们以代码清单9-43为例来简单模拟这种情况。当然，在这个示例中您已经知道问题根源，但仍可将其作为理想的实验场景来学习诊断方法。
+
+**分析方法**：在内存泄漏分析中，可采用两种基本策略：
+
+- 当内存使用量激增时，获取单次内存转储。您可以依赖以下特征识别泄漏对象：数量异常、总大小突出、频繁出现在终结队列中（若泄漏对象恰巧是可终结对象）等。这种方法有时可能是唯一可行的选择——例如，当内存泄漏极其罕见且您仅有一次在生产环境捕获内存转储的机会时。但分析此类转储往往非常耗时，主要原因在于内存泄漏的特征可能比单纯的大对象泄漏更为复杂。可能存在由某些难以追踪的根对象维持的、彼此关联的整个享元对象图，这些对象图隐藏在庞大的全局对象网络中。因此，分析此类单一内存快照需要良好的直觉、对应用程序内部机制的基本了解（以便快速识别预期对象子图），以及些许运气。
+- 获取两次或多次连续内存转储并进行差异分析（推荐自动化处理）。条件允许时应优先采用此方法。通过对比连续应用程序状态，可以过滤掉无关干扰——那些以稳定模式分配/回收的对象会被自动排除，泄漏对象将更为突出。正如本书所述，可采用多种工具实现此目的。简便方法是使用PerfView的堆快照对比功能，该工具开销低且提供优秀的差异分析支持。当然，大多数商业工具也支持此类分析，因为这是定位内存泄漏根源的最佳途径。
+
+让我们使用PerfView的堆快照对比方法。在问题应用程序运行时获取两个堆快照，需等待进程内存显著增长以增加发现泄漏对象的概率。建议在应用程序运行一段时间后再获取首个快照，使其完成初始化代码（通常会产生临时内存）并有机会进行内存回收。在命令行中执行`dotnet gcdump collect -p <pid>`生成至少两个.gcdump文件。由于这是.NET CLI工具，可同时用于Windows和Linux的内存泄漏调查。
+
+在PerfView中双击每个.gcdump文件下的“Heap Stack”节点。在较早的 gcdump 堆栈窗口中，通过菜单选择 Diff -> With baseline…设定基准快照。您可采用多种方式分析对比结果：从 ByName 标签页（按Inc或Exc列排序）、RefTree标签页着手，或直接在Flame Graph标签页进行可视化分析。
+
+![](asserts/12-4o.png)
+
+通过查看RefTree选项卡，您可以看到创建了300多个 `ChildWindow` 和 `SettingsChangedEventHandler` 实例（如图12-5所示）。
+
+![](asserts/12-5.png)
+
+图12-5 PerfView中两个堆快照差异的RefTree选项卡
+
+这类分析应该能直接将您引向应用程序中有问题的事件处理程序。作为商业工具如何呈现此类信息的示例，您可以在Visual Studio中打开最新的.gcdump文件，然后在“与基线比较|浏览”组合框中选择参考快照。在生成的差异视图中，选择 `ChildWindow` 类型并展开底部“根路径”面板中的节点，就能看到 `MainWindow` 的 `SettingsChangedEventHandler` 如何保持对这些实例的引用（如图12-6所示）。
+
+您还会看到用于包装 `ChildWindow` 引用的 `WeakReference` 数量有同等增长，但这属于预期现象，因为它们被保存在我们的观察者列表中（参见代码清单12-43）。
+
+![](asserts/12-6.png)
+
+图12-6 Visual Studio中两个堆快照差异的概览
+
+如前所述，大多数商业工具都提供类似的报告。
+
+## 本章总结
+
+终结器与可释放对象主要涉及与非托管环境的交互机制。它们更侧重于资源管理而非对象生命周期管理。然而，这些机制与弱引用一起，以精妙的方式相互交织。
+
+可释放对象通过实现 `IDisposable` 接口提供显式资源清理能力，并受到C#中 `using` 语句的支持。当词法作用域内的局部变量作为资源所有者时（在构造函数中获取资源，在析构时释放），它们实质上弥补了非托管环境中缺失的 RAII（资源获取即初始化）模式。虽然 `IDisposable` 最初就是为此目的设计，但它在日志记录、跟踪分析、性能剖析等与非托管资源无关的场景中也广受欢迎——凡是需要显式作用域的场合都能见到其身影。尽管如此，显式清理仍是管理非托管资源的首选方案。
+
+另一方面，终结器仍被广泛使用，特别是在完整实现 `Disposable` 模式时作为安全网（防止显式清理被遗漏）。但开发者必须充分了解与之相关的所有注意事项及其带来的性能开销。我们希望通过本章详述的实现细节、基准测试以及场景12-1，已经清晰地阐明了这一点。核心原则是：如无必要，勿用终结器。切勿将其当作添加日志等花哨功能来炫技的工具！
+
+弱引用可能是本章讨论机制中最冷门的一种。虽然仅适用于特定场景，但了解它们对实现弱事件模式等经典设计尤为重要。在进行代码实验时，弱引用也是检测对象可达性的唯一便捷手段。
+
+至此，我们已完成.NET内存管理核心机制的全面解析。您已经完成了一段漫长的知识旅程。接下来的两章将基于现有知识体系，聚焦更具实践性的主题。我们强烈建议您继续研读！
