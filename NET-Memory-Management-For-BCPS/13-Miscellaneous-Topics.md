@@ -2178,3 +2178,667 @@ internal struct TwoObjects
 >
 > 16字节其实已经对齐了，24字节是 .NET 运行时的一个设计选择，不是对齐需求！
 
+## 对象/结构体内存布局
+
+你是否曾关注过自己创建的类和结构体在内存中是如何布局的？很可能没有，而这其实是件好事。在编写托管代码时，你本就不该操心字段的组织方式。CLR在自动管理类型字段的内存布局方面表现出色，手动干预往往会导致过度设计。但在某些特殊场景下，你可能需要控制内存布局，例如向非托管代码传递类型实例时（如系统API调用中要求特定布局的情况）。此外，在极端追求内存使用效率的场景中，依赖自动字段布局可能也不够理想。
+
+正如本书（尤其是本章）聚焦这些特殊场景，现在让我们深入探讨内存中的对象布局。毕竟，理解底层原理而不仅满足于表面现象，正是本书的核心理念之一。
+
+通过前文可知，引用类型实例始终以**对象头**和**方法表**指针开头，而值类型实例仅包含字段值（参见第4章图4-19和4-20）。那么字段本身如何布局？
+
+高效内存访问的核心原则是**数据对齐**（第2章已简要提及）。每种基本数据类型（如整型、浮点型等）都有其首选对齐方式——即存储地址（以字节表示）应为该类型大小的整数倍。通常，基本类型的对齐值等于其自身大小：4字节的int32要求4字节对齐（地址需为4的倍数），8字节的double要求8字节对齐，以此类推。最简单的1字节char和byte类型对齐值为1——它们可存储在任何地址。现代CPU能高效访问对齐数据，访问非对齐数据虽可行但需要更多指令，效率较低。
+
+包含基本类型字段的复合类型需考虑字段对齐要求，这可能导致字段间出现填充字节（后续示例将展示）。复合类型实例自身也需对齐，以确保作为其他复合类型（或数组）的一部分时，其字段仍保持对齐。
+
+微软文档据此定义三条布局规则：
+
+- 类型对齐方式取决于其最大元素的大小（1、2、4、8等字节）或指定的打包大小（取两者中较小者）。
+- 每个字段必须按其自身大小（1、2、4、8等字节）或类型的对齐值（取两者中较小者）进行对齐。由于类型的默认对齐值是其最大元素的大小（该值大于等于所有其他字段长度），因此字段通常按其自身大小对齐。例如，即使类型中最大字段是64位（8字节）整数或Pack字段设为8，Byte字段仍按1字节边界对齐，Int16字段按2字节边界对齐，Int32字段按4字节边界对齐。
+- 字段之间会添加填充以满足对齐要求。
+
+在牢记对齐黄金法则和上述三条衍生规则的同时，还需注意结构体和类在字段布局上的设计决策：
+
+- **结构体**：默认采用顺序布局，字段按定义顺序存储在内存中。这主要是考虑到结构体通常会传递给非托管代码，且字段定义顺序是经过设计的（而非随意排列）。在.NET设计初期，结构体主要用于互操作场景，因此这种默认行为是合理的。但该特性仅适用于第6章定义的“非托管类型”（后续在 `unmanaged` 约束的语境中会再次提及）。即使字段顺序被明确定义，其布局仍会遵循对齐要求，可能因此产生填充字节并增加结构体大小（以换取高效的对齐字段访问）。
+- **类**​：默认采用自动布局，字段可自由重排。由于CLR是此类数据的唯一所有者，字段布局完全由其决定。CLR会根据CPU访问时间（考虑对齐）和内存使用效率进行最优重排。
+
+如今随着值类型在通用代码中的普及，结构体默认的顺序对齐方式可能并非最优选择，了解替代方案很有必要。
+
+让我们通过实例观察（见代码清单13-80的简单结构体），其字段布局如图13-8a所示——所有三个字段按定义顺序存储。但由于对齐要求，字段在内存中的起始地址如下：
+
+- 0字节偏移：首字段为1字节对齐的byte类型，可存储在任何地址
+- 8字节偏移：第二个字段为8字节对齐的double类型，必须起始于8的倍数地址。这导致产生了7字节的填充空间浪费
+- 16字节偏移：末字段为4字节对齐的int类型，起始于地址16符合要求
+
+此外，整个结构体的对齐值必须等于其最大元素大小（本例为8字节），即结构体总大小必须是8的倍数。当前已占用20字节，因此通过末尾填充扩展至24字节。
+
+这种整体对齐机制确保该结构体实例在数组等场景中存储时字段始终对齐（见图13-8b）。若没有末尾填充（见图13-8c），则会导致数据未对齐的情况。
+
+![](asserts/13-8.png)
+
+图13-8 结构体的默认字段布局：(a) 代码清单13-80中结构体的布局，(b) 将 `AlignedDouble` 结构体用作数组元素的示例，(c) 假设 `AlignedDouble` 结构体未正确对齐的示例（如果整个结构体对齐方式不正确）
+
+如图所示，结构体字段的顺序布局会带来显著的内存开销——本例中有11字节未被使用，几乎占整个结构体的一半空间！如果该结构体只是偶尔使用，这可能不会造成问题。但若代码高度依赖值类型且需要高性能处理数百万个实例时，这种空间浪费就会成为问题。
+
+代码清单13-80 用于研究字段布局的简单结构体示例
+
+```c#
+public struct AlignedDouble
+{ 
+	public byte B; 
+    public double D; 
+    public int I;
+}
+```
+
+.NET提供了控制字段布局的方法。虽然该功能主要为互操作场景设计，但开发者可以利用此特性优化内存布局。通过 `StructLayout` 属性（尽管名称如此，该属性也可用于类和结构体）可指定三种布局方式：
+
+- `LayoutKind.Sequential`：保证字段正确对齐并按定义顺序存储的布局方式。这是非托管结构体（此处“非托管”并非指原生代码，详见第6章说明）的默认值。
+- `LayoutKind.Auto`：保证字段正确对齐但允许重排字段顺序的布局方式（通过减少填充空间来节省内存）。这是类和托管结构体的默认值。
+- `LayoutKind.Explicit`：开发者显式定义每个字段偏移量的布局方式。
+
+代码清单13-80中的结构体（默认采用 `LayoutKind.Sequential` 布局）可轻松改为自动布局（见代码清单13-81）。如图13-9所示，这种布局方式仅产生3字节填充，在保证所有字段正确对齐的同时显著提升了空间利用率。
+
+![](asserts/13-9.png)
+
+图13-9 结构体字段自动布局示例（基于代码清单13-81）
+
+代码清单13-81 简单结构体示例（用于研究字段自动布局）
+
+```csharp
+[StructLayout(LayoutKind.Auto)]   
+public struct AlignedDoubleAuto   
+{ 
+    public byte B; 
+    public double D; 
+    public int I;   
+}
+```
+
+自动布局的主要缺点是无法在互操作中使用这种结构体。但在高性能通用代码场景中，由于更关注内存管理优势（栈分配、数据局部性、更少空间占用），您很可能会选择自动布局而非默认布局。
+
+顺序布局造成的空间浪费通常与字段数量和大小差异成正比。作为练习，建议您理解为什么代码清单13-82的结构体：
+
+- 使用 `LayoutKind.Sequential` 时会占用64字节（其中28字节因填充浪费）
+- 使用 `LayoutKind.Auto` 时仅占40字节（仅浪费4字节）
+
+代码清单13-82 布局方式显著影响大小的结构体示例
+
+```csharp
+public struct ManyDoubles   
+{ 
+    public byte B1; 
+    public double D1; 
+    public byte B2; 
+    public double D2; 
+    public byte B3; 
+    public double D3; 
+    public byte B4; 
+    public double D5;   
+}
+```
+
+自动布局可能存在一些异常情况。例如代码清单13-83：
+
+代码清单13-83 嵌套结构体的自动布局示例
+
+```csharp
+[StructLayout(LayoutKind.Auto)]   
+public struct TestLayout   
+{ 
+    public Nested B1; 
+    public Nested BA;   
+}   
+[StructLayout(LayoutKind.Auto)]   
+public struct Nested   
+{ 
+    public bool Value;   
+}   
+internal class Program   
+{ 
+    static unsafe void Main(string[] args) { 
+        Console.WriteLine(sizeof(TestLayout)); 
+    } 
+}
+```
+
+在.NET 7之前的所有版本中，该代码在64位系统显示16，32位系统显示8，因为自动布局会将嵌套结构体按指针大小对齐。这个设计缺乏合理性，因此在.NET 7中已修复，现在会正常显示2。
+
+目前展示的结构体都是非托管类型示例（非托管类型指非引用类型且不包含引用类型字段的结构体）。但通过添加引用类型字段（如代码清单13-84），即可创建非非托管结构体。如图13-10所示，此时字段会像自动布局模式一样重新排列。
+
+代码清单13-84 非非托管结构体示例
+
+```csharp
+public struct AlignedDoubleWithReference   
+{ 
+    public byte B; 
+    public double D; 
+    public int I; 
+    public object O;   
+}
+```
+
+![](asserts/13-10.png)
+
+图13-10 代码清单13-84中结构体的默认字段布局
+
+对于非非托管结构体，默认布局行为会变为自动布局，因为它们不允许通过P/Invoke传递。这是由于这些结构体包含可能被垃圾回收移动的托管对象引用。既然禁止非托管使用场景，采用自动布局是安全的。
+
+> 请注意自动布局会优先将对象引用字段置于起始位置。这种设计在标记阶段能提升对象遍历效率，因为更好的缓存行利用率使得多数对象引用能与已访问的MT字段处于同一缓存行。
+
+当结构体包含另一个采用自动布局的结构体时，默认布局行为也会变为自动布局。大多数常用内置结构体（Decimal、Guid、Char、Boolean）采用顺序布局，因此使用它们不会改变布局行为。但出人意料的是DateTime采用自动布局，当它作为其他结构体的字段时，会强制宿主结构体也变为自动布局（见代码清单13-85）。
+
+代码清单13-85 不同类型字段及其对布局的影响
+
+```c#
+public struct StructWithFields
+{
+    public byte B;
+    public double D;
+    public int I;
+    
+    //public SomeEnum E;          // 仍保持顺序布局  
+    //public SomeStruct AD;       // 仍保持顺序布局  
+    //public unsafe void* P;      // 仍保持顺序布局  
+    //public decimal DE;          // 仍保持顺序布局  
+    //public Guid G;              // 仍保持顺序布局  
+    //public char C;              // 仍保持顺序布局  
+    //public Boolean BL;          // 仍保持顺序布局  
+    //public object O;            // 触发自动布局  
+    //public DateTime DT;         // 触发自动布局（因DateTime采用自动布局）  
+}
+```
+
+若您真正关注内存使用（选择结构体通常正出于此目的），就应当注意对象布局。想象那些因填充字节而在栈分配数组中浪费的宝贵内存空间！但内存占用并非唯一考量——有时出于缓存利用率考虑也需要关注布局（这将在下一章“数据导向设计”章节详述）。
+
+> 请注意类和“非非托管结构体”的自动布局不可更改——即使显式设置 `LayoutKind.Sequential` 也会被忽略。
+
+第三种显式布局在P/Invoke场景中尤为重要，它能完全控制结构体内存布局（见代码清单13-86）。您可以精确匹配非托管代码预期的结构，实现100%的兼容性。当然需注意这种控制下，对齐要求需自行保证，极易产生未对齐字段（见图13-11）。在P/Invoke场景中这通常无关紧要，但在设计高性能密集使用的结构体时需格外谨慎。
+
+代码清单13-86 简单结构体示例（用于研究显式字段布局）
+
+```c#
+[StructLayout(LayoutKind.Explicit)]
+public struct UnalignedDouble
+{
+    [FieldOffset(0)] 
+    public byte B;
+    [FieldOffset(1)] 
+    public double D;
+    [FieldOffset(9)] 
+    public int I;
+}
+```
+
+![](asserts/13-11.png)
+
+图13-11 清单13-86中结构的显式字段布局
+
+特别需要注意的是，编译器并不要求显式布局中的字段不能重叠。因此，在指定偏移量时必须小心，避免创建相互干扰的字段。但在一种场景下这种重叠是需要的——创建所谓的可辨识联合（discriminated union）。这种类型能够表示多种数据集。通过使用显式布局并将不同类型字段的偏移量设为相同值，可以模拟这种可辨识联合（见清单13-87）。
+
+清单13-87 简单可辨识联合示例
+
+```c#
+[StructLayout(LayoutKind.Explicit)]
+public struct DiscriminatedUnion
+{ 
+    [FieldOffset(0)] 
+    public bool Bool; 
+    [FieldOffset(0)] 
+    public byte Byte; 
+    [FieldOffset(0)] 
+    public int Integer;
+}
+```
+
+当然，这需要程序员遵守规范——读取字段时应使用与写入时相同的类型，除非你希望利用此技术实现基于内存的类型转换。还可以考虑使用固定大小缓冲区以不同粒度访问同一内存（见清单13-88）。
+
+清单13-88 使用固定缓冲区的可辨识联合示例
+
+```c#
+[StructLayout(LayoutKind.Explicit)]
+public unsafe struct DiscriminatedUnion
+{ 
+    [FieldOffset(0)] 
+    public bool Bool; 
+    [FieldOffset(0)] 
+    public byte Byte; 
+    [FieldOffset(0)] 
+    public int Integer; 
+    [FieldOffset(0)] 
+    public fixed byte Buffer[8];
+}
+```
+
+> 控制对象布局还有另一种方式：封装（packing）。`StructLayout` 属性的 `Pack` 字段控制类型字段在内存中的对齐方式。例如，可以将Pack值设为1字节：
+>
+> ```c#
+> [StructLayout(LayoutKind.Sequential, Pack = 1)]
+> public struct AlignedDouble
+> { 
+>     public byte B; 
+>     public double D; 
+>     public int I;
+> }
+> ```
+>
+> 这种设置会产生怎样的内存布局？让我们回顾前文提到的微软文档第一条规则：“类型的对齐量是其最大元素大小（1、2、4、8等字节）或指定的封装大小中较小的那个”。本例中，类型对齐量不是8字节（double的大小），而是1字节。第二条规则指出：“每个字段必须按其自身大小（1、2、4、8等字节）或类型的对齐量中较小的那个进行对齐”。因此所有字段对齐量均为1字节。最终将生成非常紧凑的13字节内存布局（不含任何填充字节，但字段会偏离其最佳对齐要求）。
+
+> 可辨识联合是一种数据结构，它可以在**同一时刻**存储**多种不同类型中的一种**，但**所有类型共享同一块内存空间**。
+>
+> ```c#
+> [StructLayout(LayoutKind.Explicit)]
+> public struct DiscriminatedUnion
+> { 
+>     [FieldOffset(0)] public bool Bool;    // 1字节，从偏移0开始
+>     [FieldOffset(0)] public byte Byte;    // 1字节，从偏移0开始  
+>     [FieldOffset(0)] public int Integer;  // 4字节，从偏移0开始
+> }
+> ```
+>
+> 内存示意图：
+>
+> ```
+> 内存地址: [0] [1] [2] [3]
+> Bool:     [B] [ ] [ ] [ ]  (只使用第1字节)
+> Byte:     [B] [ ] [ ] [ ]  (只使用第1字节)
+> Integer:  [I] [I] [I] [I]  (使用全部4字节)
+> ```
+>
+> 这三个字段**共享同一块内存**！当你修改其中一个字段时，会影响其他字段的值。
+>
+> 真正的可辨识联合通常需要一个**标识字段**来区分当前存储的是哪种类型：
+>
+> ```c#
+> [StructLayout(LayoutKind.Explicit)]
+> public struct Value
+> {
+>     // 标识字段：表示当前存储的数据类型
+>     [FieldOffset(0)] public ValueType Type;
+>     
+>     // 数据字段：所有字段共享从偏移4开始的内存
+>     [FieldOffset(4)] public int IntValue;
+>     [FieldOffset(4)] public float FloatValue;
+>     [FieldOffset(4)] public bool BoolValue;
+>     [FieldOffset(4)] public char CharValue;
+> }
+> 
+> public enum ValueType
+> {
+>     Integer,
+>     Float, 
+>     Boolean,
+>     Character
+> }
+> 
+> // 使用示例
+> public class ValueContainer
+> {
+>     private Value _value;
+>     
+>     public void SetInt(int value)
+>     {
+>         _value.Type = ValueType.Integer;
+>         _value.IntValue = value;
+>     }
+>     
+>     public void SetFloat(float value)
+>     {
+>         _value.Type = ValueType.Float;
+>         _value.FloatValue = value;
+>     }
+>     
+>     public int GetInt()
+>     {
+>         if (_value.Type != ValueType.Integer)
+>             throw new InvalidOperationException("Value is not an integer");
+>         return _value.IntValue;
+>     }
+>     
+>     public float GetFloat()
+>     {
+>         if (_value.Type != ValueType.Float)
+>             throw new InvalidOperationException("Value is not a float");
+>         return _value.FloatValue;
+>     }
+> }
+> ```
+>
+> 可辨识联合的核心概念：
+>
+> - **内存共享**：多个字段占用同一块内存空间
+> - **互斥存储**：同一时刻只能存储一种类型的值
+> - **内存高效**：比使用多个独立字段更节省内存
+> - **需要额外标识**：通常需要额外字段标识当前存储的类型
+> - **类型不安全**：需要程序员确保类型使用的正确性
+
+若要检查类型的布局，有几种方法可用。推荐两款优秀的免费工具：其一是Sergey Teplyakov开发的 [ObjectLayoutInspector](https://github.com/SergeyTeplyakov/ObjectLayoutInspector) 库（GitHub开源且提供NuGet包），专用于检查对象内存布局。通过简单的方法调用即可分析类型（见清单13-89），结果会以ASCII图表直观呈现（见清单13-90）。
+
+清单 13-90. 清单 13-89 程序打印的结果
+
+```
+Type layout for 'AlignedDouble'
+Size: 24 bytes. Paddings: 11 bytes (%45 of empty space)
+|===========================|
+| 0: Byte B (1 byte) |
+|---------------------------|
+| 1-7: padding (7 bytes) |
+|---------------------------|
+| 8-15: Double D (8 bytes) |
+|---------------------------|
+| 16-19: Int32 I (4 bytes) |
+|---------------------------|
+| 20-23: padding (4 bytes) |
+|===========================|
+Type layout for 'AlignedDoubleWithReference'
+Size: 24 bytes. Paddings: 3 bytes (%12 of empty space)
+|===========================|
+| 0-7: Object O (8 bytes) |
+|---------------------------|
+| 8-15: Double D (8 bytes) |
+|---------------------------|
+| 16-19: Int32 I (4 bytes) |
+|---------------------------|
+| 20: Byte B (1 byte) |
+|---------------------------|
+| 21-23: padding (3 bytes) |
+|===========================|
+```
+
+如果你不想直接使用控制台应用程序来打印对象的布局，可以通过手动方式消费分析后的布局（参见代码清单13-91）。
+
+代码清单13-91 使用 `ObjectLayoutInspector` 手动分析结构体布局
+
+```c#
+static void Main(string[] args)
+{
+    TypeLayout layout = TypeLayout.GetLayout();
+	Console.WriteLine("总大小 {layout.FullSize}字节，其中填充 {layout.Paddings}字节。");
+    foreach (var fieldBase in layout.Fields)
+    {         
+        switch (fieldBase)          
+        {              
+            case FieldLayout field:                  
+                Console.WriteLine("{field.Offset} {field.Size} {field.FieldInfo.Name}");
+                break;
+            case Padding padding:
+                Console.WriteLine($"{padding.Offset} {padding.Size} 填充");
+                break;
+        }
+    }
+}
+```
+
+显然，该工具更适合在自定义构建步骤中使用，或仅限开发阶段离线分析，而非在目标应用程序运行时调用。
+
+第二个工具是 https://sharplab.io 网站，它提供了强大的.NET代码分析功能。该平台通过 `Inspect.Heap` 和 `Inspect.Stack` 静态方法可输出指定类型的内存布局（参见代码清单13-92及图13-12）。
+
+代码清单13-92 在Sharplab.io中用于检查内存布局的示例脚本
+
+```c#
+using System;
+using System.Runtime.InteropServices;
+public class C {
+    public static void Main() {
+        var o = new AlignedDouble();
+        Inspect.Heap(new AlignedDouble());
+        Inspect.Stack(in o);
+    }
+}
+```
+
+![](asserts/13-12.png)
+
+图13-12 代码清单13-92的脚本在https://sharplab.io在线工具中的运行结果
+
+得益于这两款优秀工具，你通常无需再依赖WinDbg等底层工具手动检查对象布局。若仍需使用，建议采用 SOS 扩展的 `!dumpobject`（针对类）和 `!dumpvc`（针对值类型）命令（参见代码清单13-93）。
+
+代码清单13-93 使用WinDbg的SOS扩展 `!dumpvc` 命令检查对象布局
+
+```
+> !dumpvc 00007ffda2725e18 00007ffda2725e18
+Name: CoreCLR.ObjectLayout.AlignedDouble
+MethodTable: 00007ffda2725e18
+EEClass: 00007ffda2872110
+Size: 40(0x28) bytes
+File: (...)\CoreCLR.ObjectLayout.dll
+Fields:
+MT Field Offset Type VT Attr Value Name
+00007ffdfd6a8b60 4000001 0 System.Byte 1 instance 0 B
+00007ffdfd6b0858 4000002 8 System.Double 1 instance 0.000000 D
+00007ffdfd6c66d8 4000003 10 System.Int32 1 instance -43316160 I
+```
+
+## 非托管约束
+
+非托管类型在第6章中已经提到过，在 `stackalloc` 的适用类型背景下，以及本章讨论非托管结构体时都有涉及。在C# 7.3中引入了一个新的泛型约束——`unmanaged`，它允许你编写操作非托管类型及其指针的泛型代码。
+
+让我们回顾微软文档中的简要定义：“它可以是以下任意类型：sbyte、byte、short、ushort、int、uint、long、ulong、nint、nuint、char、float、double、decimal或bool，任何枚举类型，任何指针类型，以及仅包含非托管类型字段的用户定义结构体类型。”
+
+代码清单13-94展示两个结构体示例，其中只有第一个符合非托管类型标准。注意所有嵌套层级都会被检查，如果结构体A包含结构体B，而B又包含结构体C，C中包含引用类型的D——那么整个结构体A将被视为非非托管类型。
+
+代码清单13-94. 非托管与非非托管类型示例
+
+```csharp
+public struct UnmanagedStruct  
+{ 
+    public int Field;  
+}  
+public struct NonUnmanagedStruct  
+{ 
+    public int Field; 
+    public object O;  
+}  
+```
+
+通过新的 `unmanaged` 泛型约束，编译器会为你检查非托管类型的标准。如果不符合条件，将生成相应的编译错误。这个约束既可用于泛型方法（见代码清单13-95），也可用于泛型结构体类型（见代码清单13-96）。
+
+代码清单13-95. 方法中使用非托管泛型约束示例
+
+```csharp
+public static void UnamanagedContraint<T>(T arg) where T : unmanaged  
+{  
+}  
+static void Main(string[] args)  
+{  
+    UnamanagedContraint(new UnmanagedStruct());  
+    UnamanagedContraint(new NonUnmanagedStruct()); // 编译错误：类型"NonUnmanagedStruct"必须是非空值类型，且所有嵌套层级的字段都符合要求  
+}  
+```
+
+代码清单13-96. 类型中使用非托管泛型约束示例
+
+```csharp
+public struct UnmanagedStruct<T> where T : unmanaged  
+{  
+}  
+static void Main(string[] args)  
+{  
+    var obj = new UnmanagedGenericStruct<object>(); // 编译错误：类型"object"必须是非空值类型  
+}  
+```
+
+非托管约束能带来什么？有了它，你可以实现以下操作：
+
+- 使用T类型的指针——如果类型T满足非托管约束，它可以作为 `T*` 指针使用（也可转换为 `void*`）。
+- 使用 `sizeof(T)`。
+- 使用 `stackalloc T`。
+
+没有非托管约束时，上述操作会被禁止，即使T被约束为 `struct` 也会导致编译错误“无法获取托管类型('T')的地址、大小或声明指针”。这些操作中的某些需要 `unsafe` 上下文，但非托管约束本身并不要求不安全代码（虽然它常与不安全代码一起使用）。
+
+当然，所有这些操作都是底层操作，主要用于低级内存管理场景，如数据快速序列化。在常规业务代码中不太可能看到非托管约束！
+
+代码清单13-97展示了一个使用非托管约束可能操作的示例方法。注意一个有趣的事实——在代码清单13-97中，你可以直接获取参数指针而无需固定(pinning)。这是因为非托管约束意味着T是值类型，按值传递。这种情况下获取地址是安全的（因为值不是堆分配的）。
+
+代码清单13-97. 非托管约束使用的简单示例
+
+```csharp
+unsafe public static int UseUnmanagedConstraint<T>(T arg) where T : unmanaged  
+{  
+    T* ptr = &arg;  // 使用T*指针  
+    T* sa = stackalloc T[16];  // 使用stackalloc  
+    return sizeof(T);  // 使用sizeof  
+}  
+```
+
+> 自C# 11起，使用 `sizeof` 和将非托管类型转换为指针虽被允许，但会引发CS8500警告。类似代码在没有非托管约束时也能工作，适用于简单结构体（见代码清单13-98）。
+
+代码清单13-98. 与代码清单13-97类似的常规结构体使用
+
+```csharp
+unsafe static public void UseUnmanagedConstraint2(SomeStruct obj)  
+{  
+    SomeStruct* p = &obj;  
+}  
+```
+
+然而，如果你想获取通过引用传递的非托管对象指针，必须显式固定它，因为它可能是堆分配的（例如存储在数组中），如代码清单13-99所示。
+
+代码清单13-99. 通过引用传递时使用非托管约束的简单示例
+
+```csharp
+unsafe public int UseUnmanagedRefConstraint<T>(ref T arg) where T : unmanaged  
+{  
+    fixed (T* ptr = &arg)  
+    {  
+        Console.WriteLine((long)ptr);  
+        return sizeof(T);  
+    }  
+}  
+```
+
+同理，要在结构体实例方法中获取其字段指针，必须显式固定该字段（见代码清单13-100），因为该方法可能在装箱的结构体实例上调用。
+
+代码清单13-100. 结构体方法中使用非托管约束的示例
+
+```csharp
+public struct StructWithUnmanagedField<T> where T : unmanaged  
+{  
+    private T field;  
+    unsafe public void Use()  
+    {  
+        fixed (T* ptr = &field)  
+        {  
+            // ...  
+        }  
+    }  
+}  
+```
+
+非托管泛型约束的实际应用场景有哪些？完美的例子是各种序列化场景。例如，你可以创建通用的“转字节数组”序列化（见代码清单13-101）。
+
+代码清单13-101. 通用序列化示例（取自微软文档）
+
+```csharp
+unsafe public static byte[] ToByteArray<T>(this T argument) where T : unmanaged  
+{  
+    var size = sizeof(T);  
+    var result = new Byte[size];  
+    Byte* p = (byte*)&argument;  
+    for (var i = 0; i < size; i++)  
+        result[i] = *p++;  
+    return result;  
+}  
+```
+
+你还可以考虑一个通用日志机制，其中传递的参数在底层被消费，如代码清单13-102所示。这里，栈分配的辅助结构描述了记录的值（提供其地址和大小），传递给某些核心日志例程。
+
+代码清单13-102. 通用底层日志示例（灵感来自.NET代码中的ETW日志）
+
+```csharp
+public unsafe void LogData<T>(T arg) where T : unmanaged  
+{  
+    if (IsEnabled())  
+    {  
+        EventData* data = stackalloc EventData[1];  
+        data[0].DataPointer = (IntPtr)(&arg);  
+        data[0].Size = sizeof(T);  
+        WriteEventCore(data);  
+    }  
+}  
+```
+
+非托管泛型约束在创建使用非托管内存的类型（特别是集合）时也很有用。代码清单13-103展示了一个非常简单的示例。没有泛型约束，就无法创建这样的泛型类型，因为无法使用 `sizeof`（元素大小必须手动在构造函数中提供）。更重要的是，得益于非托管约束，你可以自由使用 `T*` 指针——这使得索引操作变得简单，并允许使用 `ref return T`（没有约束的话，你将被迫使用 `void*` 和丑陋的指针转换来实现索引器的getter和setter）。
+
+代码清单13-103. 封装非托管内存的类型示例
+
+```csharp
+public unsafe class UnmanagedArray<T> : IDisposable where T : unmanaged  
+{  
+    private T* data;  
+    public UnmanagedArray(int length)  
+    {  
+        data = (T*)Marshal.AllocHGlobal(length * sizeof(T));  
+    }  
+    public ref T this[int index]  
+    {  
+        get { return ref data[index]; }  
+    }  
+    public void Dispose()  
+    {  
+        Marshal.FreeHGlobal((IntPtr)data);  
+    }  
+}  
+
+static void Main(string[] args)  
+{  
+    using (UnmanagedArray<int> array = new UnmanagedArray<int>(20))  
+    {  
+        array[10] = 10;  
+        for (int i = 0; i < 20; i++)  
+            Console.WriteLine(array[i]); // 将打印垃圾值和10  
+    }  
+}  
+```
+
+### 可位块化类型（Blittable Types）
+
+除了非托管类型外，还存在所谓的可位块化类型（blittable types），这类类型在托管代码和非托管代码中的内存表示形式完全相同。可位块化类型最常见于互操作封送场景，因为在使用P/Invoke时它们无需任何转换。
+
+非托管类型与可位块化类型几乎相同，但后者比前者要求更为严格。这是因为某些值类型仅在“特定情况下可位块化”，其内存表示在托管端与非托管端偶尔存在差异：
+
+- `decimal`：其二进制表示形式尚未标准化，因此无法假定非托管端的格式。
+- `bool`：通常在两端各占1字节，但在非托管端可能更大（例如C语言中可能占用4字节）。
+- `char`：通常占2字节，但在非托管端可能更小或更大（取决于编码方式）。
+- `DateTime`：由于历史原因，它是一个自动布局的结构体，因此不可位块化。
+- `Guid`：其内部表示取决于机器字节序。
+
+因此，包含上述任一类型的结构体虽然属于有效的非托管类型（能满足非托管泛型约束），但在互操作封送意义上不可位块化。计算机科学领域的术语总是存在些许混淆。
+
+更复杂的是，只有可位块化类型才能通过 `GCHandle.Alloc` 调用进行固定（因为固定操作的目的是获取 `AddrOfPinnedObject` 地址并将整个对象地址传递给非托管代码）。因此，仅满足非托管泛型约束并不能保证固定操作成功（参见代码清单13-104）。`WeirdStruct` 结构体因包含非可位块化类型字段（实际上涵盖了所有种类）而不可位块化，但它仍属于非托管类型（未违反非托管类型要求）。因此它可以用于带有 `unmanaged` 约束的 `UseUnmanagedConstraint` 方法，但在尝试通过 `GCHandle.Alloc` 固定时会抛出 `ArgumentException` 异常。
+
+代码清单13-104 使用 `GCHandle` 固定时，可位块化类型与非托管类型的差异
+
+```c#
+public struct WeirdStruct
+{ 
+    public decimal DE; 
+    public DateTime DT; 
+    public Guid G; 
+    public char C; 
+    public Boolean BL;
+}
+unsafe public static int UseUnmanagedConstraint(T obj) where T : unmanaged
+{ 
+    var handle = GCHandle.Alloc(obj, GCHandleType.Pinned); // 抛出System.ArgumentException: 对象包含非原始或不可位块化数据
+}
+static void Main(string[] args)
+{ 
+    var S=new WeirdStruct(); 
+    UseUnmanagedConstraint(s);
+}
+```
+
+总的来说：
+
+- 非托管类型（及 `unmanaged` 泛型约束）用于通用编程场景，如序列化/反序列化、哈希计算等低层内存优化。由于涉及底层内存操作，它们常在 `unsafe` 上下文中使用——尽管 `unmanaged` 约束本身并不强制要求 `unsafe`。
+- 可位块化类型则用于互操作封送场景。因本书不侧重互操作内容，故仅作简要提及。唯一值得关注的是通过 `GCHandle` 固定对象时的可位块化要求，不过该要求已在.NET最新版本中取消。
+
+> 更令人着迷的复杂性在于：`decimal` 是个特殊例外——它本身不可位块化，但包含它的结构体仍可通过 `GCHandle`固定。
+
+## 总结
+
+本章探讨了一系列引人入胜且多为底层机制的主题。从线程静态字段的深度解析出发，我们深入剖析了托管指针——这对理解.NET中的引用传递机制大有裨益，尤其在结构体日益流行的当下更显重要。
+
+事实上，本章大量篇幅聚焦于值类型相关概念：`ref` 结构体、`byref-like` 类型、`byref-like`字段类型等。随着越来越多开发者开始精细优化应用程序、消除不必要的堆分配，这些主题在.NET生态中的关注度与日俱增。当然，常规业务驱动型应用的开发可能无需涉及这些底层优化。随后我们探讨了托管内存布局这一并不总是符合直觉的知识点，并以泛型 `unmanaged` 约束的解析（及相关的 blittable 类型概念）作为章节收尾。
+
+这些知识不仅本身具有实用价值，更将为下一章的核心主题——特别是Span的使用与实现机制——奠定坚实基础。
