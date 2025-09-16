@@ -1661,6 +1661,308 @@ Native AOT 工具链的一项超强能力是，它能够在构建时解释（int
 - [dotnet/runtime#112782](https://github.com/dotnet/runtime/pull/112782) 为泛型方法引入了与已有非泛型方法的 MethodTable（方法表）相同的区分机制（即“该方法表是否对用户代码可见”），从而使得那些对用户不可见的方法表所关联的元数据可以被进一步优化和移除。
 - [dotnet/runtime#118718](https://github.com/dotnet/runtime/pull/118718) 和 [dotnet/runtime#118832](https://github.com/dotnet/runtime/pull/118832) 实现了与装箱枚举（boxed enums）相关的代码体积缩减。前者对 `Thread`、`GC` 和 `CultureInfo` 中的几个方法进行了微调，避免了对某些枚举类型进行装箱，从而无需生成相应的代码。后者则对 `RuntimeHelpers.CreateSpan`方法的实现进行了调整，该方法被 C# 编译器用于通过集合表达式等方式创建 Span。`CreateSpan`是一个泛型方法，而 Native AOT 工具链的全程序分析（whole-program analysis）会将该泛型类型参数视为“被反射使用”，这意味着编译器必须假定任何类型参数都可能被用于反射，因而必须保留相关元数据。当该泛型方法与枚举类型一起使用时，系统就必须确保保留对装箱枚举的反射支持，而 `System.Console`中就存在这样的用法（使用了枚举）。这就导致，即便是一个简单的“Hello, World”控制台应用，也无法将这部分关于装箱枚举的反射支持裁剪掉；而现在，这部分代码可以被成功移除了。
 
+## 线程
+
+`ThreadPool`（线程池）是大多数 .NET 应用和服务中绝大多数工作负载的底层支撑。它是一条关键路径上的组件，必须能够高效处理各种类型的工作负载。
+
+在 [dotnet/runtime#109841](https://github.com/dotnet/runtime/pull/109841) 中实现了一个可选项功能，随后在 [dotnet/runtime#112796](https://github.com/dotnet/runtime/pull/112796) 中将其设为 .NET 10 的默认行为。这个功能的原理其实挺简单，但要理解它，我们首先需要看看线程池是如何管理任务队列的。
+
+线程池中有多个队列，通常包括一个“全局”队列，以及每个线程池线程对应的一个“本地”队列。当来自线程池外部的代码向线程池提交工作任务时，这些任务会被放入全局队列；而当线程池内的线程（尤其是通过 `Task` 或 `await` 相关操作）提交任务时，这些任务通常会进入该线程自己的本地队列。
+
+当一个线程池线程完成了当前任务，开始寻找下一个任务时，它的查找顺序是：**首先查看自己的本地队列（本地队列被视为最高优先级），如果本地队列为空，再去查看全局队列；如果全局队列也空了，它就会去“帮助”其他线程池线程，从它们的本地队列里找活干**。这一整套机制的目的在于：
+
+- 尽量减少对全局队列的争用（如果大部分线程都主要从自己的本地队列中取任务，就不会互相抢着访问全局队列）；
+- 优先处理那些逻辑上属于“已启动工作”的后续任务（只有当某个线程正在处理一个工作项，并在这个过程中又产生了新的子任务时，这些子任务才会被放入该线程的本地队列）。
+
+总体来说，这种设计效果不错，但有时候也会出现一些退化场景，尤其是当应用程序做了一些违背最佳实践的事情……比如阻塞线程。
+
+**阻塞线程池线程**意味着该线程无法再处理线程池中的其他工作。如果阻塞时间很短，一般问题不大；如果阻塞时间较长，线程池会尝试通过注入更多线程来应对，并最终找到一个相对稳定的状态。但有一种阻塞特别棘手，那就是 [“同步等待异步”（sync over async）](https://devblogs.microsoft.com/dotnet/should-i-expose-synchronous-wrappers-for-asynchronous-methods/)。
+
+所谓“同步等待异步”，就是一个线程在阻塞等待某个异步操作完成，而这个异步操作本身又可能需要在线程池中执行某些任务才能完成。于是就出现了这样一种情况：一个线程池线程因为要等另一个线程池线程去处理某个任务而被阻塞——这就很容易导致整个线程池陷入僵局，尤其是在有本地队列的情况下。
+
+举个例子，如果一个线程因为依赖自己本地队列中的任务完成而被阻塞，那么这些任务要被处理的前提是：**全局队列先被清空，然后其他线程才会来“偷”这个线程本地队列里的任务**。但如果此时全局队列一直有新任务涌入，那这个依赖就永远得不到满足 —— 原本是最高优先级的任务，结果反而变成了最低优先级，谁都不愿意先处理它。
+
+这就是上述两个 PR（pull request）背后的核心思路：**当一个线程即将阻塞，尤其是即将阻塞在等待一个 Task 完成时，它会先把自身本地队列中的所有任务全部转移到全局队列中**。这样，原本对这个阻塞线程来说最高优先级的工作，现在就能以更公平的方式被其他线程处理，而不是沦为队列里最不被重视的任务。
+
+我们可以通过一个精心构造的测试用例来观察这个改动的影响：
+
+```c#
+// dotnet run -c Release -f net9.0 --filter "*"
+// dotnet run -c Release -f net10.0 --filter "*"
+
+using System.Diagnostics;
+
+int numThreads = Environment.ProcessorCount;
+ThreadPool.SetMaxThreads(numThreads, 1);
+
+ManualResetEventSlim start = new();
+CountdownEvent allDone = new(numThreads);
+new Thread(() =>
+{
+    while (true)
+    {
+        for (int i = 0; i < 10_000; i++)
+        {
+            ThreadPool.QueueUserWorkItem(_ => Thread.SpinWait(1));
+        }
+
+        Thread.Yield();
+    }
+}) { IsBackground = true }.Start();
+
+for (int i = 0; i < numThreads; i++)
+{
+    ThreadPool.QueueUserWorkItem(_ =>
+    {
+        start.Wait();
+        TaskCompletionSource tcs = new();
+
+        const int LocalItemsPerThread = 4;
+        var remaining = LocalItemsPerThread;
+        for (int j = 0; j < LocalItemsPerThread; j++)
+        {
+            Task.Run(() =>
+            {
+                Thread.SpinWait(100);
+                if (Interlocked.Decrement(ref remaining) == 0)
+                {
+                    tcs.SetResult();
+                }
+            });
+        }
+
+        tcs.Task.Wait();
+        allDone.Signal();
+    });
+}
+
+var sw = Stopwatch.StartNew();
+start.Set();
+Console.WriteLine(allDone.Wait(20_000) ?
+    $"Completed: {sw.ElapsedMilliseconds}ms" :
+    $"Timed out after {sw.ElapsedMilliseconds}ms");
+```
+
+这个测试用例做了以下事情：
+
+- 启动一个“噪音线程”，不断向全局队列塞入新任务，让它始终保持高负载；
+- 往线程池中提交 `Environment.ProcessorCount`（通常是 CPU 核心数）个工作项，每个工作项又会往自己的本地队列中添加四个子任务，这些子任务做一些简单工作后，就会阻塞在一个 Task 上，直到它们全部完成；
+- 最后等待这 `Environment.ProcessorCount`个主任务完成。
+
+在 .NET 9 上运行这个测试，程序会挂起（hang），因为全局队列中积压了太多任务，没有线程能腾出手来处理那些位于本地队列中的、用于解除阻塞的子任务。
+
+```
+Timed out after 20002ms
+```
+
+而在 .NET 10 上，这个测试通常几乎瞬间就能完成。
+
+```
+Completed: 4ms
+```
+
+除了这个重大优化，线程池还有一些其它小改进：
+
+- [dotnet/runtime#115402](https://github.com/dotnet/runtime/pull/115402)：降低了 ARM 处理器上的自旋等待（spin-waiting）时间，使其与 x64 更加一致；
+- [dotnet/runtime#112789](https://github.com/dotnet/runtime/pull/112789)：减少了线程池检查 CPU 使用率的频率，因为在某些情况下这会带来明显的开销，同时该频率现在可以配置；
+- [dotnet/runtime#108135](https://github.com/dotnet/runtime/pull/108135)（来自 @AlanLiu90）：移除了在高负载下启动新线程池线程时可能发生的一些锁竞争；
+
+对于那些确实有极低级别、极低锁需求的高级开发者，[dotnet/runtime#107843](https://github.com/dotnet/runtime/pull/107843)（来自 @hamarb123）为 `Volatile` 类新增了两个方法：`ReadBarrier` 和 `WriteBarrier`。读屏障具有“加载获取”（load acquire）语义，有时也被称为“向下栅栏”（downward fence），它可以防止指令重排，避免内存访问被移到栅栏之前；写屏障具有“存储释放”（store release）语义，有时也叫“向上栅栏”（upwards fence），防止内存访问被移到栅栏之后。
+
+```
+A;
+lock (...)
+{
+    B;
+}
+C;
+```
+
+可以借助“锁”的语义来辅助理解：虽然具体实现可能提供更强保障，但按规范来说，进入锁具有获取（acquire）语义，退出锁具有释放（release）语义。试想如果下面代码中的指令可以被重排成这样：
+
+```
+A;
+B;
+lock (...)
+{
+}
+C;
+```
+
+或者这样：
+
+```
+A;
+lock (...)
+{
+}
+B;
+C;
+```
+
+那显然都是非常糟糕的情况。所幸，这些屏障能帮我们规避这些问题。进入锁时具有的获取/读屏障语义就像一个向下的压力，逻辑上强制锁内所有操作不会被移到锁之前；而退出锁时的释放/写屏障语义则像一个向上的压力，确保锁内操作不会被移到锁之后。
+
+有趣的是，这些屏障的语义并不要求双向约束：读屏障只防止后面的操作跑到前面，但不限制前面的操作跑到后面；写屏障只防止前面的操作跑到后面，但不限制后面的操作跑到前面。（实际上，虽然规范不强制，但目前 lock 的实现确实在进入和退出时都使用了全栅栏，所以锁前后的指令本来就不会乱序。）
+
+```
+lock (...)
+{
+    A;
+    B;
+    C;
+}
+```
+
+关于 `Task`，在 .NET 10 中，`Task.WhenAll` 也做了一些性能改进。[dotnet/runtime#110536](https://github.com/dotnet/runtime/pull/110536)：当需要将一组来自 `IEnumerable<Task>` 的任务暂存起来时，避免了临时集合的分配：
+
+```c#
+// dotnet run -c Release -f net9.0 --filter "*" --runtimes net9.0 net10.0
+
+using BenchmarkDotNet.Attributes;
+using BenchmarkDotNet.Running;
+using System.Runtime.CompilerServices;
+
+BenchmarkSwitcher.FromAssembly(typeof(Tests).Assembly).Run(args);
+
+[MemoryDiagnoser(displayGenColumns: false)]
+[HideColumns("Job", "Error", "StdDev", "Median", "RatioSD")]
+public partial class Tests
+{
+    [Benchmark]
+    public Task WhenAllAlloc()
+    {
+        AsyncTaskMethodBuilder t = default;
+        Task whenAll = Task.WhenAll(from i in Enumerable.Range(0, 2) select t.Task);
+        t.SetResult();
+        return whenAll;
+    }
+}
+```
+
+| Method       | Runtime   |     Mean | Ratio | Allocated | Alloc Ratio |
+| ------------ | --------- | -------: | ----: | --------: | ----------: |
+| WhenAllAlloc | .NET 9.0  | 216.8 ns |  1.00 |     496 B |        1.00 |
+| WhenAllAlloc | .NET 10.0 | 181.9 ns |  0.84 |     408 B |        0.82 |
+
+[dotnet/runtime#117715](dotnet/runtime#117715)（来自 @CuteLeon）：当输入只有一个任务时，`WhenAll` 不再做无用功，直接返回该任务实例，省去了不必要的封装开销。
+
+```c#
+// dotnet run -c Release -f net9.0 --filter "*" --runtimes net9.0 net10.0
+
+using BenchmarkDotNet.Attributes;
+using BenchmarkDotNet.Running;
+using System.Runtime.CompilerServices;
+
+BenchmarkSwitcher.FromAssembly(typeof(Tests).Assembly).Run(args);
+
+[MemoryDiagnoser(displayGenColumns: false)]
+[HideColumns("Job", "Error", "StdDev", "Median", "RatioSD")]
+public partial class Tests
+{
+    [Benchmark]
+    public Task WhenAllAlloc()
+    {
+        AsyncTaskMethodBuilder t = default;
+        Task whenAll = Task.WhenAll([t.Task]);
+        t.SetResult();
+        return whenAll;
+    }
+}
+```
+
+| Method       | Runtime   |     Mean | Ratio | Allocated | Alloc Ratio |
+| ------------ | --------- | -------: | ----: | --------: | ----------: |
+| WhenAllAlloc | .NET 9.0  | 72.73 ns |  1.00 |     144 B |        1.00 |
+| WhenAllAlloc | .NET 10.0 | 33.06 ns |  0.45 |      72 B |        0.50 |
+
+再说说 `System.Threading.Channels`，这是 .NET 中一个相对低调但非常实用的线程同步工具（你可以在 Build 2025 上观看 Hanselman 和 Toub 的[《Yet Another 'Highly Technical Talk'》](https://www.youtube.com/watch?v=J3IQBI5HVOw)了解更多）。如果你需要在生产者和消费者之间传递数据，`Channel<T>`通常是你的首选。这个库从 .NET Core 3.0 开始引入，是一个小巧、健壮、高效的“生产者-消费者”队列机制，后续还增加了诸如 `ReadAllAsync`（以 `IAsyncEnumerable<T>`形式消费通道内容）和 `PeekAsync`（预览通道内容但不消费）等方法。
+
+最初的版本支持 `Channel.CreateUnbounded` 和 `Channel.CreateBounded`，.NET 9 又新增了 `Channel.CreateUnboundedPrioritized`。到了 .NET 10，Channels 继续在功能（如 [dotnet/runtime#116097](https://github.com/dotnet/runtime/pull/116097) 新增无缓冲通道实现）和性能上获得改进。
+
+.NET 10 还致力于降低使用 Channels 的应用的整体内存占用。Channels 支持取消操作：无论是生产者还是消费者，几乎任何交互都可以取消，而且提供了异步的生产和消费方法。当读者或写者需要等待时，系统会创建（或复用池中的）一个 `AsyncOperation` 对象，并将其加入队列；后续如果有写者或读者能够满足等待方，就会将该对象出队并标记为完成。
+
+这些队列原来是用数组实现的，这就导致如果要移除队列中间的某条因取消而无效的条目，会非常麻烦。所以之前的实现选择不去主动移除它们，而是让它们留在队列里，等后续某个写者或读者处理时直接丢弃并重试。理论上，在稳态下这些取消的任务会很快被处理掉，因此不必花费太多精力去主动清理。
+
+但实际情况证明，这个假设在某些特殊场景下是有问题的，比如当存在大量读者因缺乏写者而超时，每个超时的读者都会在队列中留下一个取消的条目。这时一旦来了一个写者，虽然这些取消的条目最终会被清理掉，但在那之前，它们会显著增加应用的工作集（working set），也就是内存占用。
+
+[dotnet/runtime#116021](https://github.com/dotnet/runtime/pull/116021) 针对这个问题进行了优化，把数组实现的队列改成了基于链表的队列。等待对象（waiter）本身就作为链表节点，因此唯一增加的额外开销只是用于指向前驱和后继节点的几个字段。但即便如此，团队还是尽量优化，抵消这部分开销：通过复用之前针对 `ManualResetValueTaskSourceCore<T>`所做的类似优化，我们从 `Channel<T>`自定义实现的 `IValueTaskSource<T>`接口中移除了一个字段。
+
+具体情况是这样的：awaiter（等待者）通过调用 `OnCompleted` 方法（而非更高效的 `UnsafeOnCompleted` 方法）来传递 `ExecutionContext`（执行上下文）的情况极其罕见；而与此同时，还需要额外存储一个非默认的 `TaskScheduler`（任务调度器）或 `SynchronizationContext`（同步上下文）的情况，就更是少之又少。
+
+正因如此，我们没有必要再为这两个概念分别保留两个独立的字段，而是将它们合并成了一个字段。这么做的结果是：在绝大多数情况下，我们节省了一个字段的内存开销；而只有在极其极端、几乎不会遇到的场景下——也就是既需要传递 `ExecutionContext`，又同时需要指定非默认的 `TaskScheduler` 或 `SynchronizationContext` 时——才需要额外分配一次内存。
+
+换句话说，我们用极少数情况下可能多一次分配的代价，换来了常规情况下更紧凑的内存布局和更高的效率。
+
+这些改动不仅控制了内存增长，甚至让 `AsyncOperation` 等待对象的体积比原来还小了，属于双赢。虽然这种优化对吞吐量的影响不太容易看出来，但在那种取消任务堆积、工作集持续增长的极端情况下，.NET 10 的表现就稳定多了，不再一路飙升。你可以运行如下代码观察对比：
+
+```c#
+// dotnet run -c Release -f net9.0 --filter "*"
+// dotnet run -c Release -f net10.0 --filter "*"
+
+using System.Threading.Channels;
+
+Channel<int> c = Channel.CreateUnbounded<int>();
+
+for (int i = 0; ; i++)
+{
+    CancellationTokenSource cts = new();
+    var vt = c.Reader.ReadAsync(cts.Token);
+    cts.Cancel();
+    await ((Task)vt.AsTask()).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+
+    if (i % 100_000 == 0)
+    {
+        Console.WriteLine($"Working set: {Environment.WorkingSet:N0}b");
+    }
+}
+```
+
+在 .NET 9 上，你会看到工作集不断上涨：
+
+```
+Working set: 31,588,352b
+Working set: 164,884,480b
+Working set: 210,698,240b
+Working set: 293,711,872b
+Working set: 385,495,040b
+Working set: 478,158,848b
+Working set: 553,385,984b
+Working set: 608,206,848b
+Working set: 699,695,104b
+Working set: 793,034,752b
+Working set: 885,309,440b
+Working set: 986,103,808b
+Working set: 1,094,234,112b
+Working set: 1,156,239,360b
+Working set: 1,255,198,720b
+Working set: 1,347,604,480b
+Working set: 1,439,879,168b
+Working set: 1,532,284,928b
+```
+
+在 .NET 10 上，工作集则会趋于平稳，不再持续增长：
+
+```
+Working set: 33,030,144b
+Working set: 44,826,624b
+Working set: 45,481,984b
+Working set: 45,613,056b
+Working set: 45,875,200b
+Working set: 45,875,200b
+Working set: 46,006,272b
+Working set: 46,006,272b
+Working set: 46,006,272b
+Working set: 46,006,272b
+Working set: 46,006,272b
+Working set: 46,006,272b
+Working set: 46,006,272b
+Working set: 46,006,272b
+Working set: 46,006,272b
+Working set: 46,006,272b
+Working set: 46,006,272b
+Working set: 46,006,272b
+```
+
 ## 反射
 
 在 .NET 8 中，我们引入了 `[UnsafeAccessor]` 特性，它允许开发者编写一个外部方法（`extern` 方法），该方法与某个开发者希望使用但不可见的成员相匹配，然后运行时将这些访问调整为就好像直接使用了目标成员一样。到了 .NET 9，该特性又扩展了对泛型的支持。
@@ -4524,4 +4826,183 @@ public partial class Tests
 | Streaming | 1.555 ms |
 
 在 .NET 9 中引入了 `JsonMarshal` 类和 `GetRawUtf8Value` 方法，该方法提供了对由 `JsonElement` 表示的属性底层字节的原始访问。对于还需要属性名称的情况，@mwadams 提交的 [dotnet/runtime#107784](https://github.com/dotnet/runtime/pull/107784) 提供了相应的 `JsonMarshal.GetRawUtf8PropertyName` 方法。
+
+## Peanut Butter
+
+和以往每一个 .NET 版本一样，.NET 10 也包含了大量从不同角度提升性能的 PR（Pull Request）。这类优化做得越多，应用程序和服务的整体开销就越低。以下是本次发布中一些具有代表性的性能优化点：
+
+### GC.DATAS（动态适应应用规模）优化
+
+GC.DATAS（Dynamic Adaptation To Application Sizes，动态适应应用规模）是在 .NET 8 中引入，并在 .NET 9 中默认启用的垃圾回收策略。到了 .NET 10，通过 [dotnet/runtime#105545](https://github.com/dotnet/runtime/pull/105545) 对 DATAS 做了一轮调优，进一步改善了其整体行为，包括：
+
+- 减少不必要的垃圾回收工作；
+- 平滑掉回收过程中的停顿（特别是在高分配速率的场景下）；
+- 修正了可能导致额外短代（Gen1）回收的碎片统计问题；
+- 以及其他一系列细节优化。
+
+最终带来的收益是：**减少了不必要的回收次数，提升了吞吐量的稳定性，对于分配密集型负载，延迟表现也更加可预测**。
+
+此外，[dotnet/runtime#118762](https://github.com/dotnet/runtime/pull/118762) 还为 DATAS 增加了一些可调参数，特别是允许开发者更精细地控制 Gen0（第 0 代）堆的增长行为。
+
+### GCHandle 改进：引入强类型句柄
+
+.NET 的垃圾回收器（GC）支持多种“句柄”（handle），用于显式管理资源与 GC 行为之间的关系。例如，你可以创建一个“固定句柄”（pinning handle），来确保某个对象在内存中不会被移动。
+
+传统上，这些句柄是通过 `GCHandle` 类型暴露给开发者的，但它存在不少问题，尤其是**类型安全性差，很容易误用**。
+
+为了解决这个问题，[dotnet/runtime#111307](https://github.com/dotnet/runtime/pull/111307) 引入了几个新的**强类型句柄变种**，包括：
+
+- `GCHandle<T>`
+- `PinnedGCHandle<T>`
+- `WeakGCHandle<T>`
+
+这些新类型不仅改善了易用性，还顺带削减了旧设计带来的一些性能开销。
+
+```c#
+// dotnet run -c Release -f net10.0 --filter "*"
+
+using BenchmarkDotNet.Attributes;
+using BenchmarkDotNet.Running;
+using System.Runtime.InteropServices;
+
+BenchmarkSwitcher.FromAssembly(typeof(Tests).Assembly).Run(args);
+
+[HideColumns("Job", "Error", "StdDev", "Median", "RatioSD")]
+public partial class Tests
+{
+    private byte[] _array = new byte[16];
+
+    [Benchmark(Baseline = true)]
+    public void Old() => GCHandle.Alloc(_array, GCHandleType.Pinned).Free();
+
+    [Benchmark]
+    public void New() => new PinnedGCHandle<byte[]>(_array).Dispose();
+}
+```
+
+| Method |     Mean | Ratio |
+| ------ | -------: | ----: |
+| Old    | 27.80 ns |  1.00 |
+| New    | 22.73 ns |  0.82 |
+
+### Mono 解释器优化
+
+Mono 解释器在本版本中对多个操作码（opcode）进行了性能优化，包括：
+
+- `switch` 语句（[dotnet/runtime#107423](https://github.com/dotnet/runtime/pull/107423)）
+- 创建新数组（[dotnet/runtime#107430](https://github.com/dotnet/runtime/pull/107430)）
+- 内存屏障（[dotnet/runtime#107325](https://github.com/dotnet/runtime/pull/107325)）
+
+但更值得一提的是，一系列超过十几个 PR 共同推动了 Mono 解释器在 WebAssembly（Wasm）平台上对更多操作进行向量化（vectorization）支持。例如：
+
+- [dotnet/runtime#114669](https://github.com/dotnet/runtime/pull/114669) 实现了对位移操作的向量化；
+- [dotnet/runtime#113743](https://github.com/dotnet/runtime/pull/113743) 则支持了对 Abs（绝对值）、Divide（除法）、Truncate（截断）等多种运算的向量化处理；
+- 还有一些 PR 利用了 Wasm 特有的内部 API，对已经在其它架构上通过硬件 intrinsics 加速的函数进行了类似加速，比如 [dotnet/runtime#115062](https://github.com/dotnet/runtime/pull/115062) 就在 Convert 类的十六进制转换方法（如 Convert.FromBase64String）背后的核心逻辑中使用了 `PackedSimd`。
+
+这些优化显著提升了 Mono 在 WebAssembly 平台上的执行效率。
+
+### FCALL 清理：转向更可靠的 QCALL
+
+在 `System.Private.CoreLib` 的底层代码中，托管代码经常需要调用运行时内部的原生（native）代码。传统上有两种主要的调用方式：
+
+1. **QCALL**：本质就是通过 DllImport（即 P/Invoke）调用运行时公开的原生函数，相对简单且稳定；
+2. **FCALL**：一种更复杂、更特殊的调用路径，允许原生代码直接访问托管对象。FCALL 是早期的主流方式，但**实现难度大、容易出错，而且每次调用都需要额外的辅助方法帧（helper method frames）**。
+
+随着时间推移，越来越多的 FCALL 已经被迁移到更可靠、更高效的 QCALL。.NET 10 中又有一大批 PR 专门用于移除剩余的 FCALL，包括：
+
+- dotnet/runtime#107218：移除了 Exception、GC 和 Thread 模块中的辅助方法帧；
+- dotnet/runtime#106497：移除了 object 相关的辅助帧；
+- dotnet/runtime#107152：移除了和探查器（profiler）连接相关的辅助帧；
+- dotnet/runtime#108415 和 dotnet/runtime#108535：移除了反射模块中的 FCALL；
+- 以及十几个其它相关 PR。
+
+最终，**所有涉及托管内存访问或可能抛出异常的 FCALL 都被移除了**，大幅提升了执行稳定性和潜在的性能表现。
+
+### 十六进制转换：支持 UTF8 字节流
+
+在近期的 .NET 版本中，`System.Convert` 新增了如 `FromHexString` 和 `TryToHexStringLower` 等方法，但这些方法默认都基于 UTF16。而通过 dotnet/runtime#117965，现在也提供了基于 UTF8 字节流的相应重载，更加高效且节省内存。
+
+### 字符串插值：支持访问格式化后的原始文本
+
+字符串插值功能背后是由所谓的“插值字符串处理器”（interpolated string handlers）驱动的。当你将插值表达式的目标类型设为 string 时，默认会使用来自 `System.Runtime.CompilerServices` 的 `DefaultInterpolatedStringHandler`。
+
+这个默认实现非常高效，它能够利用栈上分配的内存以及 `ArrayPool<>`，从而在缓冲格式化文本时减少堆分配。虽然 `DefaultInterpolatedStringHandler` 是一个高级实现，其它代码（包括自定义的插值处理器）也可以把它当做实现细节来使用。
+
+但之前有个小遗憾：**使用 DefaultInterpolatedStringHandler 的代码，只能拿到最终的字符串输出，而无法访问底层的格式化缓冲区**。
+
+为此，dotnet/runtime#112171 为 `DefaultInterpolatedStringHandler` 添加了一个 `Text` 属性，类型为 `ReadOnlySpan<char>`，方便那些需要直接访问已格式化文本的代码使用。
+
+### 枚举相关：减少不必要的内存分配
+
+dotnet/runtime#118288 移除了几处枚举（Enum）相关操作中的内存分配。例如，在 `EnumConverter` 中，原本使用 `string.Split` 方法，现在替换为 `MemoryExtensions.Split`，这样既不需要分配 `string[]` 数组，也不需要为每个分割出的字符串单独分配内存。
+
+### NRBF 解码：使用栈分配替代数组分配
+
+在 dotnet/runtime#107797（作者：@teo-tsirpanis）中，优化了一个 decimal 构造函数中的数组分配问题：原本需要分配一个数组，现在改用针对 Span 的集合表达式（collection expression），使得相关状态可以直接在栈上分配，省去了堆内存开销。
+
+### TypeConverter 优化：降低解析开销
+
+dotnet/runtime#111349（作者：@AlexRadch）针对 Size、SizeF、Point 和 Rectangle 类型的 TypeConverter，在解析过程中通过采用更现代的 API 和语法，比如基于 Span 的 Split 方法和字符串插值，有效减少了部分解析开销。
+
+### 泛型数学：补全 AggressiveInlining 标记
+
+大部分使用了泛型数学接口（generic math interfaces）的 `TryConvertXx` 方法，都标记了 `MethodImplOptions.AggressiveInlining`，以提示 JIT 编译器应该始终内联这些方法，从而提升性能。
+
+但之前有几个“漏网之鱼”没有被正确标记。dotnet/runtime#112061（作者：@hez2010）修复了这个问题，确保这些方法也能享受到内联优化。
+
+### ThrowIfNull：利用 C# 14 静态扩展方法统一优化
+
+C# 14 开始支持编写**静态扩展方法（extension static methods）**，这对那些需要兼容旧版本目标平台（比如 .NET Standard 2.0 或 .NET Framework）的库来说是个巨大的福音：**静态方法现在也能像实例方法那样被“polyfill”（即通过兼容层补充缺失功能）**。
+
+过去，很多 .NET 库为了兼容老平台，无法使用像 `ArgumentNullException.ThrowIfNull` 这样的实用静态方法，而这些方法能显著简化调用代码，提升方法内联率，同时让代码更简洁。
+
+现在，由于 dotnet/runtime 仓库已经用 C# 14 编译器构建，dotnet/runtime#114644 把这类库中约 2500 个相关调用点，都替换为了 `ThrowIfNull` 的 polyfill 实现，既保持了兼容性，又提升了代码质量与性能。
+
+### FileProvider 的 Change Token 优化
+
+- dotnet/runtime#116175 通过采用无需分配的哈希计算机制，减少了 `PollingWildCardChangeToken` 中的内存分配；
+- dotnet/runtime#115684（作者：@rameel）在 `CompositeFileProvider` 中通过避免为无操作（nop）的 `NullChangeTokens` 分配空间，也降低了内存开销。
+
+### 字符串插值：移除冗余的空值检查
+
+dotnet/runtime#114497 移除了在处理可空（nullable）输入时的一些冗余空值检查，进一步减少了插值操作过程中的微小开销。
+
+```c#
+// dotnet run -c Release -f net9.0 --filter "*" --runtimes net9.0 net10.0
+
+using BenchmarkDotNet.Attributes;
+using BenchmarkDotNet.Running;
+
+BenchmarkSwitcher.FromAssembly(typeof(Tests).Assembly).Run(args);
+
+[HideColumns("Job", "Error", "StdDev", "Median", "RatioSD")]
+public partial class Tests
+{
+    private string _value = " ";
+
+    [Benchmark]
+    public string Interpolate() => $"{_value} {_value} {_value} {_value}";
+}
+```
+
+### AssemblyQualifiedName：缓存结果，避免重复计算
+
+过去，`Type.AssemblyQualifiedName` 每次访问时都会重新计算该字符串。但从 dotnet/runtime#118389 开始，这个值现在会被缓存起来，避免了重复计算，提升了访问效率。
+
+```c#
+// dotnet run -c Release -f net9.0 --filter "*" --runtimes net9.0 net10.0
+
+using BenchmarkDotNet.Attributes;
+using BenchmarkDotNet.Running;
+
+BenchmarkSwitcher.FromAssembly(typeof(Tests).Assembly).Run(args);
+
+[MemoryDiagnoser(displayGenColumns: false)]
+[HideColumns("Job", "Error", "StdDev", "Median", "RatioSD")]
+public partial class Tests
+{
+    [Benchmark]
+    public string AQN() => typeof(Dictionary<int, string>).AssemblyQualifiedName!;
+}
+```
 
