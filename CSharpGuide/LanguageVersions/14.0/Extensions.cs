@@ -11,6 +11,12 @@ public static class ListExtensions
             if (item is not null) list.Add(item);
         }
     }
+
+    extension(string content)
+    {
+        public bool IsNullOrEmpty2 => string.IsNullOrEmpty(content);
+    }
+
     // 增加静态式扩展运算符
     extension<T>(List<T>)
     {

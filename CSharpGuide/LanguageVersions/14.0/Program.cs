@@ -16,6 +16,8 @@
             User? user = GetUserOrNull();
             user?.FirstName = "Alice";
             Console.WriteLine(user?.FirstName);
+
+            var s = "Hello, World".IsNullOrEmpty2; // 不能与内置的同名方法冲突
         }
 
         private static User? GetUserOrNull()
