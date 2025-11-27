@@ -754,3 +754,322 @@ u.Undo();
 > **进一步阅读**
 >
 > 关于缓解持久化数据结构最坏情况开销，这是一个非常深的主题，本书不会进一步详细讨论。如果你对这个主题感兴趣，Chris Okasaki 的《Purely Functional Data Structures》是一本值得阅读的书。
+
+以下是按照原文结构、逐行对应的**地道中文翻译**（不擅自改变格式、不添加列表）：
+
+------
+
+## 休斯列表：构建时便宜，取用时付费
+
+休斯列表（Hughes List）是一种奇怪但迷人的数据结构，它颠倒了我们对栈操作时间复杂度的通常预期：查看或弹出栈顶非常昂贵，但从任一端推入却很便宜！这种数据结构由 John Hughes 发明，也被称为“d 列表”或“差值列表（difference list）”。
+
+### Reverse 归来
+
+在深入休斯列表本身之前，我将对我们之前的 `Reverse` 实现做一个小改动，有了它我们可以实现一些有用的方法，用来连接两个栈，并将一个元素追加到栈的“错误端”。我们首先要创建一个名叫 `ReverseOnto` 的新方法，然后让 `Reverse` 调用它：
+ 代码清单 2.13 ReverseOnto 和其它方法
+
+```c#
+static class Extensions
+{
+	public static IImStack<T> ReverseOnto<T>(
+		this IImStack<T> stack, IImStack<T> tail)
+	{
+		var result = tail;
+		for (; !stack.IsEmpty; stack = stack.Pop())
+			result = result.Push(stack.Peek());
+		return result;
+	}
+	public static IImStack<T> Reverse<T>(
+        this IImStack<T> stack) =>
+        stack.ReverseOnto(ImStack<T>.Empty);
+	public static IImStack<T> Concatenate<T>(
+        this IImStack<T> xs, IImStack<T> ys) =>
+        ys.IsEmpty ? xs : xs.Reverse().ReverseOnto(ys);
+	public static IImStack<T> Append<T>(
+        this IImStack<T> stack, T item) =>
+        stack.Concatenate(ImStack<T>.Empty.Push(item));
+}
+```
+
+- `ReverseOnto` 会反转一个栈，但会将反转后的栈推到给定的 tail 上；换句话说，`ReverseOnto` 是将一个栈的反转与另一个（未反转的）栈做连接。
+- `Reverse` 只是 tail 为空时的特殊情况。
+- 因此我们能够实现 `Concatenate`：通过反转左侧栈，然后再反转地推到右侧栈上，使元素最终保持原顺序。
+- Append 会将一个元素推到栈的尾端，它是通过连接一个只有一个元素的栈实现的。
+
+显然，`ReverseOnto` 的时间与空间复杂度都是 O(n)，其中 n 为左侧栈的大小，因此 `Reverse`、`Concatenate` 与 `Append` 也都是 O(n)。我在 `Concatenate` 中做了一个小优化：如果右侧栈为空，那么直接返回左侧栈。在这种特殊情况下，我们可以跳过反转左侧栈两次的 O(n) 开销。
+
+### 柯里化与部分应用
+
+在介绍休斯列表之前，我们还需要再提前讨论一个内容。你知道吗？任何接受两个参数的函数都可以拆成两个各接受一个参数的函数？确实如此！
+
+```c#
+Func<int, int, int> adder = (x, y) => x + y;
+Console.WriteLine(adder(4, 3));
+Func<int, Func<int, int>> curried = x => y => adder(x, y);
+Func<int, int> add4 = curried(4);
+Console.WriteLine(add4(3));
+```
+
+我们的函数 curried 是一个高阶函数：它产出一个新函数。如我们预期，两次相加都产生 7。
+
+> **说明**
+>
+> Func<A, B, R> 是一个委托类型；C# 就是以此表示“函数指针”，它指向一个接受类型 A 和 B 的参数并返回 R 的函数。你也可以定义自己的委托类型，我们将在下一段代码中这么做。如果对委托类型不熟悉，可以参见附录 A。
+
+把一个多参数函数拆成多个单参数函数叫作“柯里化（currying）”，是为了纪念逻辑学家 Haskell Curry，他尽管不是最早的发明者，但大量使用了此技术。当我们从一个双参函数开始，通过绑定左侧参数的具体值得到一个新的一参函数——比如我们将左参数绑定为 4，就像这里将两参加法器变成一个左参数固定为 4 的函数——这叫作“部分应用（partial application）”。
+
+用一种奇怪的方式理解 curried：如果你传入一个整数 n，它返回一个将 n 加到其参数上的函数。如果你把 0 传给那个返回的函数呢？绑定到加法器左参数的值 n 就会返回；例如 `add4(0)` 明显返回 4。如果我们稍微眯起眼看，可以认为 curried 产生了某种存储 n 的东西，而用 0 调用该存储可取回 n。理解这一点有助于我们深入休斯列表！
+
+### 实现休斯列表
+
+我们通常认为数据结构包含数据本身：一个值和一个尾巴，一个根节点和一些子树，等等。休斯列表让人费解之处在于，它乍一看似乎根本不包含任何数据。休斯列表唯一的字段是一个委托，该委托是栈连接函数的部分应用。
+
+休斯列表的基本思想是：不是直接将元素存入列表，而是构造一个函数，该函数在用合适的参数调用时，会通过高效地连接子列表来生成我们想要的列表。由于构造函数（function construction）总是廉价的，我们可以把昂贵的操作转化为廉价的操作：通过创建一个函数来代替实际的工作。当然，天下没有免费的午餐；我们最终延迟了工作，直到真正需要列表内容时才支付代价。
+
+这段代码既看似简单又看似复杂。简单之处在于我们有一个仅包含单字段的结构体和十来个方法，每个方法都仅由一个表达式实现；复杂之处在于乍一看完全不知道到底发生了什么。
+
+在上一节我们展示了如何用 0 调用一个部分应用的加法器来取回绑定的值。理解这段代码的关键洞察是：用空栈调用一个部分应用的连接函数会产生绑定的栈。
+
+如果你第一次阅读这些代码，请特别注意传给 `Make` 的各个 lambda；这些 lambda 在逻辑上都是栈连接函数的部分应用。如果你第一次看不能完全理解，也不必担心；我当时也没懂。我们将在下文逐一剖析。
+
+代码清单 2.14 休斯列表
+
+```c#
+struct HList : IEnumerable
+{
+	delegate IImStack Concat(IImStack stack);
+	private readonly Concat c;
+	private HList(Concat c) => this.c = c;
+	private static HList Make(Concat c) => new HList(c);
+	public static HList Empty { get; } = Make(stack => stack);
+	public bool IsEmpty => ReferenceEquals(c, Empty.c);
+	public static HList FromStack(IImStack fromStack) => 
+		fromStack.IsEmpty ?
+		Empty :
+		Make(stack => fromStack.Concatenate(stack));
+	public IImStack ToStack() => c(ImStack.Empty);
+	public T Peek() => ToStack().Peek();
+	public HList Pop() => FromStack(ToStack().Pop());
+	private static HList Concatenate(
+		HList hl1, 
+		HList hl2) => hl1.IsEmpty ? hl2 : Make(stack => hl1.c(hl2.c(stack)));
+	public static HList Single(T item) => Make(stack => stack.Push(item));
+	public HList Push(T item) => Concatenate(Single(item), this);
+	public HList Append(T item) => Concatenate(this, Single(item));
+	public HList Concatenate(HList hl) => Concatenate(this, hl);
+	public IEnumerator GetEnumerator() => ToStack().GetEnumerator();
+	IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+}
+```
+
+这段代码非常密集。让我们一次只看几行，逐步拆解。
+
+```
+struct HList : IEnumerable
+```
+
+休斯列表只是一个围绕委托的轻量包装；没必要让它成为类，所以我把它设为 struct。由于它在逻辑上是一个序列，我让它实现 `IEnumerable<T>`。
+
+接下来是字段与构造函数：
+
+```c#
+delegate IImStack Concat(IImStack stack);
+private readonly Concat c;
+private HList(Concat c) => this.c = c;
+private static HList Make(Concat c) => new HList(c);
+```
+
+为了避免每次都写冗长的 `Func<IImStack, IImStack>`，我定义了一个嵌套委托类型以提升可读性。因为它做的是连接操作，所以命名为 `Concat`。
+
+接下来三行只是字段、构造函数和一个简单的静态工厂方法，使代码更易读。
+
+现在你可能觉得我已经彻底把重点埋没了：一个委托怎么能代表一个列表？它代表的又是什么列表？在上一节，我们展示了如何用部分应用的加法器构造出一个值的存储，并用 0 取回它：
+
+```C#
+Func<int, int, int> adder = (x, y) => x + y;
+Func<int, Func<int, int>> curried = x => y => adder(x, y);
+int n = 123;
+Func<int, int> storage = curried(n);
+Console.WriteLine(storage(0)); // prints 123
+```
+
+看起来，高阶函数 `curried` 应当用于产生做加法的函数。但我们“离经叛道”地用它构建了一个怪异的存储系统：为了存储任意数字 n，把它传给 `curried` 即可；返回的函数就将 n 储存了。要取回该数值，只需向返回的函数传入 0。这看上去绕远路，但谁也没禁止我们这么用。
+
+休斯列表做的就是同样的怪事，只不过对象换成了栈。正如 0 是部分应用加法器的“取回值”参数，空栈就是部分应用连接函数的“取回栈”参数。继续往下看，事情会逐渐清晰。
+
+```c#
+public static HList Empty { get; } = Make(stack => stack);
+public bool IsEmpty => ReferenceEquals(c, Empty.c);
+```
+
+休斯列表是一个把其所代表的列表连接到参数栈上的函数。而恒等函数就是把空列表连接到参数上的函数！因此，恒等函数就是空的休斯列表。
+
+正如我们让空的不可变栈和空的不可变队列成为唯一对象一样，我也希望空的休斯列表是唯一的；这样我们就可以通过委托引用比较判断某个对象是否为空列表。为维持该不变性，我们必须确保每个空列表都使用相同的委托。例如，把一个普通不可变栈转换为休斯列表时：
+
+```c#
+public static HList FromStack(IImStack fromStack) =>
+	fromStack.IsEmpty ?
+	Empty :
+	Make(stack => fromStack.Concatenate(stack));
+```
+
+这个工厂方法将普通不可变栈转成休斯列表。如果栈为空，则返回唯一的空休斯列表；如果非空，则需要对连接方法做部分应用。
+
+> **说明**
+>
+> C# 有一个容易被忽略的便利特性：当将扩展方法转换为委托时，它会自动对第一个参数做部分应用；所以我们可以更简洁地写成 `Make(fromStack.Concatenate)`。不过用 lambda 写在这里，更便于后面的复杂度分析理解。
+
+接下来是三个需要将休斯列表转回“正常”不可变栈的方法：
+
+```c#
+public IImStack ToStack() => c(ImStack.Empty);
+public T Peek() => ToStack().Peek();
+public HList Pop() => FromStack(ToStack().Pop());
+```
+
+正如 `storage(0)` 会返回 123，我们也可以通过用空栈调用连接委托来取回休斯列表所表示的栈。一旦拿到栈，就可以 `Peek` 或 `Pop`。
+
+休斯列表核心功能在这段看似简单的方法中：
+
+```c#
+private static HList Concatenate(HList hl1, HList hl2) => 
+	hl1.IsEmpty ? hl2 : Make(stack => hl1.c(hl2.c(stack)));
+```
+
+我们希望构造一个表示 hl1 与 hl2 连接结果的休斯列表。如果 hl1 为空，我们直接返回 hl2。否则，我们需要一个函数，它接受一个栈并返回—— hl1 所代表的栈，连接上 hl2 所代表的栈，再连接参数栈。连续两次连接等价于连续两次调用委托：`stack => hl1.c(hl2.c(stack))`。
+
+单元素休斯列表是什么？就是接受一个栈并把某个单元素推入其左端的函数——而这正是 `Push` 的含义！
+
+```c#
+public static HList Single(T item) =>
+	Make(stack => stack.Push(item));
+```
+
+有了这两个辅助方法，我们就可以简洁地实现 `Push`、`Append`与 `Concatenate`：
+
+```c#
+public HList Push(T item) => Concatenate(Single(item), this);
+public HList Append(T item) => Concatenate(this, Single(item));
+public HList Concatenate(HList hl) => Concatenate(this, hl);
+```
+
+最后是实现 `IEnumerable` 的部分：转成普通栈后遍历。
+
+```c#
+public IEnumerator GetEnumerator() =>
+	ToStack().GetEnumerator();
+IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+```
+
+### 休斯列表的复杂度
+
+显然，`Make`、`IsEmpty`、`FromStack`、两个版本的 `Concatenate`、`Single`、`Push` 和 `Append` 都是 O(1) 的。它们只做引用比较和委托构造，这些全是 O(1) 操作，与列表大小无关。
+
+这正是休斯列表有趣且有用之处：通过不断 `Push`、`Append` 和 `Concatenate` 构建大列表时，每步的成本与列表大小完全无关！
+连接操作始终是相同成本，与列表规模无关——与普通栈的 O(n) 级连接完全不同。在许多场景中，大列表是在被读取前由许多部分构建而成的，而休斯列表为此提供了廉价且灵活的方法。
+
+同样显然，`Peek`、`Pop` 与枚举的主要开销在于调用 `ToStack`，而该方法只做一件事：调用委托。因此要理解它们的复杂度，我们必须理解委托本身的复杂度。而此委托只在四处被创建：
+
+```c#
+Make(stack => stack)
+Make(stack => stack.Push(item))
+Make(stack => fromStack.Concatenate(stack))
+Make(stack => hl1.c(hl2.c(stack)))
+```
+
+前两个显然是 O(1)，它们分别表示零元素列表和单元素列表。我们之前推导出 `Concatenate` 扩展方法的时间与空间复杂度为 O(n)，其中 n 为 `fromStack` 的大小；`stack` 的大小无关紧要，因为只有 `fromStack` 可能被反转。也就是说，它是关于“被表示的列表”的 O(n)、而不是关于“传入的参数栈”。（当然，如果参数栈为空，还能跳过反转。）
+
+因此我们已知，每个委托的复杂度是关于其所代表列表大小的 O(n)。那第四个情况是否特殊？在第四种情况下，假设 hl1 大小为 n1，hl2 大小为 n2。进一步假设 hl2.c 的开销是 O(n2)，与参数栈大小无关；hl1.c 的开销是 O(n1)，与 hl2.c(stack) 的大小无关。则该委托任意一次调用的总复杂度为 O(n1+n2)。而 n1+n2 正是该委托所代表的列表的大小，因为该列表是 hl1 与 hl2 的连接。因此第四种委托的开销也是关于所代表列表大小的 O(n)。
+
+### 数据结构中的数据在哪里？
+
+休斯列表能在没有其它数据结构的情况下，仅靠一个指向委托的引用来表示一个列表并对其进行操作，看起来不可思议。似乎有某种魔法；魔法的秘密在于仔细思考这行代码：
+
+```c#
+private static HList Concatenate(HList hl1, HList hl2) =>
+    hl1.IsEmpty ? hl2 : Make(stack => hl1.c(hl2.c(stack)));
+```
+
+在幕后，C# 编译器会生成等价于以下逻辑的代码：
+
+```c#
+private class Closure
+{
+    public HList hl1;
+    public HList hl2;
+    public IImStack M(IImStack stack)
+    {
+    	return this.hl1.c(this.hl2.c(stack));
+    }
+}
+private static HList Concatenate(HList hl1, HList hl2)
+{
+    Closure closure = new Closure();
+    closure.hl1 = hl1;
+    closure.hl2 = hl2;
+    if (closure.hl1.IsEmpty)
+    	return closure.hl2;
+    return Make(new Concat(closure.M));
+}
+```
+
+这时数据结构的真相就显现了！连接操作的闭包类很像一棵二叉树的节点，其中 hl1 和 hl2 是左右子节点的引用。类似地，这两行也创建了捕获 item 和 fromStack 的闭包对象：
+
+```c#
+Make(stack => stack.Push(item))
+Make(stack => fromStack.Concatenate(stack));
+```
+
+我们通过一个例子来画出所有闭包，就能看到真实的数据结构长什么样。
+
+```c#
+var s = ImStack.Empty.Push(2).Push(3).Push(4);
+var hl432 = HList.FromStack(s);
+var hl = hl432.Push(5).Append(1).Concatenate(hl432).Append(0);
+Console.WriteLine(hl.Bracket());
+```
+
+如预期，这段代码输出 `[5,4,3,2,1,4,3,2,0]`。所有闭包的图示非常有启发性。我们用矩形表示委托，并用 lambda 的主体或函数名称标记。每个矩形显示自动生成的闭包类的字段及其引用的内容。包含值的椭圆代表栈。箭头表示栈或委托的引用。
+
+图 2.3 休斯列表本质上是一个二叉图！由 lambda 生成的委托拥有自动生成的闭包类，其字段 hl1 和 hl2 分别引用被连接的左右列表。
+
+![](asserts/02-03.png)
+
+当我们在上面的休斯列表上调用 ToStack 时，逐步在脑中模拟一遍发生的事情会非常有帮助。它会把空栈传给图中最顶层的那个委托。随后，该委托又把空栈传给其右侧的委托，后者将 0 推入该栈并返回它；此时我们就获得了栈底的那个值。然后，这个栈又被传给左侧的委托。随着对该图的递归遍历继续进行，我们会逐步将后续的各个元素依次推入最终得到的栈中。
+
+### 再谈几点性能方面的考虑
+
+我们已经指出，在评估算法复杂度时，时间和内存都是需要考虑的资源。休斯列表给了我们一个机会去思考另一个重要但尚未提及的资源：栈深度。一个完全通过对 n 个元素调用 `Push` 和 `Append` 构造出来的休斯列表，在调用 `ToStack` 时会消耗 O(n) 的调用栈空间，而在 .NET 中调用栈的大小是固定分配的；即便只有几千个元素的列表，也可能触发栈溢出异常。
+
+本章一开始的不可变栈和队列实现并未在实现中使用递归；我们可以改用循环。不幸的是，休斯列表做不到这一点，因为它的数据结构被藏在委托的闭包里。对于这个委托，你唯一能做的事情就是——调用它！
+
+说到性能：我们已经展示 `Push`、`Append`、`Concatenate` 和 `IsEmpty` 都是 O(1)，但 `Pop` 是 O(n)，因为它必须调用 `ToStack`。难道我们不能也把 Pop 做成 O(1) 吗？似乎我们应该可以设计出一种连接委托，让它把“弹出”的执行也延迟到之后调用 `ToStack` 时再做。为什么不这么干呢？在往下读之前，先自己想一想。
+
+让 Pop 延迟执行有两个主要问题：
+
+- 如果 Pop 被延迟，那么 `ToStack` 的复杂度就会变成 O(n)，其中 n 是所有推入和弹出操作的总次数，而不是结果栈的大小。为了得到一个很小的结果栈，可能会经历数量巨大的推入与弹出操作。
+-  如果 Pop 是 O(1)，那么 `IsEmpty` 就无法再通过引用比较来实现了。举个例子，`HList<int>.Empty.Push(10).Pop()` 是一个空列表，但仅通过检查 `Pop` 产生的那个委托，我们完全没法知道这一事实。我们不得不通过调用 `ToStack`，并检查得到的栈是否为空来实现 `IsEmpty`。
+
+休斯列表擅长通过不断推入、追加与连接来累积列表，因此这些操作才是需要做到与列表大小无关（或者说次线性）的。
+
+### 反转链表
+
+现在我们可以观察到一个有趣的事实：休斯列表本身就是一个把一个栈追加到另一个栈上的函数。那么“把一个栈的反转追加到另一个栈上”的函数是什么？我们之前已经实现过它了；它就是我们的那个小辅助函数 `ReverseOnto`！让我们对 `FromStack` 做一个很小的改动，来创建一个新的休斯列表工厂方法：
+
+```c#
+public static HList<T> Reverse(IImStack<T> fromStack) =>
+	fromStack.IsEmpty ?
+ 	Empty :
+ 	Make(stack => fromStack.ReverseOnto(stack));
+```
+
+这个方法同样只是在构造一个委托，因此本身运行时间是 O(1)——当然，对它调用 `ToStack` 时会以 O(n) 时间运行，正如你所预料的那样；天下没有免费的午餐。下次有面试官要你实现“反转一个列表”时，就告诉 TA：如果可以使用休斯列表的话，不管被反转的列表多大，我都能在 O(1) 时间内完成。看看对方会不会说你“错了”。
+
+## 小结
+
+- 不可变数据结构比对应的可变数据结构更易于推理，并且往往更加安全
+- 结构共享（持久化）使不可变数据结构在空间上更高效
+- 不可变数据结构在时间上也可以做到高效，但要当心某些操作代价很高时带来的陷阱
+- 当程序状态是不可变的时，实现“撤销/重做”操作会非常直接
+- 休斯列表通过在未来以最优的顺序执行操作，改变了原本看似昂贵操作的性能成本，但也使得像 `Pop` 这样原本廉价的操作变得昂贵。天下没有免费的午餐，但成本可以被推迟到未来支付。
+- 我们依然还没有一个真正的双端队列（deque），也就是在列表两端推入与弹出都很便宜的结构。下一章我们将使用指树（finger trees）来实现一个这样的 deque。
