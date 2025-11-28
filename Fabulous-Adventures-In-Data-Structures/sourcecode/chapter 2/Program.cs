@@ -21,3 +21,4 @@ ReadLine();
 
 CovImmutableStack.SampleCode();
 ImmutableQueue.SampleCode();
+HughesList.SampleCode();
