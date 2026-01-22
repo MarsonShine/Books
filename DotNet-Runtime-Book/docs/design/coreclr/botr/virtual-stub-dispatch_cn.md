@@ -211,6 +211,121 @@ Token 表示与分派映射（Dispatch Map）的设计
 
 因此，观察该映射可以看到：槽位映射子映射的第一列对应于经典虚表视图中的槽位号（记住：System.Object 自己贡献了 4 个虚方法，为简洁起见此处省略）。方法实现的搜索总是自底向上进行。也就是说：如果我有一个类型为 _B_ 的对象，并且我希望调用 _I.Foo_，我会从 _B_ 的槽位映射开始查找 _I.Foo_ 的映射。若在 _B_ 中找不到，我会到 _A_ 的槽位映射中查找并在那里找到。它说明：_I_ 的虚槽位 0（对应 _I.Foo_）由虚槽位 4 实现。随后我回到 _B_ 的槽位映射中，查找虚槽位 4 的实现，并发现它由 _B_ 自己实现表中的槽位 1 实现。
 
+> ## 最上面：interface I
+>
+> 左边（Classic Virtual Table）画的是接口的“经典视角”：
+>
+> - `I.Foo prestub`：接口方法调用的入口（可以理解为一个通用 stub，会触发后续查映射）
+>
+> 右边（Implementation Table）：
+>
+> - 这里只有 `I.Foo prestub`，因为接口自己没有真正实现代码，只是个“调用入口”。
+>
+> 右边（Slot Map）：
+>
+> - `ID for I : ( slot 0 , scope I , 0* )`
+>
+> 这句的含义是：**I 的 slot0 就对应 I 自己实现表 index0**（也就是那个 prestub）。
+> 星号 `*` 表示“这条映射是可推导出来的，所以可以省空间/省存储”。
+>
+> > 这一部分主要是把“接口调用先落到 prestub”这件事表示出来。
+>
+> ## 中间：class A : I（A 引入 Foo 和 Bar）
+>
+> 左边（Classic Virtual Table）：
+>
+> - `A.Foo code ptr`
+> - `A.Bar code ptr`
+>
+> 注意：这里省略了 `System.Object` 的 4 个虚方法槽位（图上文字也说了）。
+> 所以你看到的 `A.Foo` 实际上在“全局虚槽位编号”里可能不是 0，而是往后排。
+>
+> 右边（Implementation Table）：
+>
+> - index0：`A.Foo code ptr`
+> - index1：`A.Bar code ptr`
+>
+> 说明：A 自己引入了两个虚方法体（Foo/Bar）。
+>
+> 右边（Slot Map）分两块（很关键）：
+>
+> ### 2.1 `ID for A` 那块：
+>
+> - `(4, scope A, 0*)`
+> - `(5, scope A, 1*)`
+>
+> 意思是：在“虚槽位编号”的意义下：
+>
+> - **虚槽位 4** 的实现来自 **A 的实现表 index0（A.Foo）**
+> - **虚槽位 5** 的实现来自 **A 的实现表 index1（A.Bar）**
+>
+> 为什么是 4/5？因为 `Object` 的 4 个虚方法占了 0..3（被省略了），所以 A 的新虚方法从 4 开始。
+>
+> ### 2.2 `ID for I` 那块：
+>
+> - `(0, scope virtual, 4)`
+>
+> 这是最容易卡住的地方：它在说 **接口槽位到类虚槽位的映射**：
+>
+> - “I.slot0（也就是 I.Foo）”
+>   先映射到 “虚槽位 4（也就是 A.Foo 这个虚槽位）”
+>
+> 也就是：
+>
+> > I.Foo ——(接口映射)→ 虚槽位 4（A.Foo 那个槽）
+>
+> 为什么不直接指向 A.Foo 的实现表 index0？
+> 因为它想复用“虚分派”的机制：先定位到某个虚槽位，再看真正运行时对象是谁（A 还是 B），最后得到最终 override 的实现。
+>
+> ## 最下面：class B : A（B override Foo，并引入 Baz）
+>
+> 左边（Classic Virtual Table）：
+>
+> - `B.Foo code ptr`（override 了 A.Foo，所以把虚槽位 4 的内容换成 B.Foo）
+> - `A.Bar code ptr`（没 override，所以还是 A.Bar）
+> - `B.Baz code ptr`（新引入的虚方法，排在后面）
+>
+> 右边（Implementation Table）：
+>
+> - index0：`B.Baz code ptr`
+> - index1：`B.Foo code ptr`
+>
+> 注意这里顺序：**先 newslot（Baz），再 override（Foo）**，符合文中规则。
+>
+> 右边（Slot Map）里 `ID for B`：
+>
+> - `(6, scope B, 0*)`
+> - `(4, scope B, 1)`
+>
+> 含义：
+>
+> - 虚槽位 **6** 的实现来自 B 实现表 **index0**（B.Baz）
+> - 虚槽位 **4** 的实现来自 B 实现表 **index1**（B.Foo，override 的那个）
+>
+> 这里没有 `ID for I` 的映射块，是因为 **B 没有改变“接口 I.slot0 映射到哪个虚槽位”** 这件事——它仍然是走父类 A 的映射：I.slot0 → 虚槽位 4。
+>
+> ## 用图走一遍：为什么调用 I.Foo 最终会到 B.Foo？
+>
+> 假设：
+>
+> ```
+> I x = new B();
+> x.Foo();
+> ```
+>
+> 运行时查找：
+>
+> 1. 从 **B 的 Slot Map** 开始找 “ID for I, slot0”的映射
+>    - B 里没有（图中确实没画）
+> 2. 去父类 **A 的 Slot Map** 找
+>    - 找到：`I.slot0 -> virtual slot 4`
+> 3. 现在我们知道：调用应该走“虚槽位 4”
+>    接下来回到“实际对象类型” **B** 的映射里查虚槽位 4：
+>    - 在 B 的 `ID for B` 块里找到：`virtual slot 4 -> scope B, index1`
+>    - B 的实现表 index1 是 `B.Foo`
+>
+> 因此最终执行 **B.Foo**。
+
 ### 额外用途
 
 需要注意的是：该映射技术可用于实现 methodimpl 对虚槽位的重映射（即当前类的映射中包含一个“虚槽位映射”，类似于接口槽位映射到虚槽位的方式）。由于映射具备作用域（scoping）能力，也可以引用非虚方法。如果将来运行时希望支持用非虚方法来实现接口，这可能会很有用。
@@ -220,6 +335,36 @@ Token 表示与分派映射（Dispatch Map）的设计
 槽位映射采用位编码，并利用典型接口实现模式中的 delta 值，从而显著减小映射大小。此外，新槽位（包括虚与非虚）可以由其在实现表中的顺序推导出来：如果实现表包含“新虚槽位 -> 新实例槽位 -> 重写”，那么合适的槽位映射条目就可以由实现表中的索引与父类继承的虚方法数共同推导出来。所有这类可推导的映射条目都用（\*）标注。当前数据结构布局采用如下模式，其中仅当无法由实现表顺序完全推导映射时，才会存在 DispatchMap。
 
 	MethodTable -> [DispatchMap ->] ImplementationTable
+
+> 运行时为了把“接口方法调用”和“虚方法调用”都快速定位到**最终要执行的那段代码**，维护了两类结构：
+>
+> 1. **Implementation Table（实现表）**：本类型“真正提供的那些方法体”的数组（存的是入口点指针）。
+> 2. **Slot Map（槽位映射）**：把“某个 type（接口或本类）里的某个 slot”映射到“该去执行哪里”（实现表的某个 index，或某个虚槽位）。
+>
+> ### “slot（槽位）”是什么？
+>
+> 可以把 **slot** 理解成“一个方法在某个表里的编号”。
+>
+> - **接口 I** 里 `Foo()` 是第 0 个方法，所以叫 **I.slot0**。
+> - **类的虚表（vtable）**里每个虚方法也占一个槽位：比如 `A.Foo`、`A.Bar` 等。
+>
+> ### Implementation Table（实现表）是什么？
+>
+> 它是“这个类型自己引入/提供的方法体”的顺序表。图中的文字也说了顺序是：
+>
+> 1. newslot 虚方法（新引入的虚方法）
+> 2. newslot 非虚方法（实例/静态）
+> 3. override 虚方法（重写的虚方法）
+>
+> 图右侧的 “Implementation Table” 方框，就是这个数组。
+>
+> ### Slot Map（槽位映射）是什么？
+>
+> 它是一张“查表规则”，键是：**(type-id, slot)**
+> 值是：最终该跳到哪里（两种可能）：
+>
+> - `scope = virtual`：值是一个**虚槽位号**，表示“先把接口槽位映射到类的某个虚槽位”，然后再按虚分派规则找最终实现。
+> - `scope = 某个类（A/B…）`：值是该类实现表里的 **index**，表示“直接就是这个类实现表的第几个方法体”。
 
 类型 ID 映射（Type ID Map）
 -----------
@@ -248,11 +393,11 @@ Token 表示与分派映射（Dispatch Map）的设计
 
 目前共有三类存根。下图展示了这些存根之间的一般控制流，下面会逐一解释。
 
-![Figure 2](images/virtualstubdispatch-fig2.png)
+![Figure 2](./asserts/virtualstubdispatch-fig2.png)
 
 ### 通用解析器（Generic Resolver）
 
-这实际上只是一个 C 函数，作为所有存根的最终失败路径。它接收一个 <_token_, _type_> 二元组并返回目标。通用解析器还负责：在需要时创建分派存根与解析存根、当更好的存根可用时修补间接单元（indirection cell）、缓存结果，以及所有簿记（bookkeeping）工作。
+这实际上只是一个 C 函数，作为所有存根的最终失败路径。它接收一个 `<_token_, _type_>` 二元组并返回目标。通用解析器还负责：在需要时创建分派存根与解析存根、当更好的存根可用时修补间接单元（indirection cell）、缓存结果，以及所有簿记（bookkeeping）工作。
 
 ### 查找存根（Lookup Stubs）
 
@@ -278,11 +423,11 @@ Token 表示与分派映射（Dispatch Map）的设计
 
 先前的接口虚表分派机制所产生的代码序列大致如下：
 
-![Figure 3](images/virtualstubdispatch-fig3.png)
+![Figure 3](./asserts/virtualstubdispatch-fig3.png)
 
 而典型的存根分派序列是：
 
-![Figure 1](images/virtualstubdispatch-fig4.png)
+![Figure 1](./asserts/virtualstubdispatch-fig4.png)
 
 其中 expectedMT、failure 与 target 都是编码在存根里的常量。
 
