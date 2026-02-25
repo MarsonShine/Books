@@ -111,17 +111,16 @@ Stage 5 产品化
     CoreCLR 的设计旨在尽量采用与 OS API 大体相似的 ABI。
     托管到托管（managed-to-managed）调用通常会对 ABI 做一小部分为了 VM 效率的调整或扩展，但总体意图是托管代码的 ABI 与本机代码的 ABI 非常相似。
     （这不是硬性要求；在 Windows x86 上，运行时既支持托管到托管 ABI，也支持用于互操作的 3 种不同的本机 ABI，但通常不建议这种方案。）
-    参见 [CLR-ABI](clr-abi.md) 文档了解现有体系结构是如何工作的。
+    参见 [CLR-ABI](clr-abi_cn.md) 文档了解现有体系结构是如何工作的。
     请确保在 CLR-ABI 文档中补齐新平台所需的所有细节与特殊情况。
     在为 CoreCLR 定义新的处理器架构 ABI 行为时，我们必须保持：
-
     1.  无论其他参数如何，`this` 指针始终在同一个寄存器中传递。
-
+    
     2.  多种 stub 类型将需要一个额外的“secret”参数。具体放置位置通常由性能细节驱动。
-
+    
     3.  执行托管代码时，必须能够劫持（hijack）返回地址。
         现有实现要求返回地址始终位于栈上才能做到这一点，尽管对于 arm64 之类的 RISC 平台而言，这是一个已知的性能缺陷。
-
+    
 2.  体系结构特定的重定位信息（用于表示为 load、store、jmp 与 call 指令生成重定位信息）。
     参见 <https://learn.microsoft.com/windows/win32/debug/pe-format#coff-relocations-object-only> 了解需要定义的那类细节。
 
@@ -327,7 +326,7 @@ VM 中对体系结构相关逻辑的支持以多种方式编码。
 #### virtualcallstubcpu.h
 
 该头文件用于为 virtual stub dispatch 提供各种 stub 的实现。
-这些 stub 是 lookup、resolver 与 dispatch stubs，正如 [Virtual Stub Dispatch](virtual-stub-dispatch.md) 中所描述。
+这些 stub 是 lookup、resolver 与 dispatch stubs，正如 [Virtual Stub Dispatch](virtual-stub-dispatch_cn.md) 中所描述。
 出于历史原因与体积原因（这里逻辑很多），它与 cgencpu.h 的其余部分分离维护。
 
 System.Private.CoreLib
@@ -345,3 +344,27 @@ System.Private.CoreLib
 -   为该体系结构增加对 System.Reflection.ImageFileMachine 枚举，以及 System.Reflection.ProcessorArchitecture 枚举与相关逻辑的支持
 
 -   为体系结构相关内在函数（如 SIMD 指令）或其他非标准 API surface 增加支持
+
+> ### 这里的 “Bring up” 是什么意思？
+>
+> 在底层开发（如操作系统内核、驱动、虚拟机运行时、甚至硬件芯片点亮）的语境中，**Bring up（通常翻译为“点亮”、“开荒”或“初步启动”）** 是一个非常标准的术语。
+>
+> 它指的是：**让一个庞大且复杂的系统，在一个全新的硬件环境（或新 CPU 架构）上，第一次成功跑起来的过程。**
+>
+> - **核心特征：** 不求性能好，不求功能全，只求**“别一上来就崩”**。
+> - 在本文档的具体表现：
+>   - 让 CoreCLR 的 C++ 代码能在这个新 CPU 架构下编译通过。
+>   - 把 GC（垃圾回收）设置成“保守模式”（不管三七二十一，先别回收内存，免得指针乱飞导致崩溃）。
+>   - 写最简单的手写汇编（Stub），让一个最简单的 C# `Hello World` 或者基础 `Assert` 测试能成功执行，并正常退出。
+> - **总结：** Bring up 就是从 `0` 到 `0.1` 的过程，证明这条路走得通。
+>
+> #### 底层技术雷区与“脏活”清单（微观实现）
+>
+> 就算大部分 .NET 运行时代码是用跨平台的 C++ 写的，但涉及**“机器码级别的灵魂交互”**时，必须针对新 CPU 架构（比如 ARM64、RISC-V）重写大量极其硬核的底层代码。文档列出了这些重点：
+>
+> 1. **ABI 与调用约定 (Calling Convention)：** 寄存器怎么用？参数怎么传？`this` 指针放哪个寄存器？必须和操作系统的规矩严丝合缝。
+> 2. **栈展开 (Stack Unwind) 与异常处理 (EH)：** 当抛出异常时，CPU 怎么顺着调用栈一层层找回去？不同 CPU 的指令和栈帧结构完全不同，这里的逻辑必须重写。
+> 3. 大头：必须手写的“汇编存根”(Assembly Stubs)：VM 和托管代码之间有很多“胶水代码”，因为 C++ 表达不了，必须手写纯汇编。文档给出了一个清单（这是整个移植工作中最难啃的骨头）：
+>    - **方法调度的胶水：** 比如 `ThePreStub`，负责在第一次调用某个方法时，挂起线程，去触发 JIT 编译。
+>    - **GC 交互的胶水：** 比如写屏障（Write Barrier），每次给对象赋值时，都要用最高效的汇编指令通知 GC。
+>    - **互操作胶水：** 比如 C# 调用 C/C++（P/Invoke）时，如何保存和恢复新 CPU 的寄存器状态。
