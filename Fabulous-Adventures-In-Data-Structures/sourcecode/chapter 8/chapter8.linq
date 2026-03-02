@@ -25,17 +25,18 @@ void Main()
 	var colors = ImmutableHashSet<Color>.Empty
 		.Add(Color.Red).Add(Color.Yellow)
 		.Add(Color.Green).Add(Color.Purple);
-		
+
 	southAmerica.Dump();
 	colors.Dump();
-	
+
 	southAmerica.ColorGraph(colors).Dump();
 }
 
-public struct Color {
+public struct Color
+{
 	public string value;
 	public Color(string value) => this.value = value;
-	
+
 	public static Color Red = new("Red");
 	public static Color Yellow = new("Yellow");
 	public static Color Green = new("Green");
@@ -114,6 +115,66 @@ public readonly struct ImGraph<N> where N : notnull
 			}
 		}
 		return result;
+	}
+}
+
+interface IReducer<K, V>
+where K : notnull
+where V : notnull
+{
+	ImMulti<K, V> Reduce(ImMulti<K, V> solver);
+}
+
+sealed class GraphColorReducer<N, C> : IReducer<N, C>
+where N : notnull
+where C : notnull
+{
+	private readonly ImGraph<N> graph;
+	public GraphColorReducer(ImGraph<N> graph) => this.graph = graph;
+	private (ImMulti<N, C>, bool) ReduceOnce(ImMulti<N, C> attempt)
+	{
+		bool progress = false;
+		var result = attempt;
+		foreach (N n1 in attempt.Keys.Where(k => attempt[k].Count == 1)) //#A
+		{
+			C c = attempt[n1].Single(); //#B
+			var elim = graph.Edges(n1).Where(n => attempt.HasValue(n,c));
+			foreach (N n2 in elim)
+			{
+				result = result.Remove(n2, c); //#C
+				progress = true;
+			}
+		}
+		return (result, progress);
+	}
+
+	public ImMulti<N, C> Reduce(ImMulti<N, C> attempt)
+	{
+		bool progress = false;
+		do
+		{
+			(attempt, progress) = ReduceOnce(attempt); //#D	
+		} while (progress);
+		return attempt;
+	}
+}
+
+sealed class Backtracker<N, C> where N : notnull where C : notnull
+{
+	private readonly IReducer<N, C> reducer;
+	public Backtracker(IReducer<N, C> reducer) => this.reducer = reducer;
+	public IEnumerable<ImMulti<N, C>> Solve(ImMulti<N, C> attempt)
+	{
+		attempt = reducer.Reduce(attempt);
+		if (attempt.Keys.Any(k => attempt[k].IsEmpty))
+			return [];
+		if (attempt.Keys.All(k => attempt[k].Count == 1))
+			return [attempt];
+		N guessKey = attempt.Keys.Where(k => attempt[k].Count > 1).First();
+
+		return attempt[guessKey]
+					.SelectMany(v =>
+		Solve(attempt.SetSingle(guessKey, v)));
 	}
 }
 
