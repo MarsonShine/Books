@@ -123,12 +123,12 @@ public abstract record class BinTerm
 		if (t1 == t2)
 			return true;
 
-		if (t1 is Hole h1 && h1.OccursIn(t2, subst)) // #D 到这里 t1 和 t2 都不是绑定的占位符
+		if (t1 is Hole h1 && !h1.OccursIn(t2, subst)) // #D 到这里 t1 和 t2 都不是绑定的占位符
 		{
 			subst.Add(h1, t2);
 			return true;
 		}
-		if (t2 is Hole h2 && h2.OccursIn(t1, subst))
+		if (t2 is Hole h2 && !h2.OccursIn(t1, subst))
 		{
 			subst.Add(h2, t1);
 			return true;
