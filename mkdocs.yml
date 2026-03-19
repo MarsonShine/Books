@@ -1,0 +1,108 @@
+site_name: MarsonShine's Books
+site_description: 读书笔记索引 - 涵盖 C#、分布式系统、操作系统、算法等领域
+site_author: MarsonShine
+site_url: https://marsonshine.github.io/Books/
+
+docs_dir: docs
+site_dir: site
+
+theme:
+  name: material
+  language: zh
+  features:
+    - navigation.tabs
+    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - search.highlight
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: 切换到深色模式
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: 切换到浅色模式
+
+plugins:
+  - search:
+      lang: zh
+
+markdown_extensions:
+  - toc:
+      permalink: true
+  - tables
+  - fenced_code
+  - admonition
+  - attr_list
+
+nav:
+  - 首页: index.md
+  - C# 异步:
+    - 简介: AsyncInCSharp/docs/index.md
+    - 编写异步方法: AsyncInCSharp/docs/Writing-Async-Methods.md
+    - Await 到底做了什么: AsyncInCSharp/docs/Await-Actually-Do-What.md
+    - 异步代码中的异常: AsyncInCSharp/docs/Exception-In-AsyncCode.md
+    - 异步代码性能: AsyncInCSharp/docs/Performance-Of-Async-Code.md
+    - 任务并行库数据流: AsyncInCSharp/docs/Task-Parallel-Library-Dataflow.md
+    - TAP 异步模式: AsyncInCSharp/docs/Task_base-Asynchronous-Pattern.md
+    - 异步编译器转换深入: AsyncInCSharp/docs/Async-Compiler-Transform-In-Deepth.md
+    - ASP.NET 中的异步: AsyncInCSharp/docs/Async-In-ASP-NET-Application.md
+    - 并行化异步代码: AsyncInCSharp/docs/Paralleslim-In-Async.md
+    - 异步工具: AsyncInCSharp/docs/Utilities-Async-Code.md
+    - 哪个线程运行代码: AsyncInCSharp/docs/Witch-Thread-Run-Code.md
+    - 常见异步模式: AsyncInCSharp/docs/Some-Asynchronous-Patterns-Used-In-Net.md
+    - 桌面 UI 应用: AsyncInCSharp/docs/Desktop-Users-Interface-Application.md
+  - 架构整洁之道: CleanArchitecture/README.md
+  - 代码整洁之道: CleanCode/README.md
+  - 编写高性能 .NET 代码: WHPerformanceDotNet/README.md
+  - C# 并发编程实战: ConcurrencyInCSharpCookbook/03ParallerBasic/README.md
+  - C# 指南:
+    - 简介: CSharpGuide/docs/index.md
+    - GetHashCode 指南: CSharpGuide/docs/Guidelines-And-Rules-For-GetHashCode.md
+    - 向量化指南: CSharpGuide/docs/vectorization-guidelines.md
+    - 高效安全代码: CSharpGuide/docs/Write_Safe_And_Efficient_Code.md
+  - 深入理解计算机系统 (CSAPP): CSAPP/README.md
+  - 深入理解 C#: CSharpInDepth/Readme.md
+  - 设计模式: DesignPattern/DesignPatternCore/README.md
+  - Effective Java: EffectiveJava/README.md
+  - Linux 相关: linux/doc/linux-guiding.md
+  - TCP/IP:
+    - 概述: TCPIP/README.md
+    - TCP/IP 协议: TCPIP/TCP-IP.md
+    - HTTP/2 协议: TCPIP/HTTP2-Protocol.md
+    - HTTP/3 协议: TCPIP/HTTP3-Protocol.md
+    - DNS: TCPIP/DNS.md
+    - UDP: TCPIP/UDP.md
+    - Socket: TCPIP/Socket.md
+  - Java 编程思想: ThinkingInJava/README.md
+  - TypeScript: ts/README.md
+  - DDIA:
+    - 概述: DDIA/README.md
+    - 数据复制: DDIA/data-duplication.md
+    - 数据分片: DDIA/data-sharding.md
+    - 事务: DDIA/transaction.md
+    - 一致性与共识: DDIA/consistency-and-consensus.md
+    - 流处理: DDIA/data-stream-dealing.md
+  - 垃圾回收算法与实现:
+    - 概述: GarbageCollection/README.md
+    - 标记清除 GC: GarbageCollection/mark-sweep-gc.md
+    - 复制 GC: GarbageCollection/copy-gc.md
+    - Go GC: GarbageCollection/GC-Golang.md
+  - 博客系列: blogs/README.md
+  - AI & LLMs: AI-LLMs/README.md
+  - Kubernetes:
+    - 概述: Kubernetes/README.md
+    - 网络: Kubernetes/network.md
+    - Service: Kubernetes/service.md
+  - 分布式系统:
+    - 概述: distsys/README.md
+    - 简介: distsys/intro.md
+    - 复制: distsys/replication.md
+    - 时间: distsys/time.md
+    - 最终一致性: distsys/eventual.md
