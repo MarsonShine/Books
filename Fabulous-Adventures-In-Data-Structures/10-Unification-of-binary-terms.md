@@ -152,9 +152,11 @@ ImStack(2,Y)
 - 当我们在右侧递归时，我们统一占位符 Y 和项 stackOne，将该映射添加到置换中，并成功返回。
 
 我们会得到这样的置换：
+{% raw %}
 ```csharp
 var subst = new Dictionary<Hole, BinTerm>{{X, two}, {Y, stackOne}};
 ```
+{% endraw %}
 我们可以证明这个置换使两棵树相等。这段代码：
 ```csharp
 Console.WriteLine(term1.Substitute(subst));
