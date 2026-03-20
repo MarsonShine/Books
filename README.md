@@ -28,8 +28,10 @@
 ### 安装依赖
 
 ```bash
-pip install mkdocs-material
+python -m pip install "mkdocs<2" mkdocs-material
 ```
+
+当前 `Material for MkDocs` 还未支持 MkDocs 2，因此这里显式约束到 `MkDocs 1.x`，避免本地和 CI 安装到不兼容版本。
 
 ### 本地预览
 
@@ -38,6 +40,8 @@ mkdocs serve
 ```
 
 启动后访问 http://127.0.0.1:8000/ 即可预览站点。
+
+构建前会自动通过 `hooks/prepare_docs.py` 生成 `_mkdocs_docs/`，把 `docs/` 下的链接映射展开为真实目录，因此在 Windows 上也不需要额外处理 Git symlink。
 
 ### 构建静态文件
 

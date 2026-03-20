@@ -4,11 +4,15 @@
 
 # MkDocs build output
 site/
+_mkdocs_docs/*
+!_mkdocs_docs/.gitignore
 
 /CSharpInDepth/.vs/CSharpIndepth/v15/Server/sqlite3
 /.vs
 /.vscode
 .vscode/
+__pycache__/
+*.pyc
 [Oo]bj/
 [Bb]in/
 .idea/
