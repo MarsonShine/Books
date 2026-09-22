@@ -1,3 +1,5 @@
+- 2026
+  - [读懂 .NET 11 性能改进：从 JIT 到异步、集合与网络](2026/performance-improvements-in-net-11.md)
 - 2021
   - [actor 模型](2021/actor-model.md)
   - [循环对齐（loop alignment）](2021/loop-alignment.md)
