@@ -1,3 +1,7 @@
 <Solution>
+  <Project Path="cbor/cbor.csproj" />
   <Project Path="dotnet11-features.csproj" />
+  <Project Path="ef-sqlite/ef-sqlite.csproj" />
+  <Project Path="web/web.csproj" />
+  <Project Path="winforms/winforms.csproj" />
 </Solution>
