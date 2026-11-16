@@ -1,39 +1,76 @@
-# 联合类型 JSON 与异步数据验证
+# JSON 联合类型与异步验证
 
-在仓库根目录运行：
+[AdvancedDemos.cs](../AdvancedDemos.cs) 包含两个例子：根据 JSON 字段判断联合类型的分支，以及等待一条异步验证规则。它们都在本机运行；示例里的查询用短暂延时代替，不连接数据库或远端服务。
 
 ```powershell
 dotnet run --project CSharpGuide/dotnet11-features -c Release -- advanced
 ```
 
-代码在 [AdvancedDemos.cs](../AdvancedDemos.cs)。示例用本地延时模拟查询，不访问数据库或远端服务。
+命令在仓库根目录执行。
 
-## JSON 里两个分支都是对象，怎么知道该创建哪个？
+## 收到一个 JSON 对象，应该还原成哪种通知？
 
-物流通知可能是 `ParcelArrived`（已送达，包含收件人），也可能是 `ParcelDelayed`（已延迟，包含延迟小时数）。C# 的 `DeliveryNotice` 联合类型允许它装下其中任意一个。
+物流系统有两种通知：`ParcelArrived` 记录单号和收件人，`ParcelDelayed` 记录单号和延迟小时数。代码用联合类型 `DeliveryNotice` 表示这两种结果：
 
-序列化时，.NET 11 会直接写出当前分支的 JSON。问题出在反序列化：两个分支都是 `{ ... }`，只看第一个字符无法区分。
-
-示例在 union 上配置 `JsonUnionTypeStructuralClassifier`，让序列化器根据根对象的字段缩小候选范围：
-
-```text
-{"TrackingId":"P123","Recipient":"小王"}  → ParcelArrived
-{"TrackingId":"P123","DelayHours":3}      → ParcelDelayed
-{"TrackingId":"P123"}                     → 无法唯一判断，抛 JsonException
+```csharp
+public union DeliveryNotice(ParcelArrived, ParcelDelayed);
 ```
 
-最后一种输入只提供了两种通知都有的单号；调用方不能猜测它是哪一种。实际字段规则还受到必填字段、JSON 命名配置影响。分类器检查的是根字段与要求，不会根据字段值或嵌套对象内容推断业务含义。
+.NET 11 可以把联合类型当前的值直接写成 JSON，再读回来。如果一个分支是数字、另一个是字符串，读取时看到 `123` 或 `"abc"` 就能判断类型。但本例的两个分支都是对象，都以 `{` 开头，光看 JSON 值的类型还不够。
 
-示例的 `DeliveryJsonContext` 由 JSON 源生成器创建类型元数据；`JsonSerializer.Deserialize(json, DeliveryJsonContext.Default.DeliveryNotice)` 明确使用生成结果。它展示了源生成和分类器如何配合，不意味着任何两个结构相同的对象类型都能被区分。协议允许增加标识字段时，显式且稳定的标识往往更容易维护。
+代码在 `DeliveryNotice` 上指定 `JsonUnionTypeStructuralClassifier`。它查看对象的根级字段，尝试找出唯一匹配的分支。运行后可以看到三种情况：
 
-## 异步验证：规则需要等数据库怎么办？
+```text
+有 TrackingId 和 Recipient  → ParcelArrived
+有 TrackingId 和 DelayHours → ParcelDelayed
+只有 TrackingId             → 无法唯一判断，抛出 JsonException
+```
 
-普通 `[Required]` 可以立即检查字段，但“会员编号是否存在”通常需要访问数据库或外部服务。用同步验证时阻塞等待会占住线程；把 `async` 方法当作普通同步方法调用又无法正确等待结果。
+第三种输入只有单号，而单号是两种通知都有的字段。序列化器没有足够信息确定分支，示例捕获异常并打印出来。
 
-`RegisteredCodeAttribute` 继承 `AsyncValidationAttribute`，在 `IsValidAsync` 里等待一个模拟查询。编号 `VIP-42` 通过，其他编号返回 `ValidationResult`。调用方必须使用 `Validator.ValidateObjectAsync`；失败时该方法抛 `ValidationException`。如果想自行收集多个错误，可以使用对应的 `TryValidateObjectAsync`。
+分类器根据根级字段名称和必需字段筛选候选类型，不会检查字段值或深入嵌套对象。例如两个分支的字段完全相同、只靠某个字段的值区分时，不能指望它自动理解这个业务规则；需要考虑明确的类型标识或自定义分类器。分类成功也不等于字段值通过了业务验证。
 
-`IsValid` 在示例里明确抛异常，防止有人改用同步验证时悄悄跳过异步规则。模拟延时接收 `CancellationToken`；实际数据库或 HTTP 调用也应继续传递它。这个示例只演示一次模型验证，不承担注册、事务或并发唯一性保证：即便预检查通过，真正写入时仍要由数据存储保证唯一性。
+### 类型信息从哪里来？
 
-`RangeAttribute.FormatMessage` 是另一项改进：验证规则知道自己的最小值和最大值，调用方可以提供本地化模板，规则再把参数填进去，不必自己猜测不同属性的格式参数。
+示例还声明了一个由源生成器处理的上下文：
 
-参考：[System.Text.Json 联合类型](https://learn.microsoft.com/en-us/dotnet/standard/serialization/system-text-json/union-types)、[.NET 11 异步验证](https://learn.microsoft.com/en-us/dotnet/core/whats-new/dotnet-11/libraries#asynchronous-validation-with-dataannotations)。
+```csharp
+[JsonSerializable(typeof(DeliveryNotice))]
+internal partial class DeliveryJsonContext : JsonSerializerContext;
+```
+
+调用 `JsonSerializer.Deserialize` 时，代码传入 `DeliveryJsonContext.Default.DeliveryNotice`。这份元数据由源生成器在编译时生成，告诉序列化器如何处理 `DeliveryNotice`；分类器再根据输入选择具体分支。
+
+源生成解决的是类型元数据的准备方式，分类器解决的是两个对象分支如何区分。两者配合使用，并不能让形状相同的对象自动变得可区分。字段是否必需、JSON 命名规则等也会影响匹配。完整限制和自定义方式见 [System.Text.Json 联合类型文档](https://learn.microsoft.com/en-us/dotnet/standard/serialization/system-text-json/union-types)。
+
+## 验证会员编号时，需要等一次查询
+
+`MemberApplication` 有一个 `MemberCode` 属性。示例给它加了两条规则：`[Required]` 检查是否提供了值，`[RegisteredCode]` 则模拟查询编号是否存在。
+
+后者继承 `AsyncValidationAttribute`，在 `IsValidAsync` 中等待一个短暂延时。这里延时只是为了模拟异步查询：`VIP-42` 被当作存在，其他编号返回“会员编号不存在”。实际程序可以在这个方法里调用数据库或远端服务。
+
+调用方使用异步验证入口：
+
+```csharp
+await Validator.ValidateObjectAsync(
+    model,
+    new ValidationContext(model),
+    validateAllProperties: true);
+```
+
+示例分别验证 `VIP-42` 和 `UNKNOWN`。前者通过，后者抛出 `ValidationException`，`catch` 读取并打印错误信息。如果调用方希望收集验证结果而不是通过异常处理，可以使用对应的 `TryValidateObjectAsync`。
+
+`RegisteredCodeAttribute` 的同步 `IsValid` 有意抛异常：这条规则需要等待，若误用同步验证入口，程序应明确报错，而不是让调用方误以为规则已经执行。异步方法接收取消令牌，示例将它传给 `Task.Delay`；换成数据库或 HTTP 查询时，也应继续传递。
+
+“编号存在”的预检查只能反映查询当时的状态。它不代替真正写入数据时的约束或事务；如果业务要求编号唯一，仍要由数据存储保证。
+
+### 让验证规则填充错误消息
+
+最后一个例子使用 `RangeAttribute(1, 10)` 和 `FormatMessage`：
+
+```csharp
+var range = new RangeAttribute(1, 10);
+string message = range.FormatMessage("{0} 必须在 {1} 到 {2} 之间", "数量");
+```
+
+输出是“数量 必须在 1 到 10 之间”。消息模板由调用方提供，最小值和最大值由 `RangeAttribute` 填入，适合需要统一或本地化错误消息的验证入口。[.NET 11 异步验证说明](https://learn.microsoft.com/en-us/dotnet/core/whats-new/dotnet-11/libraries#asynchronous-validation-with-dataannotations)

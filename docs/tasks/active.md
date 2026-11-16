@@ -2,10 +2,10 @@
 
 Status: idle
 Task: none
-Next: 等待用户下一项任务。
+Next: 等待新的用户任务。
 
 ## 最近完成
 
-- 补充 .NET 11 正式版示例：`CSharpGuide/dotnet11-features/README.md`。
-- 主项目、Web、EF SQLite、CBOR、WinForms 非交互模式、环境分组和 SDK 脚本已实际运行；详见 `docs/status.md`。
-- 没有编写单元测试，也没有推送。
+- 重写 .NET 11 示例项目文档，入口：`CSharpGuide/dotnet11-features/README.md`。
+- 主项目构建与全部控制台示例、CBOR、EF SQLite、WinForms 非交互示例运行通过；Web 构建、文档链接和 harness 检查通过，详见 `docs/status.md`。
+- 未修改示例代码，未新增单元测试；改动已提交，尚未推送。

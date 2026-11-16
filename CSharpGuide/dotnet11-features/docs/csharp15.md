@@ -1,39 +1,144 @@
-# C# 15：把数据范围和控制流写清楚
+# C# 15：从项目示例开始
 
-运行 `dotnet run --project CSharpGuide/dotnet11-features -c Release -- language`，并对照 `LanguageDemos.cs` 阅读。本项目目标为 `net11.0`，默认使用 C# 15；下面的示例不需要开启 preview。
+在仓库根目录运行：
 
-## 集合表达式也能传构造参数
+```powershell
+dotnet run --project CSharpGuide/dotnet11-features -c Release -- language
+```
 
-`["CSharp", "csharp"]` 以前只能表达放哪些元素，无法同时指定集合的比较规则。现在 `HashSet<string> tags = [with(StringComparer.OrdinalIgnoreCase), "CSharp", "csharp", "NET"];` 可以把比较器传给集合构造过程。两个大小写不同的 CSharp 因此只保留一个。
+示例代码在 [LanguageDemos.cs](../LanguageDemos.cs)。项目以 `net11.0` 为目标，并显式指定 C# 15，因为仓库上层的 `Directory.build.props` 将语言版本设为 C# 10。本页介绍的示例不需要 preview 语言版本。
 
-`[with(capacity: 8), 10, 20, 30]` 同样可以为 `List<int>` 预留容量。容量是内部可容纳空间，`Count` 仍是实际元素数。`with(...)` 必须位于集合表达式开头，并且目标集合的构造或工厂需要支持对应参数。
+## 创建集合时，指定比较规则和容量
 
-## union：返回商品，或者返回找不到的原因
+集合表达式可以写出元素：
 
-`ProductResult` 有两个分支：`Product` 和 `MissingProduct`。调用者可以对返回值写 switch：一个分支显示商品，另一个解释商品不存在。相比把错误原因藏在 null 里，类型本身告诉调用方有哪些结果。
+```csharp
+HashSet<string> tags = ["CSharp", "csharp", "NET"];
+```
 
-联合类型提供分支到 union 的隐式转换。switch 穷尽性检查可以提醒我们处理遗漏的分支；默认值及可空性仍需要按实际类型和编译器警告处理。union 不意味着每种情况都绝不分配，也不自动提供跨版本序列化协议。运行 `language` 看两个分支的输出，再试着新增一种分支，观察编译器警告。
+默认的字符串比较会区分大小写，因此前两个字符串是不同元素。如果希望它们被当成同一个值，创建 `HashSet` 时就要传入比较器。C# 15 允许在集合表达式开头用 `with(...)` 传参：
 
-## closed：限制哪些类型能直接继承
+```csharp
+HashSet<string> tags =
+    [with(StringComparer.OrdinalIgnoreCase), "CSharp", "csharp", "NET"];
+```
 
-`closed record PaymentState` 让编译器知道本程序集里的直接子类型。这里 `Pending` 和 `Paid` 覆盖了两个分支，switch 就可以直接写出完整处理。
+现在两个 CSharp 只保留一个，程序输出的集合数量是 2。比较器属于集合创建时的设置，必须在添加元素之前确定；`with(...)` 因此也必须位于集合表达式的开头。
 
-注意这个限制不是自动向下传递：如果一个直接子类仍然允许被继承，其他程序集仍可能扩展它。需要真正封闭到叶子时，可以让中间类型继续 `closed` 或让叶子类型 `sealed`。本示例将两个叶子类型标为 sealed。
+示例还创建了一个列表：
 
-## 扩展索引器：好看不代表随机访问免费
+```csharp
+List<int> prices = [with(capacity: 8), 10, 20, 30];
+```
 
-`EnumerableIndexer` 让 `IEnumerable<int>` 支持 `sequence[1]`，内部调用 `ElementAt`。如果底层是普通可枚举序列，找第 100 项可能需要从头遍历；语法看起来像数组，并不改变算法复杂度。已经有实例索引器时，也不能假定扩展索引器会取代实例成员。
+容量 8 表示列表预先准备了容纳元素的空间，实际放入的仍只有三个数，所以 `Capacity` 是 8，`Count` 是 3。能传哪些参数取决于目标集合的构造方法或工厂，不能给所有集合随意指定同一组参数。
 
-## 带标签的 break 和 continue
+## 查询结果可以是商品，也可以是“未找到”
 
-网格示例找到目标后使用 `break outer`，直接退出外层循环。普通 `break` 只退出当前内层循环。第二个循环遇到 9 时用 `continue rows` 跳到下一行；标签必须标在相应的外层结构上。
+查看 `ProductResult` 的定义：
 
-## 非虚静态接口成员
+```csharp
+public record Product(string Name, decimal Price);
+public record MissingProduct(string Id);
+public union ProductResult(Product, MissingProduct);
+```
 
-`ITemperature.CelsiusToFahrenheit` 是接口上的普通静态辅助方法，通过接口名直接调用。C# 15 放宽了这类方法在旧目标运行时上的使用限制。这与 `static abstract` 泛型数学契约是两类功能；在 net11.0 下运行只能看到调用行为，不能单凭它证明旧运行时兼容性。
+它声明了两种可能的结果。找到商品时返回 `Product`；没有找到时返回 `MissingProduct`，里面还能带上请求的编号。
 
-## Memory safety 仍是预览
+两种值可以隐式转换成 `ProductResult`：
 
-C# 15 的内存安全规则调整仍处于 preview，需要预览语言版本及相应编译开关。它改变指针声明、解引用及 unsafe 调用责任的划分，不是本项目默认启用的正式特性。动手前应阅读 [官方说明](https://learn.microsoft.com/en-us/dotnet/csharp/whats-new/csharp-15#memory-safety) 和目标 SDK 文档，不要把试验代码的限制误当成 GA 合同。
+```csharp
+ProductResult found = new Product("键盘", 120m);
+ProductResult missing = new MissingProduct("P-404");
+```
 
-参考：[C# 15 官方发布说明](https://learn.microsoft.com/en-us/dotnet/csharp/whats-new/csharp-15)。
+调用方再通过 `switch` 分别处理：
+
+```csharp
+string message = found switch
+{
+    Product p => $"找到商品 {p.Name}，价格 {p.Price}",
+    MissingProduct m => $"商品不存在：{m.Id}"
+};
+```
+
+比起用一个 `null` 既表示找不到商品，又把原因放在别处，联合类型把结果的几种情况放进了方法的类型声明。新增一种分支后，可以通过编译器的穷尽性检查发现没有处理的 `switch`。
+
+实际使用时仍要考虑默认值和可空性，留意编译器警告；联合类型本身也不承诺每个分支都不分配对象。若结果需要跨服务传输，还要单独决定 JSON 等协议怎样区分这些情况。
+
+## closed 类型让编译器知道直接子类型
+
+支付状态示例使用的是继承：
+
+```csharp
+public closed record PaymentState;
+public sealed record Pending : PaymentState;
+public sealed record Paid(decimal Amount) : PaymentState;
+```
+
+`closed` 限定 `PaymentState` 的直接派生类型只能在声明它的程序集中定义。编译器因此能看到这里列出的直接子类型，处理状态时可以分别写 `Pending` 和 `Paid`：
+
+```csharp
+string description = payment switch
+{
+    Pending => "待支付",
+    Paid p => $"已支付 {p.Amount}"
+};
+```
+
+这个限制不会自动传递给每一层。如果某个直接子类本身允许继续继承，其他程序集仍可能继承那个子类。本例把 `Pending` 和 `Paid` 都标为 `sealed`；层级更深时，也可以在需要限制的中间类上使用 `closed`。
+
+联合类型和封闭继承都能帮助调用方列出需要处理的情况，但它们的建模方式不同：前者声明一个值可以是哪几种类型，后者声明一组有继承关系的类型。
+
+## 给现有类型增加索引器
+
+项目在 `extension` 块里为 `IEnumerable<int>` 定义了一个索引器，内部调用 `ElementAt`。因此，下面的 `sequence` 虽然只声明为可枚举序列，也可以写 `sequence[1]`：
+
+```csharp
+IEnumerable<int> sequence = Enumerable.Range(10, 5).Where(x => x % 2 == 0);
+Console.WriteLine(sequence[1]); // 12
+```
+
+结果依次是 10、12、14，因此下标 1 取得 12。需要注意的是，这个索引器仍然调用 `ElementAt`：如果底层序列不能直接按索引访问，取得较后面的元素可能要从头遍历。写法像数组，不代表访问成本也和数组一样。
+
+扩展成员也不会随意取代类型已有的实例成员。声明和调用规则见 [C# 扩展成员文档](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/keywords/extension)。
+
+## 从嵌套循环退出，或者直接开始下一行
+
+网格示例逐行查找数字 9。普通 `break` 只能退出当前内层循环；找到目标后，如果还要停止外层循环，可以给外层循环命名：
+
+```csharp
+outer: for (int row = 0; row < grid.Length; row++)
+{
+    for (int column = 0; column < grid[row].Length; column++)
+    {
+        if (grid[row][column] == 9)
+            break outer;
+    }
+}
+```
+
+`break outer` 直接退出 `outer` 循环。项目中的完整示例在退出前记录了行、列，输出 `(1, 1)`。
+
+另一个循环统计不含 9 的行。内层一旦发现 9，就执行 `continue rows`，跳到外层的下一行，不再把当前行计入结果。标签需要标在相应的外层循环或 `switch` 上；不带标签的 `break` 和 `continue` 仍按原来的规则作用于最近的适用结构。
+
+## 接口上的普通静态方法
+
+`ITemperature` 定义了一个静态辅助方法，将摄氏温度转成华氏温度：
+
+```csharp
+public interface ITemperature
+{
+    public static double CelsiusToFahrenheit(double celsius) => celsius * 9 / 5 + 32;
+}
+
+Console.WriteLine(ITemperature.CelsiusToFahrenheit(25)); // 77
+```
+
+调用通过接口名完成，不需要创建实现该接口的对象。C# 15 放宽了普通的非虚静态接口成员在旧目标运行时上的使用限制。它与要求实现类型提供成员的 `static abstract` 泛型数学契约不同；本项目运行在 .NET 11 上，只演示调用方式，没有验证旧运行时兼容性。
+
+## 内存安全规则仍处于预览
+
+C# 15 的内存安全规则调整仍是 preview。它涉及哪些指针操作需要 `unsafe` 上下文，以及调用带有相关安全要求的方法时由谁承担检查责任。尝试这些规则需要预览语言版本；启用更新后的安全规则还需要 `updated-memory-safety-rules` 编译特性。本项目没有默认开启它们。
+
+完整语言规则和配置方式见 [C# 15 官方发布说明](https://learn.microsoft.com/en-us/dotnet/csharp/whats-new/csharp-15)，其中包括[内存安全预览说明](https://learn.microsoft.com/en-us/dotnet/csharp/whats-new/csharp-15#memory-safety)。

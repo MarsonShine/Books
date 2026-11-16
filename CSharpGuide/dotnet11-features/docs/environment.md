@@ -1,58 +1,55 @@
-# 进程、DNS 与 HTTP 指标：需要操作系统或网络的示例
+# 进程、DNS 和 HTTP 指标
 
-这里的三个例子在 `EnvironmentDemos.cs`。从仓库根目录运行（主项目入口为 `environment`）：
+[EnvironmentDemos.cs](../EnvironmentDemos.cs) 有三组需要和操作系统或网络打交道的示例。它们不会随 `all` 自动执行，需要在仓库根目录明确指定：
 
 ```powershell
-# 不访问外网；查找当前进程，再启动 dotnet --version
+# 查询当前进程，再启动 dotnet --version；不访问外网
 dotnet run --project CSharpGuide/dotnet11-features -c Release -- environment process
 
-# 只在本机 127.0.0.1 启动一次 HTTP 服务，不发送外网请求
+# 在本机回环地址启动临时 HTTP 服务，并采集客户端指标
 dotnet run --project CSharpGuide/dotnet11-features -c Release -- environment http
 
-# 真实 DNS 请求：明确填写需要查询的域名
+# 通过系统 DNS 查询域名的 MX 记录
 dotnet run --project CSharpGuide/dotnet11-features -c Release -- environment dns example.com
 
-# 可选：明确指定 DNS 服务器的 IP（服务器需要允许该机器发起查询）
+# 可选：指定 DNS 服务器 IP
 dotnet run --project CSharpGuide/dotnet11-features -c Release -- environment dns example.com 1.1.1.1
 ```
 
-`process` 需要本机 PATH 中有 `dotnet`；`http` 需要系统允许绑定回环地址和一个临时端口；`dns` 需要系统 DNS 或指定 DNS 服务器可达，示例仅在 Windows、Linux 和 macOS 上执行。DNS 的记录、TTL 和网络条件会随时间变化，不要把示例输出当作固定答案。查询会暴露给所使用的 DNS 服务器，请使用愿意公开查询的域名。
+`process` 需要 PATH 中能找到 `dotnet`；`http` 需要允许绑定 `127.0.0.1` 的临时端口；`dns` 需要能访问系统 DNS 或指定服务器，代码只在 Windows、Linux 和 macOS 上执行查询。DNS 服务器能看到所查的域名，运行时请填写愿意交给该服务器查询的名称。
 
-## 进程：逐行收输出，再拿退出状态
+## 查找进程、读取输出、等待退出
 
-`Process.TryGetProcessById` 返回 `bool`，找不到正整数 PID 时可返回 `false`，调用方可以不靠异常表达“进程不存在”。例子只查询自己的 PID，不探测其他人的进程。`Process` 实例用完要释放；查询成功也不代表另一个进程今后仍然存在，实际获取后仍可能退出。
+示例先用 `Process.TryGetProcessById(Environment.ProcessId, out ...)` 查找自己。方法返回 `bool`，调用方可以把“没有找到进程”当作普通情况处理；查找成功后得到的 `Process` 用完也要释放。
 
-接着程序启动自己的 `dotnet --version` 子进程，用 `ReadAllLinesAsync` 按行读取输出。每个 `ProcessOutputLine` 有 `Content` 和 `StandardError`，后者说明这行来自标准错误还是标准输出。两个管道异步收集的行不应拿来推断子进程在两个管道之间的严格写入顺序。
+接下来，程序启动 `dotnet --version`，使用 `ReadAllLinesAsync` 读取输出。每一行的 `ProcessOutputLine` 都有 `Content` 和 `StandardError`，可以区分标准输出与标准错误。两个管道分别收集，不能根据收到的行推断子进程跨两个管道写入的严格先后顺序。
 
-读取结束后，`WaitForExitStatusAsync` 给出 `ProcessExitStatus`：正常情况看 `ExitCode`；在 Unix 上若由信号终止，`Signal` 可提供终止信号。这个 API 在 Unix 上只能取得子进程的退出状态。示例设置十秒取消期限，并在超时后只请求结束它自己启动的子进程。
+读取结束后，`WaitForExitStatusAsync` 返回退出状态：正常退出时可以查看 `ExitCode`，Unix 上由信号终止时可以查看 `Signal`。在 Unix 上，这个 API 只能取得子进程的退出状态。示例设置了十秒期限，超时后只请求结束它自己启动的子进程。
 
-注意，取消 `WaitForExitStatusAsync` 只结束等待，本身不终止子进程。是否结束子进程应根据程序的所有权和用途决定，不要对从外部取得的 PID 随意执行终止。另见 [进程 API 说明](https://learn.microsoft.com/en-us/dotnet/core/whats-new/dotnet-11/libraries#diagnostics-and-process-execution)。
+取消等待并不会自动终止进程。是否需要终止，要看调用方是否拥有这个进程以及业务希望它怎样结束。[.NET 11 进程 API](https://learn.microsoft.com/en-us/dotnet/core/whats-new/dotnet-11/libraries#diagnostics-and-process-execution)还列出了句柄、挂起启动和信号相关的方法。
 
-## DNS：一次查询返回的不只有记录
+## MX 记录里有哪些信息
 
-以邮件域名为例，MX 记录告诉邮件发送方应联系哪些邮件服务器及其优先级。示例用 `Dns.ResolveMxAsync` 查询系统 DNS，再读取：
+邮件发送方可以通过 MX 记录找到负责接收某个域名邮件的服务器。示例调用 `Dns.ResolveMxAsync`，然后打印：
 
-- `ResponseCode`：DNS 服务器的响应码。
-- `Records`：MX 列表；每条记录包含 `Preference`、`Exchange` 和 `Ttl`。优先级数值较小的服务器一般优先。
-- `NegativeCacheTtl`：适用时建议缓存“不存在／没有该类型记录”结果的时间；值为零可能表示不适用或当前平台无法取得，不等于一定发生错误。
+- `ResponseCode`：DNS 响应码。
+- `Records`：返回的 MX 记录，每条包含优先级 `Preference`、服务器 `Exchange` 和 `Ttl`。优先级数值越小，通常越先尝试。
+- `NegativeCacheTtl`：适用时，对“不存在”或“没有该类型记录”的结果建议缓存多久。零可能表示不适用或平台没有提供该值。
 
-一次返回的记录数为零时，要先看响应码：域名不存在、该域名没有 MX 记录、查询发生错误是不同情况。仅凭 `Records.Count == 0` 不能断言域名不存在。某些域名返回交换主机 `.`，这是声明不接收邮件的特殊记录，也不代表查询出错。
+没有返回记录时，应结合响应码判断是域名不存在、没有 MX 记录，还是查询失败。有些域名返回交换主机 `.`，表示它声明不接收邮件，这也是一种有效结果。
 
-如果传入可选服务器 IP，代码通过 `DnsResolverOptions.Servers` 指定该服务器的 53 端口，再用 `DnsResolver.ResolveMxAsync` 查询；不改变机器的全局 DNS 设置。实例捕获选项时的服务器列表副本，后续修改选项不会改变已创建实例。公司网络可能拦截自定义 DNS，个别平台对服务器配置也有限制。示例传入取消令牌，最多等待约五秒。
+不指定服务器时，程序使用系统 DNS；指定 IP 时，会创建带 `DnsResolverOptions.Servers` 的 `DnsResolver`，把查询发往该地址的 53 端口。它不会修改系统全局 DNS 设置。公司网络可能阻止访问外部 DNS，示例最多等待约五秒。记录和 TTL 会变化，输出不必与别人的结果相同。
 
-相同思路可用 `ResolveTxtAsync`、`ResolveSrvAsync`、`ResolveNsAsync`、`ResolveCNameAsync` 等查询不同记录。选择记录类型由业务协议决定；MX 不是网站 IP，不能直接代替 A/AAAA 查询。[.NET 11 DNS 说明](https://learn.microsoft.com/en-us/dotnet/core/whats-new/dotnet-11/libraries#dns-record-resolution-apis)、[DnsResolver](https://learn.microsoft.com/en-us/dotnet/api/system.net.dnsresolver?view=net-11.0)。
+类似的 `ResolveTxtAsync`、`ResolveSrvAsync`、`ResolveNsAsync` 等方法用于查询其他类型；MX 记录不是网站的 A/AAAA 地址。[DNS 更新说明](https://learn.microsoft.com/en-us/dotnet/core/whats-new/dotnet-11/libraries#dns-record-resolution-apis)和 [DnsResolver API](https://learn.microsoft.com/en-us/dotnet/api/system.net.dnsresolver?view=net-11.0)列出了具体类型。
 
-## HTTP 客户端指标：为什么要主动采集
+## 在请求进行时查看 HTTP 指标
 
-.NET 11 的 `System.Net.Http` 指标中，`http.client.active_requests` 和 `http.client.open_connections` 是可观察指标。它们不是每次变化就主动向你的 `MeterListener` 推一个值；使用 `MeterListener` 自行采集时，需要调用 `RecordObservableInstruments()`。
+示例先用 `MeterListener` 订阅 `System.Net.Http` 的 `http.client.active_requests` 和 `http.client.open_connections`，然后在本机创建一个只处理一次请求的 TCP 服务。
 
-示例建立的只是本机临时 TCP 服务。过程是：
+`HttpClient` 发出 GET 后，服务端读完请求头，却暂时不发响应。此时请求仍在进行，程序调用 `RecordObservableInstruments()`，便能采集活动请求和连接的当前值。随后服务端返回 `OK`，程序再采集一次。
 
-1. 启动监听器，订阅 `System.Net.Http` 中这两个指标。
-2. `HttpClient` 向回环地址发起 GET；服务端收齐请求头，但暂时不发送响应。
-3. 此时调用 `RecordObservableInstruments()`，可以观察仍在进行的请求和活动连接及其标签。
-4. 放行服务端发送 `OK`，请求结束后再采集。服务端以 `Connection: close` 返回，回收完成时可能没有这两个活动时间序列，因此第二次没有数据不应一概判定为失败或直接推断为零。
+这两个指标是可观察指标：使用 `MeterListener` 时，需要主动调用 `RecordObservableInstruments()` 才会取得当前读数。回调还会收到服务器地址、协议、连接状态等标签；实际可能按不同标签组合返回多条数据。它们是某一时刻的状态，不能直接当作每秒请求数。
 
-监听器的回调收到的标签包含 URL scheme、服务器地址等。实际仪表可能按协议、请求方式和连接状态等维度分别报告多条记录；这些记录是快照，不能直接当作吞吐量。请求完成速度、连接池以及并发流量都会影响输出。示例有十秒超时，并释放 listener、客户端、服务端和连接。
+例子返回 `Connection: close`。请求结束、连接回收后，第二次采集可能没有对应的活动时间序列；没有输出不一定代表监听器失败，也不能直接当作数值零。整个示例有十秒超时，结束时会释放客户端和监听器。
 
-`SocketsHttpHandler.ShouldEvictConnection` 在 .NET 11 API 标记为实验性（`SYSLIB5008`），因此没有将它伪装成正式版默认示例。若日后采用，需要单独启用实验诊断并处理 API 可能变化。[HTTP 指标发布说明](https://learn.microsoft.com/en-us/dotnet/core/whats-new/dotnet-11/libraries#http-metrics-use-observable-instruments)、[连接回收 API](https://learn.microsoft.com/en-us/dotnet/api/system.net.http.socketshttphandler.shouldevictconnection?view=net-11.0)。
+`SocketsHttpHandler.ShouldEvictConnection` 目前标记为实验性 API（`SYSLIB5008`），本例没有启用。相关资料见 [HTTP 指标说明](https://learn.microsoft.com/en-us/dotnet/core/whats-new/dotnet-11/libraries#http-metrics-use-observable-instruments)与[连接回收 API](https://learn.microsoft.com/en-us/dotnet/api/system.net.http.socketshttphandler.shouldevictconnection?view=net-11.0)。

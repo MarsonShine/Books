@@ -1,65 +1,111 @@
-# Runtime Async、JIT、SIMD 和 GC：从示例看运行时做了什么
+# Runtime Async、JIT、SIMD 与 GC
 
-示例入口是 `RuntimeDemos.RunAsync()`，依次运行异步、JIT、SIMD 和 GC 示例。控制台显示的是程序结果和运行时状态；这些输出本身不能证明 JIT 消除了哪条指令，也不能作为性能测试结果。
+在仓库根目录运行下面的命令，程序会依次执行本文介绍的四组示例。对应代码在 [RuntimeDemos.cs](../RuntimeDemos.cs)。
 
-## Runtime Async：等待时把什么留下，完成后又怎么继续
+```powershell
+dotnet run --project CSharpGuide/dotnet11-features -c Release -- runtime
+```
 
-运行示例时，先看 `CalculateTotalAsync → AddDeliveryFeeAsync → LoadPriceAsync`：价格 120 加运费 10，再减优惠 20，结果是 110。
+控制台中的值可以帮助我们看清程序行为；想知道 JIT 有没有删除检查或减少分配，还需要看生成的代码或做性能测量。
 
-`cacheHit` 为 `true` 时，`LoadPriceAsync` 立即返回 120。调用方拿到 `Task<int>` 时操作已经完成，`await` 可以直接取得结果。
+## Runtime Async：一次计算，两种完成方式
 
-`cacheHit` 为 `false` 时，价格来自一个尚未完成的 `TaskCompletionSource<int>`。调用返回后，示例先检查任务是否完成，再调用 `SetResult(120)`。此时异步方法要先让出线程，运行时需要保留恢复位置和后续计算所需的信息；任务完成后才继续算运费和优惠。`TaskCompletionSource` 在这里替代真实网络请求，保证演示可离线、可重复。
+示例用三个异步方法计算价格。`LoadPriceAsync` 取得商品价格，`AddDeliveryFeeAsync` 加上运费，`CalculateTotalAsync` 再减去优惠：
 
-传统 C# 编译器会把异步方法变为状态机，通过 `MoveNext` 推进执行，并将方法的结果或异常交给返回的任务。Runtime Async 将挂起和恢复的更多安排交给运行时与 JIT。编译器生成能够表达异步方法和等待点的 IL；JIT 在可识别的直接调用加等待模式下，可以采用内部异步调用方式。同步完成时，上层有机会直接拿到值，而不必为每一层创建中间任务；真正挂起时，仍要保存继续执行所需的状态。
+```text
+商品价格 120 → 加运费 10 → 减优惠 20 → 最终价格 110
+```
 
-这里的“有机会”很重要：如果业务把中间任务存入集合、交给其他代码、检查状态或调用 `WhenAll`，它是调用方需要观察的对象，不能假定会消失。I/O 本身也可能需要自己的任务和缓冲区。不要凭源码有几个 `await` 就判断实际分配了几个对象。
+价格来自哪里，决定了这条调用链会不会暂停。
 
-示例最后将 `FormatException` 注入尚未完成的操作。外层依然通过 `await` 收到相同异常。优化后的运行时可越过没有处理异常的中间恢复记录，但用户编写的 `catch`、`finally` 仍须按语义执行。同步完成时的异常传播和挂起后的恢复路径也不完全相同。
+### 缓存命中：结果已经有了
 
-`AsyncLocal` 的输出演示另一个容易混淆的点：`ConfigureAwait(false)` 影响恢复时是否回到捕获的同步上下文或调度器，并不自动禁止 `ExecutionContext` 中的 `AsyncLocal` 流动。无同步上下文的控制台程序中，不能通过这个例子判断是否发生了线程切换。
+当 `cacheHit` 为 `true`，`LoadPriceAsync` 直接返回 120。上层的 `await` 拿到的结果已经完成，于是接着计算运费和优惠。调用返回时，最外层任务已经完成，程序会打印结果 110。
 
-### 比较两种编译方式
+源码中有三个 `async` 方法，并不意味着执行时一定会暂停三次。`await` 先看要等的操作是否已完成；完成了就直接继续。
 
-.NET 11 的应用代码需要在项目编译时启用 Runtime Async；框架库使用了它，不代表原来编译好的应用程序集会自动改变。本项目默认启用，它在项目文件中对应：
+### 缓存未命中：先返回，稍后继续
+
+当 `cacheHit` 为 `false`，`LoadPriceAsync` 等待一个尚未完成的 `Task<int>`。示例用 `TaskCompletionSource<int>` 控制它何时完成，这样不用真的请求网络，也能稳定地看到等待过程：
+
+```text
+调用 CalculateTotalAsync
+  → LoadPriceAsync 开始等待价格
+  → 调用方拿到尚未完成的任务，IsCompleted 为 False
+  → 调用方执行 gate.SetResult(120)
+  → 等待价格的方法继续，依次算出 130 和 110
+```
+
+等待期间线程可以去做其他工作。以后继续计算时，程序还得知道从哪一步继续，以及运费是 10 这样的信息。无论采用哪种异步实现，这些需要跨等待保留的数据都不能丢失。
+
+### Runtime Async 改变了哪一步
+
+传统方式下，C# 编译器为异步方法生成状态机。状态机记录执行进度，`MoveNext` 负责推进；方法的结果或异常通过它返回的任务交给调用方。
+
+Runtime Async 把更多挂起和恢复的安排交给运行时与 JIT。编译器在 IL 中保留异步方法和等待点的信息，JIT 看到“调用一个异步方法后立即等待其结果”时，有机会使用内部异步调用方式。
+
+拿缓存命中来说：`AddDeliveryFeeAsync` 只想取得价格，随后立刻加上运费。JIT 如果识别并优化了这次直接调用，就有机会直接把 120 交给它，减少为中间一层创建任务、再从任务取出结果的工作。最外面的调用方仍按 `Task<int>` 的公开签名使用 `CalculateTotalAsync`。
+
+缓存未命中时则不同：120 还没算出来，运行时仍须保存恢复位置、运费等信息。Runtime Async 能改变这些步骤的组织方式，不会让一次真正的等待凭空消失。
+
+如果调用方把一个任务存起来、传给别的代码，或者用它检查状态，那个任务对象就是程序要使用的结果，不能假定它会被省掉。I/O 自身也可能需要任务和缓冲区。仅凭源码中 `await` 的数量，无法算出实际分配了多少对象。
+
+### 异常和上下文
+
+示例还创建了一个未完成的价格任务，然后用 `SetException` 让它以 `FormatException` 结束。异常会沿调用链传播，最终由调用方的 `await` 抛出，并被示例中的 `catch` 捕获。
+
+传统状态机可能在每一层把异常记入本层任务，再由上一层 `await` 取出并重新抛出。Runtime Async 在符合条件的调用链中，可以越过没有处理异常的中间恢复记录，减少这些中转。代码里自己写的 `catch` 和 `finally` 仍然要照常执行。异常发生在暂停之前，还是在暂停后恢复时发生，内部传播路径也会不同。
+
+示例还在调用前设置了 `AsyncLocal` 的 `RequestId`。即使 `LoadPriceAsync` 使用 `ConfigureAwait(false)`，恢复后仍能读到它。这是因为 `ConfigureAwait(false)` 控制的是是否返回捕获的同步上下文或调度器，它不会自动阻止 `ExecutionContext` 中的 `AsyncLocal` 流动。控制台程序一般没有同步上下文，示例的输出也不能用来判断是否切换了线程。
+
+### 在本机比较两种编译方式
+
+项目默认开启 Runtime Async，项目文件中对应的设置是：
 
 ```xml
 <Features>$(Features);runtime-async=on</Features>
 ```
 
-在项目目录下运行下面的命令，对照两种编译方式：
+在 `CSharpGuide/dotnet11-features` 目录下，先运行默认版本，再关闭开关重新构建：
 
 ```powershell
 # 默认启用 Runtime Async
 dotnet build -c Release -t:Rebuild
 dotnet run -c Release --no-build -- runtime
 
-# 不启用 Runtime Async，重新编译整个项目
+# 使用传统编译方式
 dotnet build -c Release -t:Rebuild -p:EnableRuntimeAsyncDemo=false
 dotnet run -c Release --no-build -- runtime
 
-# 恢复本项目的默认编译方式
+# 恢复默认设置
 dotnet build -c Release -t:Rebuild
 ```
 
-切换属性后要使用 `-t:Rebuild`。实测普通增量构建可能沿用上一次的编译结果，反射观察也就不会随设置改变。
+程序会用反射检查 `CalculateTotalAsync` 是否带有 `AsyncStateMachineAttribute`。对这个示例方法，默认编译结果通常显示 `False`，关闭开关后显示 `True`。切换时使用 `Rebuild`：普通增量构建可能继续使用上一次的产物。不同方法可能因为代码形态而回退到传统方式，因此一个方法的属性不能代表整个应用。
 
-示例用反射打印 `CalculateTotalAsync` 是否带 `AsyncStateMachineAttribute`：对于该示例方法，这能帮助观察编译方式；不同代码形态可能走传统回退，不能仅凭一个属性判断整个应用是否启用。`Task`、`Task<T>`、`ValueTask`、`ValueTask<T>` 是 Runtime Async 支持的方法返回类型；`async void`、异步迭代器和自定义 task-like builder 不应直接套用这一机制。
+这个编译开关针对自己的应用代码；框架库采用哪种方式，取决于框架自身怎样编译。Runtime Async 支持返回 `Task`、`Task<T>`、`ValueTask` 和 `ValueTask<T>` 的适用方法。`async void`、异步迭代器和自定义 task-like builder 不应直接套用上面的实现过程。
 
-对照实验使用同一个 SDK、同一个运行时和相同输入。分别测立即完成、确实挂起、异常三条路径；将计时和分配交给 BenchmarkDotNet 等工具，不用控制台输出的耗时推断吞吐量。
+要比较性能，应使用相同 SDK、运行时和输入，分别测量同步完成、真正挂起和异常三条路径。可以用 BenchmarkDotNet 记录耗时和分配量，控制台输出本身不是基准测试。
 
 参考：[.NET 11 Runtime Async](https://learn.microsoft.com/en-us/dotnet/core/whats-new/dotnet-11/runtime#runtime-async)、[运行时规范草案](https://github.com/dotnet/runtime/blob/main/docs/design/specs/runtime-async.md)、[代码生成说明](https://github.com/dotnet/runtime/blob/main/docs/design/coreclr/botr/runtime-async-codegen.md)。
 
-## JIT：先知道哪些事情已经成立
+## JIT：前面的判断可以帮后面省一次检查
 
-`StartsWith` 先判断 `span.IsEmpty`，只有非空才读取第一个元素。非空意味着长度至少为 1，所以进入右侧时访问 `[0]` 必然安全。JIT 可以利用这条信息，不再生成重复的下标检查。空输入仍然返回 `false`；安全语义没有改变。
+示例里的 `StartsWith` 先检查 span 是否为空，再读取第一个元素：
 
-`ToByte` 先限制输入不大于 80。`uint` 本身不可能为负，而 `byte` 能表示 0 到 255，因此 `checked((byte)value)` 在该分支中不会溢出。JIT 可能删掉不必要的溢出检查。`IsSmall` 的连续值判断也可能合并成范围比较。
+```csharp
+!values.IsEmpty && values[0] == expected
+```
 
-接口调用示例展示正常的面向接口代码。JIT 如果能够证明调用对象的具体类型，就能把接口调用改成直接调用，并有机会进一步内联；不能证明时仍要保留一般调用。只看到结果是 100 并不能证明去虚拟化发生了。
+`&&` 左边为 `false` 时，右边不会执行。能读到 `values[0]`，说明前面的检查已经确认 span 非空。JIT 可以利用这个条件，省去访问第一个元素时重复的边界检查。空输入仍然返回 `false`，不会因为优化而去访问不存在的元素。
 
-### 查看生成的代码
+`ToByte` 也是类似的例子。它先判断 `uint` 值是否不大于 80，再执行 `checked((byte)value)`。进入转换分支时，值一定在 0 到 80 之间；而 `byte` 可以容纳 0 到 255，因此这次转换不可能溢出。JIT 有机会去掉多余的溢出检查。`IsSmall` 的 `0 or 1 or 2 or 3 or 4` 则可能被合并成范围判断。
 
-用 Release 构建，在项目目录下打开 PowerShell，观察指定方法的反汇编：
+接口示例将 `Discount` 作为 `IRule` 调用。若 JIT 能确定实际类型是 `Discount`，就有机会改成直接调用，甚至把方法内容内联；无法确定时，需要保留一般的接口调用。程序打印 100 只说明算出了预期值，不能证明采用了哪种机器代码。
+
+### 看看 JIT 生成了什么
+
+在项目目录下，可以用 PowerShell 查看 `StartsWith` 的反汇编：
 
 ```powershell
 $env:DOTNET_TieredCompilation = '0'
@@ -69,44 +115,55 @@ Remove-Item Env:DOTNET_JitDisasm
 Remove-Item Env:DOTNET_TieredCompilation
 ```
 
-如果主程序使用了不同的章节参数，请以项目 README 为准。关闭分层编译只是让这次查看更容易聚焦优化后的代码，不能拿这个配置直接代表应用默认性能。实际输出随架构、构建方式和运行时版本而变化。可比较守卫和访问相关的机器指令，也可以在不同版本分别查看，不能保证一定出现特定指令或 `CORINFO_HELP_RNGCHKFAIL` 名称。
+这里关闭分层编译，是为了更容易集中观察优化后的代码，不代表应用默认运行配置。不同 CPU 和运行时版本生成的指令可能不同；比较时应关注前面的非空判断和后面的读取之间有没有重复检查，而不是只寻找某个固定的辅助方法名。[官方 JIT 改进说明](https://learn.microsoft.com/en-us/dotnet/core/whats-new/dotnet-11/runtime#jit-improvements)
 
-[官方 JIT 改进说明](https://learn.microsoft.com/en-us/dotnet/core/whats-new/dotnet-11/runtime#jit-improvements)
+## SIMD：130 个整数，最后两个怎么处理
 
-## SIMD：130 个 int 为什么最后还剩两个
+`Vector128<int>` 中的 128 是位数。一个 `int` 占 32 位，所以一个向量能放四个整数，`Vector128<int>.Count` 返回 4。
 
-`Vector128<int>` 的 128 是**位数**；一个 `int` 是 32 位，因此每次处理 4 个整数，而不是 128 个整数。两个长度为 130 的数组相加时，示例的完整向量循环处理下标 `0..127`，再用普通循环处理下标 `128`、`129`。目标数组单独分配，避免与输入发生重叠。
+示例把两个长度为 130 的数组逐项相加。完整向量循环每次处理四项，处理完下标 0 到 127 后，还剩下 128 和 129。第一种写法用普通循环逐项计算这两个值。
 
-.NET 11 新增了向量元素组合 API。示例用 `CreateGeometricSequence(1, 2)` 得到 `[1, 2, 4, 8]`，再把 `[1, 2, 3, 4]` 与 `[10, 20, 30, 40]` 交错，得到 `[1, 10, 2, 20]` 和 `[3, 30, 4, 40]`。这些 API 用来表达数据排列，不会自动替数组相加循环处理尾部。
-
-示例接着用 `Unzip` 把两份交错结果还原成原来的两个向量。`Reverse` 把 `[1, 2, 3, 4]` 反转为 `[4, 3, 2, 1]`；`ConcatLowerLower` 把两个向量各自的前半段拼在一起，得到 `[1, 2, 10, 20]`。这些操作处理的是向量内已有元素的位置，不是对整段任意长度数组自动执行循环。
-
-尾部除了逐项处理，还可以重算末尾一整个向量。示例的 `AddWithOverlappingTail` 对同一份输入运行第二次：
+示例还用 `AddWithOverlappingTail` 算出另一份结果。它处理完完整向量后，从数组末尾往前取四项，再计算一次：
 
 ```text
-完整向量最后一轮：下标 [124, 125, 126, 127]
-重叠收尾一轮：    下标 [126, 127, 128, 129]
-                            ↑ 重复 ↑    ↑ 原本剩下 ↑
+完整向量的最后一轮：124、125、126、127
+重叠收尾的这一轮：  126、127、128、129
 ```
 
-源数组不会被修改，结果写进新数组。126、127 虽然再次计算，第二次写入的仍是相同结果，因此与标量收尾的完整数组一致。程序会打印这个比较结果；这是演示正确性，不能据此断言重叠收尾更快。
+126 和 127 被计算了两次，但这里的输入数组没有被修改，结果写入新数组。对同一组输入再做一次加法，写入的值相同，所以最终结果与逐项收尾一致。程序会比较两份完整结果；它验证的是这个例子的结果，不能说明哪种写法更快。
 
-这一做法依赖运算和数据不受重复处理影响。假如计算总和，126、127 会被加进总和两次；如果原地执行 `a[i] += b[i]`，这两个位置也会被加两遍。输入和目标发生其他破坏性重叠时，已写出的数据还可能改变后续读取。输入短于一个向量时，`length - width` 会是负数，示例退回逐项处理；没有尾部时也不会重复运行最后一组。
+重复计算并不总是安全。如果正在累加总和，126 和 127 会被加两次；如果原地执行 `a[i] += b[i]`，这两个位置也会多加一次。输入和输出发生其他重叠时，先写出的值还可能影响后面的读取。输入不足四项时，示例退回逐项处理；长度恰好是四的倍数时，没有尾部，也就不需要重叠处理。
 
-另一种办法是使用硬件支持的掩码加载与存储，只让有效位置访问内存。例如最后一轮可用 `[有效, 有效, 无效, 无效]` 表示只访问下标 128、129。掩码必须控制读写；先完整读取四个元素、再遮住后两项已经越界。
+另一种办法是使用硬件支持的掩码加载和存储。最后一轮可以指定只有前两个位置有效，只读取和写入下标 128、129。掩码必须控制内存访问：先读取四项再遮住后两项，读取时已经越界。
 
-Arm SVE 的谓词可以表达这样的循环，.NET 11 扩充了相关谓词 API 和代码生成。SVE 是 Arm 的可伸缩向量指令集，不是所有 Arm64 CPU 都有；调用特定硬件 API 前要检查对应的 `IsSupported`，并提供不支持时的替代路径。本项目展示的是跨平台 `Vector128<T>` 的两种收尾，不假装普通 `Vector128<T>` 已经自动变成 SVE 掩码循环。是否值得使用掩码，还需要在目标 CPU 和真实数据长度上测量。
+Arm SVE 的谓词支持这类写法，.NET 11 扩充了相关谓词 API 和代码生成。但 SVE 不是所有 Arm64 CPU 都支持；使用专用硬件 API 前需要检查 `IsSupported` 并准备回退。本项目实际运行的是跨平台 `Vector128<T>` 的标量收尾和重叠收尾，普通向量循环不会因为升级到 .NET 11 就自动变成 SVE 掩码循环。
+
+### 交错、拆分和反转向量
+
+示例还展示了 .NET 11 的向量组合方法。它们操作的是向量里已有的元素，与上面的数组收尾是两回事。
+
+```text
+CreateGeometricSequence(1, 2)：[1, 2, 4, 8]
+
+Zip 输入： [1,  2,  3,  4]    [10, 20, 30, 40]
+Zip 输出： [1, 10,  2, 20]    [ 3, 30,  4, 40]
+Unzip：    再拆回原来的两个向量
+```
+
+`Reverse` 把 `[1, 2, 3, 4]` 变成 `[4, 3, 2, 1]`。`ConcatLowerLower` 取两份向量各自的前半段，拼成 `[1, 2, 10, 20]`。处理图像、音频等交错数据时，这些操作可以直接表达需要的排列。
 
 参考：[.NET 11 向量 API](https://learn.microsoft.com/en-us/dotnet/core/whats-new/dotnet-11/runtime#simd-lane-construction-and-composition)、[SIMD 指南](https://learn.microsoft.com/en-us/dotnet/standard/simd)。
 
-## 写屏障和 GC：为什么写一个引用还需要记账
+## GC：老对象指向新对象时，怎样避免漏掉引用
 
-示例把新对象放入 `Dictionary`，使它在字典存活期间仍可访问。真正的分代场景是：老年代对象的字段指向年轻代对象。如果只扫描年轻代，GC 可能漏掉这条从老对象过来的引用；如果每次都扫描整个老年代，年轻代回收又会变得很贵。
+示例创建一个对象并放入 `Dictionary`。只要字典还保留它，程序就能从字典取得同一个对象。`GC.GetGeneration(item)` 显示对象当前的代数，`GC.CollectionCount` 显示进程中各代已经发生的回收次数。这些值会受到之前的分配和回收时机影响。
 
-写屏障是 JIT 在需要的引用写入处生成的辅助操作，用来标记值得检查的堆区域。后续年轻代回收可检查这些区域，找到跨代引用。写屏障不等同于线程内存屏障，也不表示这次赋值立刻触发 GC；具体哪些写入需要屏障，由运行时和 JIT 决定。
+分代回收中有一个需要解决的问题：一个已经进入老年代的对象，可能持有指向年轻代对象的引用。只回收年轻代时，GC 不能漏掉这条引用；但每次为了找它而扫描整个老年代，又会增加回收成本。
 
-`GC.GetGeneration` 和 `GC.CollectionCount` 只是当前进程的观察值。程序启动后发生过哪些分配、什么时候回收、对象是否已经晋升，会影响输出；这个示例既不强制回收，也不宣称从输出看到了卡表或某条写屏障指令。
+写屏障是 JIT 在需要的引用写入处生成的辅助操作。它会帮助 GC 标记值得检查的堆区域，让后续年轻代回收能够找到跨代引用。写屏障与线程同步中的内存屏障不同，也不意味着每次赋值都会立刻触发 GC。
 
-.NET 11 的相关改进包括把数组存储辅助逻辑展开，使 JIT 能在证明安全时去掉多余的协变检查或写屏障；复制含引用的结构体时分开处理引用和普通数据；为 `ConditionalWeakTable` 使用的 dependent handle 增加年龄管理，使长期存活的关系不必在每次年轻代回收时反复检查。这些内部优化的触发与收益都要结合实际负载分析。
+.NET 11 对相关路径做了几项改进：展开数组存储辅助逻辑，让 JIT 在证明安全时有机会去掉多余的类型检查或写屏障；复制包含引用的结构体时，分别处理引用和普通数据；为 `ConditionalWeakTable` 使用的 dependent handle 增加年龄管理，减少年轻代回收时对长期存活关系的重复检查。
+
+示例没有强制回收，也不会从代数或回收次数推断某条写屏障指令是否执行。要研究具体优化，需要结合实际负载、诊断工具或生成的机器代码。
 
 参考：[数组存储](https://github.com/dotnet/runtime/pull/126547)、[结构体复制](https://github.com/dotnet/runtime/pull/128542)、[dependent handle](https://github.com/dotnet/runtime/pull/78746)、[GC 设计说明](https://github.com/dotnet/runtime/blob/main/docs/design/coreclr/botr/garbage-collection.md)。
