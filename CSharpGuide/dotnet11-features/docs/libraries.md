@@ -1,109 +1,300 @@
-# .NET 11 基础库示例
+# .NET 11 基础库：跟着示例看输入和输出
 
-本篇对应 [LibraryDemos.cs](../LibraryDemos.cs)。在仓库根目录运行：
+这篇文章对应 [LibraryDemos.cs](../LibraryDemos.cs)。代码包含文本、集合、数值、JSON、压缩和进程几个例子。先在仓库根目录运行：
 
 ```powershell
 dotnet run --project CSharpGuide/dotnet11-features -c Release -- libraries
 ```
 
-示例处理的 JSON、压缩数据和 ZIP 都在内存里，进程部分会调用本机的 `dotnet --version`，不需要网络服务。下面按程序的执行顺序介绍，建议一边看代码一边对照输出。
+JSON、压缩数据和 ZIP 都在内存中处理。进程示例会执行本机的 `dotnet --version`，不需要启动网络服务。下面按控制台输出顺序阅读，就能找到每个例子对应的代码。
 
-## 文本：一个字符不一定只占一个 `char`
+## 为什么 `"A😀B".Length` 是 4
 
-先看 `"A😀B"`。它看起来有三个字符，`.Length` 却返回 4：.NET 字符串使用 UTF-16，`char` 表示一个 16 位编码单元；其中的 😀 需要两个 `char` 才能表示。
+字符串 `"A😀B"` 看起来是三个字符：字母 A、一个表情、字母 B。但 C# 里：
 
-```text
-字符串：A  😀    B
-索引：  0  1  2  3
+```csharp
+string text = "A😀B";
+Console.WriteLine(text.Length); // 4
 ```
 
-如果按 `char` 查找或替换，需要小心不要把这个表情拆成一半。.NET 11 给字符串的查找、替换、拆分和修剪增加了接受 `Rune` 的重载。`Rune` 表示一个 Unicode 标量，示例用 `new Rune(0x1F600)` 查找 😀，又把它替换成 `*`。`IndexOf` 返回 1，这仍然是 **UTF-16 索引**；它不会把字符串改成按人眼看到的字符计数。一个字形还可能由多个 Unicode 标量组成，例如表情和肤色修饰符。
-
-处理外部输入时，还需要知道编码是否完整。示例里的 UTF-8 数据是 `[0x41, 0xC3, 0x28]`：`0x41` 是字母 A，`0xC3` 表示一个多字节序列的开头，后面的 `0x28` 却不是合法的续字节。`Utf8.IndexOfInvalidSubsequence` 返回 1，指出第一个无效序列的起始字节位置；输入合法时返回 `-1`。`Utf16.IsValid` 则可检查 UTF-16 的代理项是否正确配对，示例中的孤立 `\uD800` 就不能单独构成合法字符。
-
-同一段文本也可能混用不同换行符。示例中除了 Windows 的 `\r\n`，还包含 NEL 和 Unicode 行分隔符。正则同时使用 `Multiline` 和 .NET 11 的 `AnyNewLine` 后，可以用 `^line\d$` 找出四行：前者让 `^` 和 `$` 匹配行首、行尾，后者扩展了它们识别的换行形式。解析具体协议时，仍要以该协议允许的换行符为准。
-
-这一组还有两个小工具。`StringBuilder.MoveChunks(source)` 将内容块转给新的 builder，调用后 `source.Length` 变成 0；需要保留原内容时不能把它当作复制。`Base64.EncodeToString` 把 UTF-8 字节直接编码成 Base64 字符串，示例随后解码，得到原来的中文文本。`IndexOfAnyWhiteSpace` 则直接查找文本中的 Unicode 空白，示例返回全角空格的位置 2。
-
-## 集合：FullJoin 和比较器
-
-示例有两件商品，编号分别是 1、2；两条订单引用的商品编号是 2、3。执行 `FullJoin` 后会得到：
+原因是 .NET 的 `string` 使用 UTF-16 存储文本，而 `Length` 数的是其中有多少个 `char`。每个 `char` 存放一个 16 位的数，可以把它看作一格存储空间。A 和 B 各占一格，😀 比较特殊，需要连续两格：
 
 ```text
-商品 1 + 没有订单
-商品 2 + 订单 2
-没有商品 + 订单 3
+看到的字符：   A       😀       B
+char 下标：    0     1    2     3
+占用格数：     1       2        1
 ```
 
-完整外连接既保留匹配的记录，也保留两边各自没有匹配的记录。本例中两边元素都是引用类型，缺失的一侧是 `null`。如果一个键在左侧出现两次、右侧出现三次，匹配部分会得到六对结果。`Join` 只返回匹配的记录；示例使用不需要结果选择器的重载，得到一对匹配。
+这两格合起来才能表示 😀。UTF-16 把它们分别称为**高代理项**和**低代理项**；这只是两种需要配合使用的 16 位数，不是网络代理，也不是程序中的代理对象。
 
-LINQ 查询在枚举时执行，所以修改数据后再枚举，看到的是枚举时的数据。对于 `Queryable.FullJoin`，还要由数据库提供程序把表达式翻译成 SQL；C# 编译通过并不代表任意数据库提供程序都支持它。[SQLite 示例](ef.md)会打印实际生成的 SQL。
+这个例子中 😀 是 Unicode 字符 U+1F600，在 UTF-16 中写成 `\uD83D\uDE00`：
 
-另外两个例子分别处理位和相等规则。`BitArray` 可以直接从 `ReadOnlySpan<byte>` 构造，示例中两个字节总共包含三个置位，`PopCount()` 返回 3。`EqualityComparer<T>.Create` 则通过键选择器生成比较器：示例用姓名作为键，并忽略大小写，所以 `("Ada", 20)` 与 `("ADA", 30)` 被 `HashSet` 视作同一个人。年龄不参与这份比较规则。
+```csharp
+string valid = "\uD83D\uDE00"; // 两半放在一起：😀
+string invalid = "\uD800";     // 只有高代理项，缺少后半部分
 
-## JSON：一行一个值，和一个数组有什么区别
+Console.WriteLine(Utf16.IsValid(valid));   // True
+Console.WriteLine(Utf16.IsValid(invalid)); // False
+```
 
-`SerializeAsyncEnumerable` 默认输出一个 JSON 数组；传入 `topLevelValues: true` 后，会逐项写成 JSON Lines：
+第二个字符串里的 `\uD800` 就是**孤立代理项**：它需要另一半配对，但旁边没有合法的另一半。C# 的 `string` 可以装下这样的 `char` 序列，因此字符串能够创建，不代表它一定是格式正确的 UTF-16。`Utf16.IsValid` 用来检查这一点。原示例也检查了这样的单独代理项，输出 `False`。
+
+### Rune 让查找和替换更容易
+
+既然 😀 要占两个 `char`，单独拿一个 `char` 做查找就无法表达整个表情。`Rune` 可以表示一个 Unicode 标量值；这里可以先把它理解为能够装下 **U+1F600 这个完整字符**的值：
+
+```csharp
+Rune emoji = new(0x1F600);
+Console.WriteLine(text.IndexOf(emoji));                  // 1
+Console.WriteLine(text.Replace(emoji, new Rune('*')));  // A*B
+```
+
+.NET 11 为 `string` 增加了接受 `Rune` 的查找、替换、拆分和修剪重载。示例中的 `IndexOf` 返回 1，是因为 😀 的第一格 `char` 位于下标 1；返回值仍按 `char` 计算。
+
+`Rune` 也不总等于人眼看到的一个完整字形。例如某些表情由基本表情和肤色修饰符等多个 Unicode 标量组成，屏幕上合在一起显示，内部却可能有多个 `Rune`。如果要按用户看到的字形移动光标或截取文本，还需要考虑文本元素的边界。
+
+### UTF-8 字节也可能不完整
+
+网络和文件里常见的是 UTF-8 字节。先区分两件事：一个数字能否存进 `byte`，以及一串字节能否按 UTF-8 规则组成文本。`byte` 能存放 0 到 255 的整数；UTF-8 则规定了这些字节应当怎样排列。
+
+示例拿到三个字节：
 
 ```text
-1\n
-2\n
+字节下标：  0     1     2
+内容：     41    C3    28
 ```
 
-每一行都是独立的 JSON 值，每个值后都有 LF，包括最后一项。消费者可以按行处理，不必等整个数组闭合。不过写入流不保证数据立刻到达网络另一端，缓冲、取消和写入失败仍需由实际应用处理。
+这三个值都能存进 `byte`：`0x41`、`0xC3`、`0x28` 分别是十进制的 65、195、40。问题出在它们组合成的 UTF-8 文本上：
 
-命名规则示例同时设置了三个层级：全局 PascalCase、类型上的 snake_case，以及 `EventName` 成员上的 camelCase。成员规则优先，所以结果是：
+1. `0x41` 可以单独表示字母 A。
+2. `0xC3` 是一个双字节字符的开头，需要紧跟一个符合 UTF-8 规则的后续字节。
+3. 后面的 `0x28` 不符合这个要求，所以从 `0xC3` 开始的序列无效。
+
+```csharp
+byte[] data = [0x41, 0xC3, 0x28];
+int index = Utf8.IndexOfInvalidSubsequence(data); // 1
+```
+
+返回值是 1，指向无效序列的**起始字节** `0xC3`，并不是说 `0xC3` 不是合法的 `byte`。
+
+把 `0x28` 换成符合要求的 `0xA9`，就能组成合法文本：
+
+```csharp
+byte[] valid = [0x41, 0xC3, 0xA9]; // UTF-8 文本 Aé
+int index = Utf8.IndexOfInvalidSubsequence(valid); // -1
+```
+
+这里 `0xC3` 和 `0xA9` 合起来表示 `é`。整个输入都是合法 UTF-8，所以返回 `-1`。这个 API 可以在解析前检查字节，并在出错时指出第一个无效序列从哪里开始。
+
+### 正则遇到不同的换行符
+
+并不是所有文本都用 `\n` 换行。示例混用了 Windows 常见的 `\r\n`、NEL（`\u0085`）和 Unicode 行分隔符（`\u2028`）。
+
+正则 `^line\d$` 同时使用 `RegexOptions.Multiline` 和 .NET 11 新增的 `RegexOptions.AnyNewLine`：前者让 `^`、`$` 可以匹配每一行的开头和结尾，后者让正则认识更多换行形式。示例最终找到四行。具体文件格式或网络协议可能只允许其中某些换行符，解析时仍应按协议规定处理。
+
+### 转移 StringBuilder 内容、Base64 和空白搜索
+
+`StringBuilder.MoveChunks` 把一个 builder 保存文本用的内部块转给新的 builder：
+
+```csharp
+var source = new StringBuilder("hello ");
+source.Append(".NET 11");
+StringBuilder destination = StringBuilder.MoveChunks(source);
+
+Console.WriteLine(destination);   // hello .NET 11
+Console.WriteLine(source.Length); // 0
+```
+
+转移后原 builder 清空，所以它适合不再需要保留原内容的情况；需要留下两份内容时，就不能把这个方法当成复制。
+
+示例还把“你好 .NET 11”编码成 UTF-8 字节，再用 `Base64.EncodeToString` 得到 Base64 文本，最后解码还原。Base64 只是让二进制数据能够用文本形式传输，并不加密内容。
+
+`IndexOfAnyWhiteSpace` 用来找第一个空白字符。示例输入 `"ab　cd"` 中，`b` 后面是全角空格，返回的位置是 2。这个方法按文本空白规则判断；某些协议只允许几种指定空白，不能不加区分地采用同一规则。
+
+## FullJoin：两边没有匹配上的记录也保留
+
+示例有两件商品和两条订单：
+
+```text
+商品：1 键盘       2 鼠标
+订单：商品编号 2   商品编号 3
+```
+
+按商品编号做 `FullJoin`，结果有三行：
+
+```text
+键盘   + 没有订单
+鼠标   + 商品编号为 2 的订单
+无商品 + 商品编号为 3 的订单
+```
+
+商品 2 和订单 2 可以配对；商品 1 没有订单，订单 3 找不到商品，它们也各自保留下来。示例两边都是引用类型，因此没有对应记录的一侧是 `null`。如果一个编号在左边有两条、右边有三条，匹配部分会产生六对，不会自动去重。
+
+对比一下普通 `Join`：它只返回两边匹配的记录，本例只有商品 2 和订单 2 那一对。示例使用了不需要单独写结果选择器的重载。
+
+这些 LINQ 查询在枚举时才开始执行，`foreach` 会触发遍历。比如先用 `var query = products.FullJoin(...)` 创建查询，此时只是记下要怎样匹配；开始 `foreach` 时，才逐步读取商品和订单。再枚举一次，通常会重新读取数据并计算结果。
+
+`Queryable.FullJoin` 面向数据库查询：它先把要做的匹配记录成表达式，再由数据库提供程序尝试翻译成 SQL。C# 能编译这个方法，不代表当前数据库提供程序一定能翻译它。[EF Core SQLite 示例](ef.md)会打印实际生成的 SQL。
+
+### BitArray 和按姓名判断相等
+
+`BitArray` 把一组开关状态存成二进制位：每一位可以是 0 或 1，例如表示某个选项关闭还是开启。它可以从 `ReadOnlySpan<byte>` 创建；这里的 span 可以理解为对一段连续字节的访问视图，不需要先为这段数据再复制一个数组。
+
+示例给它两个字节：
+
+```text
+00000011  → 两个 1
+10000000  → 一个 1
+```
+
+因此 `PopCount()` 返回 3，也就是总共有三位为 1。
+
+位的下标从每个字节的低位开始计算。第二个字节 `10000000` 中最左边那个 1，是该字节的第 7 位；前面还有一个字节的 8 位，因此整个 `BitArray` 的第 15 位为 `true`。
+
+另一个例子创建了一个人员集合，人员数据有姓名和年龄，但只希望按姓名去重。示例使用 `p => p.Name` 从人员数据中取出姓名，再指定 `StringComparer.OrdinalIgnoreCase`，让比较时忽略字母大小写。`EqualityComparer<T>.Create` 将这两部分组合成一个比较器，交给 `HashSet` 使用。
+
+于是，集合判断 `("Ada", 20)` 和 `("ADA", 30)` 时，只比较 `Ada` 与 `ADA`，认为两人相同，最后只保留一项。年龄不同不影响判断，因为这份比较器没有使用年龄；换用其他比较规则，集合的去重结果也可能不同。
+
+## 数值：同样写着 1.23，内部保存的值可能不同
+
+```csharp
+double binary = 1.23;
+decimal converted = (decimal)binary;
+decimal direct = 1.23m;
+```
+
+`double` 使用二进制浮点，无法精确保存十进制的 1.23；赋值时保存的是一个非常接近它的二进制数。`1.23m` 则直接表示十进制的 1.23。
+
+可以类比十进制里表示三分之一：不管写 `0.3`、`0.33` 还是 `0.333`，只要位数有限，就只能越来越接近 `1/3`。二进制也有类似情况，有些十进制小数需要无限多位才能精确表示。`double` 的位数有限，保存 1.23 时就要选一个附近的可表示值。
+
+平时打印 `double`，输出经常会做适合阅读的格式化，因此看到 `1.23` 不表示内部恰好存了十进制的 1.23。转换为 `decimal` 时，程序处理的仍是已经保存下来的那个近似值。
+
+.NET 11 改进了从 `double` 到 `decimal` 的转换舍入。本机运行示例时，输出是：
+
+```text
+double 转 decimal：1.2299999999999999822364316060
+decimal 字面量：  1.23
+```
+
+前者反映了 `double` 里实际保存的近似值。升级后，如果程序依赖旧版本转换结果的具体末位，应核对[兼容性说明](https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/11.0/decimal-biginteger-conversions)。金额或其他原本以十进制给出的数据，通常应直接解析成十进制类型，而不是先转为 `double` 再期望找回最初的值。
+
+### 只读数字开头，不必先截子字符串
+
+例如收到 `"123,456"`，当前只需要先读出逗号前的数字：
+
+```csharp
+int.TryParsePartial("123,456".AsSpan(), NumberStyles.Integer,
+    CultureInfo.InvariantCulture, out int value, out int consumed);
+```
+
+调用成功后，`value` 是 123，`consumed` 是 3。调用方可以从下标 3 继续处理逗号和后面的 `456`；它们还没有被这次调用解析或验证。
+
+`NumberStyles.Integer` 指定采用整数的解析规则；`CultureInfo.InvariantCulture` 指定不随当前系统语言变化的格式规则。这里的逗号不属于这次整数解析的内容，所以解析停在逗号前面。如果需要读取下一项，还要由调用方检查并跳过分隔符，再解析剩下的部分。
+
+`BigInteger` 也新增了直接解析 UTF-8 字节的能力。若数据本来就是字节，示例可以直接解析，不必先创建一个字符串。
+
+### 十六进制浮点、十进制浮点和复数
+
+示例把 `Math.PI` 用 `"X"` 格式写成十六进制浮点文本，再用 `NumberStyles.HexFloat` 解析回来。它通过比较 `double` 的原始二进制位，确认两次得到的是同一个值；控制台只显示较短的小数时，有些位上的差异可能看不出来。
+
+本机的示例输出为 `0X1.921FB54442D18P+1`。其中 `0X` 表示后面的数字使用十六进制，`P+1` 表示乘以 2 的 1 次方。这是一种文本表示方式，`Math.PI` 在计算时仍然是 `double`。把文本解析回 `double` 后，再用 `BitConverter.DoubleToInt64Bits` 查看保存的二进制位，结果与原值相同。
+
+`Decimal32`、`Decimal64`、`Decimal128` 是三种不同宽度的 IEEE 754 十进制浮点类型。示例分别读取 `0.1`，并显示 `Decimal64` 的正无穷大。它们与 C# 的 `decimal` 是不同类型，精度、范围和对无穷大、NaN 的支持都需要分别考虑。
+
+宽度中的 32、64、128 表示整个数值使用的位数，不是小数点后能保留的位数。无穷大表示超出有限数值范围的特殊结果；NaN 表示“不是一个数字”，可用于表示某些没有数值结果的运算。示例只展示类型能够表示无穷大，不是在比较三种类型的精度。
+
+`Complex<T>` 表示复数，可以选择分量类型。示例用 `Complex<float>` 相加：`(1 + 2i) + (3 + 4i)` 得到 `(4 + 6i)`。
+
+### 生成随机数和排列向量
+
+`Random.Shared.NextInteger<int>(0, 10)` 生成的整数包含 0，不包含 10，所以范围是 0 到 9；每次运行的值可能不同。
+
+`Vector128<int>` 总宽度是 128 位，一个 `int` 占 32 位，因此装得下四个整数。示例用 `CreateGeometricSequence(1, 2)` 生成 `[1, 2, 4, 8]`，再用 `Zip` 把两组数交错排列。若数组长度不能被向量宽度整除，最后剩下的数据如何处理，可看[运行时文档](runtime.md)中的 130 项例子。
+
+`Zip` 的输入是 `[1, 2, 3, 4]` 和 `[10, 20, 30, 40]`。交错排列后共有八个整数，一个向量放不下，于是返回两个：`[1, 10, 2, 20]` 和 `[3, 30, 4, 40]`。这里的 Zip 是排列向量里的元素；前面的 LINQ `Join` 是按键匹配集合，两者用途不同。
+
+## JSON：数组和逐行数据是两种格式
+
+同样要输出数字 1 和 2，JSON 数组与 JSON Lines 看起来不同：
+
+```text
+JSON 数组： [1,2]
+
+JSON Lines：
+1
+2
+```
+
+数组整体是一个 JSON 值；JSON Lines 每行是一个独立的 JSON 值。示例使用 `SerializeAsyncEnumerable` 读取异步序列，设置 `topLevelValues: true` 后输出后者，并在每个值后写入换行符 LF，包括最后一项。消费者可以一行一行处理，不必等待整个数组闭合。写进流也不保证立即发到网络另一端，具体还取决于流和网络缓冲。
+
+### 一个对象为什么有两种命名格式
+
+示例给序列化器设置全局 PascalCase，又给 `LibraryEvent` 类型指定 snake_case，给 `EventName` 成员单独指定 camelCase。最终输出：
 
 ```json
 {"eventName":"launch","release_version":"11"}
 ```
 
-`Notes` 为 `null`，被类型上的忽略规则省略。成员若单独指定规则，可以覆盖类型规则；`JsonPropertyName` 则可为某个属性指定更高优先级的固定名称。
+`EventName` 有自己的成员规则，所以是 `eventName`；`ReleaseVersion` 没有单独指定，就采用类型上的规则，变成 `release_version`。`Notes` 的值是 `null`，类型上的忽略规则让它不出现在输出中。成员可以覆盖类型规则，`JsonPropertyName` 可以为具体属性指定固定名称。
 
-示例还调用 `MakeReadOnly(populateMissingResolver: true)`，固定 options 并准备默认类型解析器，然后用 `GetTypeInfo<LibraryEvent>()` 取得强类型元数据。options 固定后不能再修改。
+这几种名称分别指：PascalCase 每个单词开头大写，例如 `ReleaseVersion`；camelCase 的第一个单词小写，例如 `eventName`；snake_case 用下划线分隔单词，例如 `release_version`。规则改变的是 JSON 中的字段名，不会重命名 C# 类中的属性。
 
-`JsonDemoReading` 展示简单的 C# 联合类型序列化：它可以是整数，也可以是字符串。当前值为字符串时，输出就是一个 JSON 字符串，没有额外包装对象或 `$type` 字段。反序列化时，数字和字符串可以根据 JSON 值的类型区分；如果两个分支都是对象，就都以 `{` 开头，需要其他办法。这个情况在 [对象联合类型示例](advanced.md)中展开说明，完整规则见 [System.Text.Json 联合类型文档](https://learn.microsoft.com/en-us/dotnet/standard/serialization/system-text-json/union-types)。
+代码接着调用 `MakeReadOnly(populateMissingResolver: true)`，固定这份配置并准备默认类型解析器；之后通过 `GetTypeInfo<LibraryEvent>()` 取得该类型的序列化元数据。配置变为只读后，就不能再修改它。
 
-## 压缩：输出缓冲区由调用方提供
+序列化器要知道 `LibraryEvent` 有哪些属性、JSON 字段叫什么，以及遇到 `null` 时怎么处理。这些信息就是这里所说的“类型元数据”。解析器负责提供它们；`GetTypeInfo<LibraryEvent>()` 取回的是描述该类型如何序列化的一份信息，不是 `LibraryEvent` 实例本身。
 
-.NET 11 的 `ZLibEncoder` 等 API 可以直接使用 span，不必先把输入包装成流。示例准备一份 UTF-8 输入和一块输出数组，然后调用 `Compress`。有三个返回信息需要一起看：
+### 联合类型直接写出当前值
 
-- `bytesConsumed`：这次处理了多少输入；
-- `bytesWritten`：向输出缓冲写了多少字节；
-- `OperationStatus`：操作是否完成，还是需要继续处理。
+`JsonDemoReading` 可以装一个整数或一个字符串。示例装入字符串“传感器离线”，序列化得到的就是 JSON 字符串，不额外包一个对象，也没有 `$type` 字段。反序列化时，JSON 数字与字符串容易区分；如果两个候选类型都会写成 JSON 对象，就需要其他信息来判断。[对象联合类型示例](advanced.md)演示了按字段区分，[官方文档](https://learn.microsoft.com/en-us/dotnet/standard/serialization/system-text-json/union-types)列出了完整规则。
 
-示例提供了足够大的输出缓冲，并设置 `isFinalBlock: true`，告诉编码器后面没有输入了。它确认状态为 `Done` 且全部输入已被消费，再把实际写出的那段数据交给解码器。解码时同样检查状态和消费量，并只使用实际产生的字节。
+## 压缩：输入和输出缓冲区怎么交给编码器
 
-真实应用不能假定一次调用就完成。如果输出空间先用完，调用方需要处理已写出的部分，准备下一块缓冲，再从未消费的输入继续。编码器处理完一条独立消息后，可以 `Reset()` 再处理下一条，或者释放它并创建新实例。
+`ZLibEncoder` 可以直接读取字节并写入调用方提供的缓冲区。示例将一段中文转成 UTF-8 字节，准备 256 字节的输出数组，再调用 `Compress`。调用后需要看三项结果：
 
-`StringStream` 解决的是另一个常见问题：数据已经是字符串，下游 API 却要求 `Stream`。它按指定编码提供字节，省去调用方先创建整份 UTF-8 数组的步骤；读取过程中仍需要编码。其他几种包装已有内存的流见[补充示例](extra-libraries.md)。
+| 结果 | 含义 |
+| --- | --- |
+| `bytesConsumed` | 本次读取并处理了多少输入字节 |
+| `bytesWritten` | 本次向输出缓冲写入了多少字节 |
+| `OperationStatus` | 是否完成，还是需要更多空间或输入 |
 
-ZIP 示例先创建归档，释放写入端后把内存流移回开头，再按 `FileAccess.Read` 打开条目并输出内容和 `CompressionMethod`。.NET 11 在读取 ZIP 条目时检查 CRC32，损坏或截断的数据可能抛出 `InvalidDataException`。CRC 用来发现数据损坏，不能替代防篡改认证。密码 ZIP、tar 和 Zstandard 见[补充示例](extra-libraries.md)及[官方压缩说明](https://learn.microsoft.com/en-us/dotnet/core/whats-new/dotnet-11/libraries#compression-and-archive-formats)。
+示例把 `isFinalBlock` 设为 `true`，告诉编码器这条消息后面没有更多输入。它检查状态为 `Done` 且输入已全部处理，再把输出数组中实际写出的部分交给解码器；解码后也只读取实际产生的字节。
 
-## HTTP：压缩的是请求体
+输出数组不一定总够大。实际处理时如果空间用完，应先处理已写出的部分，再准备空间并从尚未处理的输入继续。编码器用完可以释放；如果要处理一条独立的新消息，也可以先调用 `Reset()` 后重用。
 
-`GZipCompressedContent` 包装原有的 `HttpContent`。序列化请求时，它压缩内容并设置 `Content-Encoding: gzip`。示例没有发送请求，而是把压缩字节读到内存，再用 `GZipStream` 解压，确认内容能还原。
+可以把它想成从一桶水往一个小杯子里倒：杯子满了，先把杯里的内容交出去，再继续处理桶里剩下的部分。`bytesConsumed` 告诉我们输入处理到哪里，`bytesWritten` 告诉我们输出缓冲里有多少有效数据。若只顾着拿走输出，却又从输入开头继续，之前的数据就会被重复压缩。
 
-服务端需要能够接收 gzip 请求体，才能使用这种包装。它与 `SocketsHttpHandler.AutomaticDecompression` 不同：后者处理的是服务器返回的压缩**响应**。
+### 已有字符串或内存，怎样交给只接受 Stream 的代码
 
-示例还设置了 `InitialHttp2MaxConcurrentStreams = 20`。新 HTTP/2 连接在收到服务器 SETTINGS 之前，先按这个数量限制可并发的流；收到 SETTINGS 后使用服务器公布的限制。它不是整个应用的请求限流器，设置值至少为 1。真实 DNS 和本地 HTTP 指标放在可选的[环境示例](environment.md)中；连接回收回调及 TLS 会话 API 的实验状态和平台条件，请参见[网络发布说明](https://learn.microsoft.com/en-us/dotnet/core/whats-new/dotnet-11/libraries#networking-and-transport-security)。
+`StringStream` 让调用方按指定编码把字符串作为字节流读取。示例把 `"配置=启用"` 交给 `StringStream`，再用 `StreamReader` 读回来。调用方不必提前创建整份 UTF-8 数组，但流在读取时仍需要编码。
 
-## 数值：看清输入的表示方式
+如果原始数据已经是字节内存，另外几种流也能把已有内存交给 `Stream` API；它们的区别见[补充基础库示例](extra-libraries.md)。
 
-C# 中 `1.23` 是 `double`，`1.23m` 才是 `decimal`。二进制浮点无法精确保存十进制的 1.23；.NET 11 改进了二进制浮点到 `decimal` 等转换的舍入，示例会显示转换后更接近原始二进制值的结果，而不是简单显示为 `1.23`。如果金额原本来自十进制文本，应直接按十进制解析。升级时也要留意[转换行为变化](https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/11.0/decimal-biginteger-conversions)。
+### ZIP 内容什么时候检查 CRC
 
-浮点数现在可以用 `"X"` 格式写成十六进制，再用 `NumberStyles.HexFloat` 解析。示例对 `Math.PI` 做往返后比较原始位模式，确认结果与输入一致。这比只比较控制台上显示的短十进制文本更直接。
+示例先在内存中创建 ZIP，写入 `hello.txt`；关闭写入端后，把流位置移回开头，重新读取内容，并显示条目的 `CompressionMethod`。
 
-`TryParsePartial` 用于只解析输入开头的一部分。输入 `123,456` 时，示例读出 123，报告消费了三个字符；逗号和后面的内容仍要由调用方继续处理。`BigInteger` 也可以直接从 UTF-8 字节解析，省去先转成字符串的步骤。
+.NET 11 读取 ZIP 条目时会验证 CRC32，损坏或截断的数据可能抛出 `InvalidDataException`。CRC 用于发现数据损坏，不是防止恶意篡改的认证手段。[补充示例](extra-libraries.md)演示了修改内存中的 ZIP 内容，再读取到结尾触发校验；密码 ZIP、tar 和 Zstandard 也在那里介绍。
 
-`Decimal32`、`Decimal64`、`Decimal128` 是不同宽度的 IEEE 754 十进制浮点类型，支持无穷大和 NaN；它们不是 C# 的 `decimal`，选择时需要分别考虑精度、范围和特殊值。`Complex<T>` 则允许选择复数分量的数值类型：示例把两个 `Complex<float>` 相加，得到 `(4 + 6i)`。
+可以把 CRC32 理解为对内容算出的一个短校验值。写入 ZIP 时保存这个值；读取时再对读到的内容计算一次，如果对不上，就知道数据出了问题。因为它不是用秘密密钥生成的，有人故意修改内容时，也可能重新计算 CRC，所以不能用它证明数据没有被恶意修改。
 
-`Vector128<int>` 有 128 位，能装四个 32 位整数。示例用 `CreateGeometricSequence` 生成 1、2、4、8，再用 `Zip` 交错两组数据；数组长度不能被向量宽度整除时怎样处理，见[运行时示例](runtime.md)。`Random.Shared.NextInteger<int>(0, 10)` 返回的上界 10 不包含在内。
+## HTTP：压缩请求体，需要服务端也认识
+
+`GZipCompressedContent` 包装已有的 `HttpContent`。内容被写出时，包装器进行 gzip 压缩，并设置 `Content-Encoding: gzip`。
+
+例如客户端原本要发送一段 JSON，可以先把 JSON 放进 `StringContent`，再用 `GZipCompressedContent` 包住。服务端收到的是压缩后的请求体；请求头里的 `Content-Encoding: gzip` 告诉它，应先按 gzip 解压，再读取里面的 JSON。示例中的原始内容是 `"请求数据"`，便于直接观察解压结果。
+
+示例没有向网络发送请求，而是读取压缩后的字节，再用 `GZipStream` 解压，确认得到原始文本。真实请求的服务端必须支持 gzip 请求体。`SocketsHttpHandler.AutomaticDecompression` 处理的是另一方向：自动解压服务器返回的响应。
+
+示例还设置 `InitialHttp2MaxConcurrentStreams = 20`。建立 HTTP/2 连接后、收到服务器的 SETTINGS 之前，客户端先按这个值限制该连接上的并发流；收到设置后再使用服务器公布的限制。它不是整个应用的请求限流器，设置值至少为 1。真实 DNS 和本地 HTTP 指标可运行[环境示例](environment.md)；其他网络 API 的平台和实验状态见[官方发布说明](https://learn.microsoft.com/en-us/dotnet/core/whats-new/dotnet-11/libraries#networking-and-transport-security)。
+
+HTTP/2 的一条连接可以同时承载多个请求和响应，每组请求与响应称为一条流。连接刚建立时，客户端还没收到服务器发来的 SETTINGS，因此还不知道对方允许多少条流同时进行；这个初始值就是在等待设置期间使用的上限。应用还可能建立其他连接，所以它不能代替针对整个应用的并发控制。
 
 ## 启动进程并收集输出
 
-过去要同时重定向标准输出、标准错误并等待退出，通常需要自己安排读取，避免一侧管道写满。`Process.RunAndCaptureTextAsync` 把常见的启动、收集和等待过程组合起来。示例直接执行 `dotnet --version`，读取 `StandardOutput`、`StandardError` 和退出状态，并没有经过 shell。
+启动进程后，如果既要读取标准输出、又要读取标准错误，还要等待程序退出，就需要协调两条管道的读取。`Process.RunAndCaptureTextAsync` 把常见操作组合起来：示例直接运行本机的 `dotnet --version`，得到标准输出、标准错误和退出状态，没有经过 shell。
 
-启动成功不代表子进程执行成功，仍需检查退出状态。这个 API 收集完整输出；面对很大或持续不断的输出，应考虑逐行或流式读取，并设置取消和超时。可运行的逐行读取示例见[进程、DNS 与 HTTP 指标](environment.md)。
+可以把标准输出看作命令正常打印结果的通道，标准错误看作命令报告问题的另一条通道。管道有缓冲容量：如果父进程一直等待子进程退出，却迟迟不读取某个已经写满的管道，子进程可能卡在写入处，双方就都等下去了。这个 API 替调用方处理常见的输出收集过程；示例随后从结果对象读取版本和退出状态。
 
-其他新增 API、适用平台及预览状态可查阅 [.NET 11 基础库发布说明](https://learn.microsoft.com/en-us/dotnet/core/whats-new/dotnet-11/libraries)。
+成功启动进程不意味着命令执行成功，仍要检查退出状态。这个方法会收集完整输出；如果子进程持续输出或结果可能很大，可以考虑逐行或流式读取，并设置取消和超时。[进程示例](environment.md)展示了逐行读取。
+
+其他新增 API 及其平台要求可查阅 [.NET 11 基础库发布说明](https://learn.microsoft.com/en-us/dotnet/core/whats-new/dotnet-11/libraries)。

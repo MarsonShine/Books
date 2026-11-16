@@ -24,6 +24,8 @@ dotnet run --project CSharpGuide/dotnet11-features -c Release -- environment dns
 
 接下来，程序启动 `dotnet --version`，使用 `ReadAllLinesAsync` 读取输出。每一行的 `ProcessOutputLine` 都有 `Content` 和 `StandardError`，可以区分标准输出与标准错误。两个管道分别收集，不能根据收到的行推断子进程跨两个管道写入的严格先后顺序。
 
+进程可以把正常结果写到标准输出（stdout），把错误信息写到标准错误（stderr）。这两路数据各有自己的管道。逐行读取时，`Content` 是文字，`StandardError` 告诉我们文字来自哪一路；读取结束只说明输出已读完，还要继续等待进程退出，才能知道退出状态。
+
 读取结束后，`WaitForExitStatusAsync` 返回退出状态：正常退出时可以查看 `ExitCode`，Unix 上由信号终止时可以查看 `Signal`。在 Unix 上，这个 API 只能取得子进程的退出状态。示例设置了十秒期限，超时后只请求结束它自己启动的子进程。
 
 取消等待并不会自动终止进程。是否需要终止，要看调用方是否拥有这个进程以及业务希望它怎样结束。[.NET 11 进程 API](https://learn.microsoft.com/en-us/dotnet/core/whats-new/dotnet-11/libraries#diagnostics-and-process-execution)还列出了句柄、挂起启动和信号相关的方法。
@@ -32,9 +34,13 @@ dotnet run --project CSharpGuide/dotnet11-features -c Release -- environment dns
 
 邮件发送方可以通过 MX 记录找到负责接收某个域名邮件的服务器。示例调用 `Dns.ResolveMxAsync`，然后打印：
 
+例如，给 `alice@example.com` 发送邮件时，发送方会先查询 `example.com` 的 MX 记录，找到应当联系的邮件服务器。MX 记录中的名称还需要进一步解析为 IP 地址，才能建立连接；它不表示收件人账号一定存在。
+
 - `ResponseCode`：DNS 响应码。
 - `Records`：返回的 MX 记录，每条包含优先级 `Preference`、服务器 `Exchange` 和 `Ttl`。优先级数值越小，通常越先尝试。
 - `NegativeCacheTtl`：适用时，对“不存在”或“没有该类型记录”的结果建议缓存多久。零可能表示不适用或平台没有提供该值。
+
+TTL 是“这条结果可以缓存多久”。例如记录的 TTL 为 300 秒，查询方通常可以在这段时间内复用结果，而不必每次都重新查询。`NegativeCacheTtl` 则针对没有找到的结果；它和记录上各自的 TTL 不是同一个字段。
 
 没有返回记录时，应结合响应码判断是域名不存在、没有 MX 记录，还是查询失败。有些域名返回交换主机 `.`，表示它声明不接收邮件，这也是一种有效结果。
 
@@ -47,6 +53,8 @@ dotnet run --project CSharpGuide/dotnet11-features -c Release -- environment dns
 示例先用 `MeterListener` 订阅 `System.Net.Http` 的 `http.client.active_requests` 和 `http.client.open_connections`，然后在本机创建一个只处理一次请求的 TCP 服务。
 
 `HttpClient` 发出 GET 后，服务端读完请求头，却暂时不发响应。此时请求仍在进行，程序调用 `RecordObservableInstruments()`，便能采集活动请求和连接的当前值。随后服务端返回 `OK`，程序再采集一次。
+
+之所以先让服务端等一下，是为了给采集留出时间：如果服务端马上响应，请求可能在第一次采集前就结束，看不到“正在处理的请求”。在本机的一次运行中，等待响应时 `http.client.active_requests` 显示为 1；放行之后它不再处于进行状态。
 
 这两个指标是可观察指标：使用 `MeterListener` 时，需要主动调用 `RecordObservableInstruments()` 才会取得当前读数。回调还会收到服务器地址、协议、连接状态等标签；实际可能按不同标签组合返回多条数据。它们是某一时刻的状态，不能直接当作每秒请求数。
 

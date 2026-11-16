@@ -12,6 +12,8 @@ dotnet run --project CSharpGuide/dotnet11-features -c Release -- extra
 
 假设上游已经给出一块 `byte[]`，下游却只接受 `Stream`。以前可以把数据复制到新的 `MemoryStream`，现在也可以让流直接使用已有内存。
 
+这里的 `Stream` 可以理解为带当前位置的字节读写接口。例如读取时，每读走几个字节，当前位置就向后移动；写入时，数据从当前位置开始覆盖。它不一定对应磁盘文件，也可以操作内存里的数据。
+
 示例先用 `WritableMemoryStream` 包装存有 `hello` 的数组，再从流的开头写入 `H`：
 
 ```text
@@ -24,6 +26,8 @@ dotnet run --project CSharpGuide/dotnet11-features -c Release -- extra
 接着，`ReadOnlyMemoryStream` 把同一数组作为只读流提供给 `StreamReader`。只读限制的是通过这个流写入；其他代码如果还持有原数组，仍能修改内容。
 
 `ReadOnlySequenceStream` 用来处理不连续的内存。示例把“前半”和“后半”分别放在两个片段里，再交给流读取。`StreamReader` 得到的是完整的“前半后半”，调用方不必先把两段拼成一个新数组。读取和 UTF-8 解码仍然会发生。
+
+可以把两段想成网络接收时先后拿到的两个缓冲：第一块保存“前半”，第二块保存“后半”。`ReadOnlySequence<byte>` 记录这些缓冲以及它们的先后顺序；`ReadOnlySequenceStream` 则让只认识 `Stream` 的代码也能依次读取。它不保证底层数组永远不变，因此读取尚未结束时，提供缓冲的一方还不能回收或随意修改它们。
 
 ## GroupJoin：先找到每个客户，再看他有哪些订单
 
@@ -42,13 +46,17 @@ customers.GroupJoin(purchases, c => c.Id, p => p.CustomerId)
 
 当前 .NET 11 SDK 中，这个调用返回 `IGrouping<Customer, Purchase>`：`group.Key` 是客户，枚举 `group` 得到他的订单。小夏没有匹配项，但客户这一组仍然存在。普通 `Join` 则只输出匹配上的客户与订单。
 
+这条调用里有两个函数，分别告诉 LINQ 用什么来配对：`c => c.Id` 取客户编号，`p => p.CustomerId` 取订单上的客户编号。小林的 `Id` 为 1，两条订单的 `CustomerId` 也是 1，于是这两条订单被放进小林的分组。小夏仍有自己的分组，只是组里没有订单。
+
 [发布说明](https://learn.microsoft.com/en-us/dotnet/core/whats-new/dotnet-11/libraries#tuple-returning-join-and-groupjoin-overloads)把相关新重载概括为 tuple-returning；这里描述的是本机 SDK 中这个 `GroupJoin` 重载的实际类型。换成 `Queryable` 时，还要看数据库提供程序能否翻译查询。
 
 ## 随机浮点数与 BFloat16 的位表示
 
 `Random.Shared.NextBinaryFloat<T>()` 可以按指定的二进制浮点类型生成随机值。示例分别生成 `float` 和 `Half`，输出每次都可能不同。`Random` 适合一般伪随机用途；生成密钥等敏感数据时，应使用 `RandomNumberGenerator`。
 
-示例还把十进制文本 `1.5` 解析为 `BFloat16`。它是 16 位二进制浮点格式，可以用 `BitConverter.BFloat16ToUInt16Bits` 取得位模式 `0x3FC0`，再用 `UInt16BitsToBFloat16` 还原。这是在保存和恢复 **BFloat16 本身的位**；如果原来的数在转换成 BFloat16 时已经丢失精度，之后不能凭这 16 位找回来。
+`float` 使用 32 位，`Half` 使用 16 位；能保存的范围和精度不同。泛型参数 `<float>` 或 `<Half>` 决定返回值的类型，不是生成后再统一转换。示例没有指定上下界，这些调用返回大于等于 0 且小于 1 的值。
+
+示例还把十进制文本 `1.5` 解析为 `BFloat16`。它是 16 位二进制浮点格式，`BitConverter.BFloat16ToUInt16Bits` 把这个浮点数的 16 个二进制位按整数读出来，结果写成十六进制是 `0x3FC0`；`UInt16BitsToBFloat16` 再把相同的位还原为浮点数。如果原来的数在转换成 BFloat16 时已经丢失精度，之后不能凭这 16 位找回来。
 
 ## 两种 JSON 多态方式
 
@@ -64,6 +72,8 @@ customers.GroupJoin(purchases, c => c.Id, p => p.CustomerId)
 
 只有 `Name` 时，两种类型都可能符合。分类器会根据根级属性名称和必需属性筛选候选，不会读取属性值或分析嵌套内容。它帮助序列化器选择类型，业务仍需验证字段值是否合法。[联合类型序列化文档](https://learn.microsoft.com/en-us/dotnet/standard/serialization/system-text-json/union-types)
 
+“根级属性”指对象最外层的字段。例如 `{"Name":"Misty","Details":{"Lives":9}}` 里，`Name` 和 `Details` 在根级；`Lives` 藏在 `Details` 里面，不会被当作根级的 `Lives` 来帮助区分猫和狗。
+
 ### closed 层次：用标记记住派生类型
 
 另一个示例将 `Delivered` 作为 `DeliveryEvent` 序列化。基类声明为 `closed` 并启用了 `InferClosedTypePolymorphism`，序列化器据此发现派生类型，输出中包含 `$type`：
@@ -75,6 +85,8 @@ customers.GroupJoin(purchases, c => c.Id, p => p.CustomerId)
 反序列化后，结果的实际类型仍是 `Delivered`。这个例子与前面的 union 分类不同：这里由 `$type` 指明类型。标记会进入交换的数据，如果 JSON 需要长期保存或供其他服务使用，应明确管理标记的兼容性。显式注册派生类型时，注册列表会取代推断列表；使用源生成时也需要对应的类型元数据。
 
 示例还复用了一次 `Utf8JsonWriter`：先完成并 `Flush` 第一份 JSON，清空目标 `MemoryStream`，再调用带新 `JsonWriterOptions` 的 `Reset` 写第二份。`Reset` 不会替调用方清空流，流的长度和位置仍由调用方管理。
+
+`Flush` 的作用是把 writer 尚未交出的内容写到目标流；流本身可能还有自己的缓冲，并不保证网络另一端已经收到。示例写的是内存流，因此随后可直接读取字节。清空流、重置 writer 后，第二次输出是独立的 `"second"`，而不是把新值接到 `"first"` 后面。
 
 ## 压缩与归档
 
@@ -112,16 +124,20 @@ AES 密钥 + 数据密钥 → 包装后的数据
 AES 密钥 + 包装后的数据 → 原来的数据密钥
 ```
 
+可以把前者叫作“密钥加密密钥”：数据密钥需要保存或交给另一处使用时，先用它保护，再保存包装后的结果。收到结果的一方必须持有正确的 AES 密钥，才能还原原数据密钥。示例只演示 API 调用，两个密钥都临时生成并保存在当前进程里。
+
 程序调用 `EncryptKeyWrap` 和 `DecryptKeyWrap`，然后用 `FixedTimeEquals` 比较还原后的密钥。无填充的 Key Wrap 要求输入至少 16 字节，且长度为 8 字节的倍数；示例还用 19 字节输入演示带填充的 `EncryptKeyWrapPadded`。用过的密钥数组会被清除，但示例没有实现密钥存储、权限控制或密钥轮换。[AES Key Wrap 说明](https://learn.microsoft.com/en-us/dotnet/core/whats-new/dotnet-11/libraries#aes-key-wrap)
 
 ## 通过公钥协商共享秘密：X25519
 
 Alice 和 Bob 各自生成密钥对，交换公钥。Alice 用自己的私钥和 Bob 的公钥计算；Bob 用自己的私钥和 Alice 的公钥计算。示例分别导出、导入公钥，再比较双方得到的秘密，输出 `True` 表示本次结果一致，程序不会打印秘密本身。
 
-代码先检查 `X25519DiffieHellman.IsSupported`，不支持的平台会跳过。实际通信还要认证对方公钥，并通过合适的 KDF 从原始共享秘密派生会话密钥；单独执行密钥交换并不能证明连接的另一端是谁。本例只在本机演算，不建立连接。[X25519 说明](https://learn.microsoft.com/en-us/dotnet/core/whats-new/dotnet-11/libraries#x25519-diffie-hellman-key-exchange)
+“公钥”可以发给对方，“私钥”由各自保管。两边分别用自己的私钥和收到的对方公钥计算，虽然输入的顺序和持有的私钥不同，结果会相同。示例先导出公钥，再导入一份公钥对象交给对方计算，模拟交换过程；没有把 Alice 或 Bob 的私钥传给另一方。
+
+代码先检查 `X25519DiffieHellman.IsSupported`，不支持的平台会跳过。实际通信还要认证对方公钥：否则可能和冒充对方的人算出另一个共享秘密。协商出的原始秘密还通常要经过密钥派生函数（KDF），结合协议要求生成后续加密使用的会话密钥。本例只在本机演算，不建立连接。[X25519 说明](https://learn.microsoft.com/en-us/dotnet/core/whats-new/dotnet-11/libraries#x25519-diffie-hellman-key-exchange)
 
 ## 通过管道读取数据
 
-`SafeFileHandle.CreateAnonymousPipe` 创建一对读写句柄。示例从写端写入 `pipe`，再通过 `RandomAccess.ReadAsync` 从读端读取。
+`SafeFileHandle.CreateAnonymousPipe` 创建一条管道，并返回一对读写句柄。句柄是操作系统交给程序的访问入口：写句柄用于向管道放数据，读句柄用于取数据。示例从写端写入 `pipe`，再通过 `RandomAccess.ReadAsync` 从读端读取。
 
 一次读取可能只返回部分数据，所以代码根据已读字节数继续读取，直到取完四字节或管道结束；读取还设置了短超时。管道不能像磁盘文件那样定位到任意位置。对不可定位句柄，`RandomAccess` 会忽略 `fileOffset`，但参数仍需非负；这里传入 0。读写完成后，两端安全句柄都会释放。[RandomAccess 说明](https://learn.microsoft.com/en-us/dotnet/api/system.io.randomaccess?view=net-11.0)

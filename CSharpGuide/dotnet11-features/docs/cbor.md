@@ -4,6 +4,8 @@
 
 示例代码在 [cbor/Program.cs](../cbor/Program.cs)。它把数组 `[10, 20]` 的 CBOR 编码分成两段，用来模拟分批收到的数据。CBOR 是一种二进制数据格式，编码规则可参考 [RFC 8949](https://www.rfc-editor.org/rfc/rfc8949)。
 
+可以先把 CBOR 当作与 JSON 类似的数据交换格式：它也能表达数组、整数、字符串和对象等数据，只是传输时使用二进制编码。`[10, 20]` 在 JSON 中可以写成可读文本，而这个例子中的 CBOR 编码是三个字节 `82 0A 14`，其中每个数都按十六进制表示。
+
 需要 .NET 11 SDK 和 `System.Formats.Cbor` 11.0.0。第一次运行要从 nuget.org 的 HTTPS 源恢复包，包已缓存后可以离线运行。项目目录中的 `NuGet.Config` 单独配置了该源：
 
 ```powershell
@@ -32,9 +34,11 @@ int first = reader.ReadInt32();        // 10
 
 这时数组还有一个元素，但手里的两个字节已经读完。`reader.PeekState()` 返回 `NeedsMoreData`：读取器知道还不能结束，却也没有足够的数据继续。
 
+`PeekState()` 相当于先问“接下来能读到什么”，不会替我们把下一个值读走。这里它告诉程序继续之前需要更多数据；网络连接本身不会因为这个返回值自动读取下一包，还要由调用方取得并交给读取器。
+
 ## 收到第二段后继续
 
-示例先确认 `BytesRemaining == 0`，也就是第一段恰好全部消费，再用 `SlideData` 交入第二段。由于这次知道后面没有数据了，标记 `isFinalBlock: true`：
+示例先确认 `BytesRemaining == 0`，也就是第一段恰好全部读完，再用 `SlideData` 交入第二段。由于这次知道后面没有数据了，标记 `isFinalBlock: true`：
 
 ```csharp
 reader.SlideData(lastChunk, isFinalBlock: true);
@@ -44,6 +48,6 @@ reader.ReadEndArray();
 
 读完数组后，`PeekState()` 返回 `Finished`。因此程序先打印第一个数和 `NeedsMoreData`，再打印第二个数和 `Finished`。
 
-这个例子有意把数据拆在元素边界，第一段没有剩余字节。真实网络分段不一定这么整齐：一个值可能只收到一部分。如果还有未消费的字节，调用方需要把它们与新到的数据一起保留，再交给读取器；不能直接扔掉旧缓冲。
+这个例子有意把数据拆在元素边界，第一段没有剩余字节。真实网络分段不一定这么整齐：一个值可能只收到一部分。如果还有尚未读完的字节，调用方需要把它们与新到的数据一起保留，再交给读取器；不能直接扔掉旧缓冲。
 
 目前增量读取要求 `CborConformanceMode.Lax`，其他严格模式不接受非最终块。消息最大长度、缓冲区管理、取消和连接中断也需要由调用方处理。[.NET 11 增量读取说明](https://learn.microsoft.com/en-us/dotnet/core/whats-new/dotnet-11/libraries#read-cbor-incrementally)

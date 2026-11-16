@@ -12,6 +12,8 @@ dotnet run --project CSharpGuide/dotnet11-features/ef-sqlite -c Release
 
 程序会创建数据库、写入几条记录并执行查询。数据库只存在于打开的 SQLite 内存连接中，关闭连接后数据消失。`EnsureCreatedAsync` 适合这样的临时示例，生产数据库的结构变更仍应根据项目情况管理迁移。
 
+这里的 EF Core 负责把 C# 对象与数据库记录对应起来。`ShelterContext` 是这次操作使用的 `DbContext`：通过它添加动物、保存数据和发出查询。程序先用一个 context 写入，再创建另一个 context 查询；两个 context 共用同一条保持打开的 SQLite 连接，所以第二个 context 仍能读到刚才写入的内存数据。
+
 ## 一只狗为什么要存两行
 
 示例把 `Animal` 作为基类，`Dog` 和 `Cat` 分别继承它。`UseTptMappingStrategy()` 选择 TPT（Table per Type）映射：基类和每个派生类型各有一张表。
@@ -25,6 +27,8 @@ Cats：   Id、IsIndoor
 名叫豆豆的狗会在 `Animals` 中有一行，保存名字、年龄和资料；在 `Dogs` 中还有一行，保存品种。两行通过 `Id` 对应。猫也是一样，只是额外数据保存在 `Cats`。
 
 读取 `context.Animals` 时，EF 需要把这些表连接起来，才能知道每个动物是狗还是猫。程序打印的查询 SQL 中有对 `Dogs` 和 `Cats` 的 `LEFT JOIN`，随后输出的对象类型是 `Dog` 或 `Cat`。
+
+比如 `Animals` 中豆豆的 Id 为 1，`Dogs` 中也有 Id 为 1 的记录；查询会按 Id 把两行拼起来。对 `Cats` 做 `LEFT JOIN` 时找不到 Id 为 1 的猫，相关列就是 `NULL`，但豆豆这只动物仍会保留下来。EF 再根据哪张派生表匹配到了记录，创建 `Dog` 或 `Cat` 对象。例子里的 Id 只为说明连接方式，实际值由数据库生成。
 
 ## 把城市和兽医放在一列 JSON 里
 
@@ -41,6 +45,8 @@ modelBuilder.Entity<Animal>().UseTptMappingStrategy()
 {"City":"上海","Veterinarian":"李医生"}
 ```
 
+这里的“复杂类型”可以理解为一组属于动物的数据：城市和兽医共同组成 `Details`，但程序不会单独通过一个 `Details` 的主键去查找它。`ToJson()` 将这组属性保存在动物所在行的一列中；C# 代码中仍然可以用 `animal.Details.City` 访问城市。
+
 这里同时做了两件事：`UseTptMappingStrategy()` 决定狗和猫如何分表，`ToJson()` 决定资料如何存入 `Animals` 表。EF 早已支持复杂类型和 JSON 列；EF Core 11 扩展的是它们与 TPT、TPC 继承映射的组合支持。
 
 查询时仍然使用 C# 属性：
@@ -51,6 +57,8 @@ var shanghai = context.Animals.AsNoTracking()
 ```
 
 `ToQueryString()` 会打印 SQLite 提供程序生成的 SQL，其中的 `Details ->> 'City'` 在数据库端从 JSON 提取城市，再交给 `WHERE` 筛选。程序输出的结果只有豆豆。换用其他数据库时，JSON 查询语法和提供程序支持情况可能不同。[EF Core 11 说明](https://learn.microsoft.com/en-us/ef/core/what-is-new/ef-core-11.0/whatsnew#complex-types-and-json-columns-on-entity-types-with-tpttpc-inheritance)
+
+`Where` 此时构造的是查询，`ToQueryString()` 让我们先查看 SQL；后面的 `ToListAsync()` 才执行查询并把结果取回。示例使用 `AsNoTracking()`，因为这里只读取和显示，不打算修改查到的对象再让这个 context 保存。
 
 ## 最大年龄和年龄最大的动物
 

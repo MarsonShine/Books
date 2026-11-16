@@ -52,6 +52,8 @@ ProductResult found = new Product("键盘", 120m);
 ProductResult missing = new MissingProduct("P-404");
 ```
 
+“隐式转换”指赋值时不需要再写 `new ProductResult(...)` 或强制类型转换。两个变量的声明类型都是 `ProductResult`，但 `found` 里面装的是商品，`missing` 里面装的是未找到信息。调用方随后仍需要按实际分支分别处理。
+
 调用方再通过 `switch` 分别处理：
 
 ```csharp
@@ -78,6 +80,8 @@ public sealed record Paid(decimal Amount) : PaymentState;
 
 `closed` 限定 `PaymentState` 的直接派生类型只能在声明它的程序集中定义。编译器因此能看到这里列出的直接子类型，处理状态时可以分别写 `Pending` 和 `Paid`：
 
+这里的程序集可以先理解成编译后供 .NET 加载的单元，通常是一个 `.dll` 文件。同一个项目编译出的这些类型属于同一程序集；另一个项目即使引用了它，也不能再直接声明一个 `class Refunded : PaymentState`。
+
 ```csharp
 string description = payment switch
 {
@@ -98,6 +102,8 @@ string description = payment switch
 IEnumerable<int> sequence = Enumerable.Range(10, 5).Where(x => x % 2 == 0);
 Console.WriteLine(sequence[1]); // 12
 ```
+
+这个 `sequence` 不是预先存着三个结果的数组：`Enumerable.Range(10, 5)` 依次提供 10 到 14，`Where` 留下偶数。当 `ElementAt(1)` 要求第二项时，代码才会从序列中向前寻找；它看到 10、跳过 11，再取得 12。
 
 结果依次是 10、12、14，因此下标 1 取得 12。需要注意的是，这个索引器仍然调用 `ElementAt`：如果底层序列不能直接按索引访问，取得较后面的元素可能要从头遍历。写法像数组，不代表访问成本也和数组一样。
 

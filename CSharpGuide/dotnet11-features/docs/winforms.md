@@ -26,6 +26,8 @@ Application.SetDefaultVisualStylesMode(VisualStylesMode.Net11);
 
 开关仍然是 `CheckBox`，只是把 `Appearance` 设为 `ToggleSwitch`。代码仍通过 `Checked` 读取和修改状态，也可以继续使用 `CheckedChanged` 等事件；状态不会因为外观变成开关就自动保存。
 
+例如读取 `toggle.Checked` 可以知道当前是开还是关。用户点击时可以在 `CheckedChanged` 里更新界面；如果希望下次启动程序时仍记住状态，还需要自己把它写入配置或其他存储。
+
 示例还设置了 `FormRevealMode.Deferred`。窗口启动时，应用可以等初始布局和主题准备好再显示，减少窗口先以未设样式的状态闪现。最终视觉效果与 Windows 版本、主题和窗口内容有关。
 
 ## 添加 100 项时，先暂停绘制
@@ -41,6 +43,8 @@ using (list.SuspendPainting(LayoutSuspendTraversal.TargetOnly))
 ```
 
 进入 `using` 后，目标控件暂缓绘制和相关布局更新；离开时释放作用域，恢复更新。`TargetOnly` 只针对当前目标，处理嵌套控件时还可以按需要考虑 `TargetAndDescendants`。
+
+`using` 在这里管理的是一段临时状态：无论循环正常结束还是中途抛出异常，离开作用域时都会释放返回的对象，让控件恢复更新。它不是等 100 项添加完才开始往列表里保存；列表项仍在循环中一项项加入，只是暂缓了期间的画面和布局处理。
 
 少量列表项未必需要这样做。是否减少闪烁或耗时，可以在自己的窗口和数据量下观察。它也不会改变 Windows Forms 的线程要求：后台工作线程不能因此直接修改 UI 控件。
 

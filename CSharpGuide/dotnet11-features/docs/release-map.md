@@ -44,7 +44,7 @@
 | 知识点 | 本项目状态 |
 | --- | --- |
 | Unicode `Rune` 字符串操作 | **示例**：emoji 在 UTF-16 中占两个 `char`，`Rune` 查找与替换。 |
-| UTF-8/UTF-16 校验与错误位置 | **示例**：无效 UTF-8 的起始位置、孤立 UTF-16 代理项。 |
+| UTF-8/UTF-16 校验与错误位置 | **示例**：找到无效 UTF-8 的起始位置，检查 UTF-16 中没有配对的字符部分；见[字符与 UTF-16 的讲解](libraries.md)。 |
 | 正则 `RegexOptions.AnyNewLine` | **示例**：同一输入含 CRLF、NEL 和 Unicode 行分隔符。 |
 | `StringBuilder.MoveChunks` | **示例**：转移内容后原 builder 清空。 |
 | Base64 API | **示例**：编码为字符串并还原；字符/字节重载和状态管理见官方库说明。 |

@@ -10,6 +10,8 @@ dotnet run --project CSharpGuide/dotnet11-features/web -c Release
 
 服务只监听本机 `127.0.0.1:5087`。启动后保留这个终端，在另一个终端发送下面的请求；结束时回到服务终端按 Ctrl+C。如果 5087 端口已经被占用，可以修改 `web/Program.cs` 中的 `UseUrls`，并相应修改请求地址。
 
+`127.0.0.1` 表示当前这台机器，`5087` 是程序监听的端口。浏览器或命令行向这个地址发 HTTP 请求后，ASP.NET Core 根据请求方法和路径选择处理代码。例如 `GET /reading/2` 会匹配代码中的 `/reading/{id:int}`，再把路径里的 `2` 交给参数 `id`。
+
 下面带 `-SkipHttpErrorCheck` 的命令需要 PowerShell 7。Windows PowerShell 5.1 可以用 `curl.exe` 查看返回的 400 响应。
 
 ## 设备状态：同一个返回类型可以装数字或字符串
@@ -50,6 +52,8 @@ Invoke-WebRequest 'http://127.0.0.1:5087/items?count=abc' -SkipHttpErrorCheck
 
 `/items` 要求 `int count`，所以 `abc` 无法绑定。这个端点有一个过滤器：它执行后续处理，看到响应状态是 400 时，返回 `{"error":"count 必须是整数"}`。
 
+这里的参数绑定是框架把请求里的文字转换成方法参数的过程。`?count=3` 中的 `"3"` 能转成整数 3；`?count=abc` 不能。端点过滤器包在处理函数周围，示例中的 `next(context)` 表示继续后面的处理，返回后再检查本次处理留下的状态。
+
 .NET 11 让配置了过滤器的 Minimal API 即使参数绑定失败，也能运行过滤器。示例还设置了 `RouteHandlerOptions.ThrowOnBadRequest = false`：在 Development 环境中，这样绑定失败会返回可供过滤器观察的 400，而不是先抛出 `BadHttpRequestException`。该过滤器只说明当前端点的处理，不是整个应用的统一错误处理中间件。
 
 ## 健康检查为什么能跳过后续中间件
@@ -69,6 +73,8 @@ Invoke-RestMethod http://127.0.0.1:5087/cache-metrics
 ```
 
 这个端点新建 `MemoryCache`，开启 `TrackStatistics`，放入 `book`，然后分别查询 `book` 和一个不存在的键。`MeterListener` 订阅 `Microsoft.Extensions.Caching.Memory.MemoryCache`，调用 `RecordObservableInstruments()` 采集当前值。
+
+可以把 `Meter` 看作发布一组指标的名称，`MeterListener` 是接收这些指标的监听器。示例先订阅缓存的 meter，再进行一次命中和一次未命中；因为这些指标需要主动读取，最后调用 `RecordObservableInstruments()` 才取得当前计数。
 
 输出里的 `dotnet.cache.requests` 带有 `dotnet.cache.request.result` 标签：`hit` 和 `miss` 在本例中各为 1。`dotnet.cache.entries` 表示当前条目数；指标不会包含缓存中的值。
 
