@@ -7,6 +7,7 @@
 - [C# 7.0](7.0/)
 - [C# 8.0](8.0/)
 - [C# 10.0](10.0/)
+- [C# 15：联合类型、封闭类型层次与扩展索引器](../dotnet11-features/docs/csharp15.md)
 
 ## 技术文章
 
@@ -16,6 +17,7 @@
 
 ## 扩展主题
 
+- [.NET 11 学习示例](../dotnet11-features/README.md)含运行命令和代码入口，可按[特性地图](../dotnet11-features/docs/release-map.md)查找运行时、基础库、Web、EF Core 和 SDK 专题。
 - [Roslyn 编译器](roslyn/)
 - [Source Generators](sourcegenerators/)
 - [诊断工具](diagnostics/)

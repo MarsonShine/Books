@@ -5,10 +5,12 @@
 需要 .NET 11 SDK 和 ASP.NET Core 共享框架，不需要数据库或额外 NuGet 包。在仓库根目录启动：
 
 ```powershell
-dotnet run --project CSharpGuide/dotnet11-features/web -c Release
+dotnet run --project CSharpGuide/dotnet11-features/web -c Release --launch-profile web
 ```
 
-服务只监听本机 `127.0.0.1:5087`。启动后保留这个终端，在另一个终端发送下面的请求；结束时回到服务终端按 Ctrl+C。如果 5087 端口已经被占用，可以修改 `web/Program.cs` 中的 `UseUrls`，并相应修改请求地址。
+[web 启动配置](../web/Properties/launchSettings.json)将环境设为 `Development`，并为 IDE 启用自动打开浏览器。配置中列出了 HTTPS 端口 60588 和 HTTP 端口 60589，但程序随后调用 `UseUrls("http://127.0.0.1:5087")`，实际监听 5087。若 IDE 自动打开的地址无法连接，可访问 `http://127.0.0.1:5087/health`。
+
+保留服务终端，在另一个终端发送下面的请求。结束时回到服务终端按 Ctrl+C。如果 5087 已被占用，可以修改 `web/Program.cs` 中的 `UseUrls`，并相应修改请求地址。
 
 `127.0.0.1` 表示当前这台机器，`5087` 是程序监听的端口。浏览器或命令行向这个地址发 HTTP 请求后，ASP.NET Core 根据请求方法和路径选择处理代码。例如 `GET /reading/2` 会匹配代码中的 `/reading/{id:int}`，再把路径里的 `2` 交给参数 `id`。
 

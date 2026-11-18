@@ -8,7 +8,7 @@
 
 ```powershell
 dotnet --list-sdks
-dotnet build CSharpGuide/dotnet11-features -c Release
+dotnet build CSharpGuide/dotnet11-features/dotnet11-features.csproj -c Release
 dotnet run --project CSharpGuide/dotnet11-features -c Release --no-build -- all
 ```
 
@@ -33,12 +33,18 @@ dotnet run --project CSharpGuide/dotnet11-features -c Release -- runtime
 
 主控制台项目只依赖 SDK 自带框架。目录中的 `NuGet.Config` 清空了包源，防止示例受到机器上其他包源的影响。CBOR 和 EF Core 是单独项目，各自配置了 nuget.org HTTPS 源，首次运行需要下载依赖。
 
+在 IDE 中打开 [dotnet11-features.slnx](dotnet11-features.slnx)，可以在主控制台、CBOR、EF Core SQLite、Web 和 Windows Forms 五个项目之间切换。上面的构建命令指定了主控制台的 `.csproj`；需要在 Windows 上构建全部示例项目时，可在仓库根目录运行：
+
+```powershell
+dotnet build CSharpGuide/dotnet11-features/dotnet11-features.slnx -c Release
+```
+
 ## 对照两种异步编译方式
 
 项目默认开启 Runtime Async。想看传统编译器状态机，可以先强制重新编译，再运行 `runtime` 组：
 
 ```powershell
-dotnet build CSharpGuide/dotnet11-features -c Release -t:Rebuild -p:EnableRuntimeAsyncDemo=false
+dotnet build CSharpGuide/dotnet11-features/dotnet11-features.csproj -c Release -t:Rebuild -p:EnableRuntimeAsyncDemo=false
 dotnet run --project CSharpGuide/dotnet11-features -c Release --no-build -- runtime
 ```
 
@@ -47,7 +53,7 @@ dotnet run --project CSharpGuide/dotnet11-features -c Release --no-build -- runt
 切换属性后要使用 `-t:Rebuild`；单独改属性不一定触发增量重新编译。恢复默认版本也需要执行：
 
 ```powershell
-dotnet build CSharpGuide/dotnet11-features -c Release -t:Rebuild
+dotnet build CSharpGuide/dotnet11-features/dotnet11-features.csproj -c Release -t:Rebuild
 ```
 
 项目显式设置了 C# 15，因为上层 `CSharpGuide/Directory.build.props` 固定了 C# 10。C# 15 的这些示例不需要预览语言版本；内存安全规则仍是单独的预览功能，本项目没有启用。
@@ -60,7 +66,7 @@ dotnet build CSharpGuide/dotnet11-features -c Release -t:Rebuild
 | --- | --- | --- |
 | [ASP.NET Core](docs/web.md) | ASP.NET Core 11 共享框架；本机回环端口 5087 可用 | 启动本机服务，观察联合类型响应、验证和过滤器 |
 | [EF Core SQLite](docs/ef.md) | 首次运行可访问 nuget.org；支持 SQLite 的平台 | 使用内存数据库并打印 SQL，无需数据库服务 |
-| [增量 CBOR](docs/cbor.md) | 首次运行可访问 nuget.org | 分两段读取一个数组 |
+| [增量 CBOR](docs/cbor.md) | 首次运行可访问 nuget.org | 对照 JSON 与 CBOR 编码，分两段读取数组，再看如何与 PipeReader 配合 |
 | [Windows Forms](docs/winforms.md) | Windows 和 .NET 11 Windows Desktop 运行时 | 打开窗口查看新控件样式，也可用 `--inspect` 只检查属性 |
 | [网络与进程](docs/environment.md) | 各命令分别需要本机进程、回环网络或 DNS | 真实 DNS 查询需要显式指定域名 |
 | [SDK 命令](docs/sdk.md) | PowerShell 7、.NET 11 SDK | 在系统临时目录创建解决方案并保留结果 |

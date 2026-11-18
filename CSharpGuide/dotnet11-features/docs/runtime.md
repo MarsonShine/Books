@@ -78,15 +78,15 @@ Runtime Async 把更多挂起和恢复的安排交给运行时与 JIT。编译�
 
 ```powershell
 # 默认启用 Runtime Async
-dotnet build -c Release -t:Rebuild
+dotnet build dotnet11-features.csproj -c Release -t:Rebuild
 dotnet run -c Release --no-build -- runtime
 
 # 使用传统编译方式
-dotnet build -c Release -t:Rebuild -p:EnableRuntimeAsyncDemo=false
+dotnet build dotnet11-features.csproj -c Release -t:Rebuild -p:EnableRuntimeAsyncDemo=false
 dotnet run -c Release --no-build -- runtime
 
 # 恢复默认设置
-dotnet build -c Release -t:Rebuild
+dotnet build dotnet11-features.csproj -c Release -t:Rebuild
 ```
 
 程序会用反射检查 `CalculateTotalAsync` 是否带有 `AsyncStateMachineAttribute`。对这个示例方法，默认编译结果通常显示 `False`，关闭开关后显示 `True`。切换时使用 `Rebuild`：普通增量构建可能继续使用上一次的产物。不同方法可能因为代码形态而回退到传统方式，因此一个方法的属性不能代表整个应用。

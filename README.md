@@ -7,6 +7,7 @@
 4. [编写高性能 .NET 代码](WHPerformanceDotNet/)
 5. [C# 并发编程实战](ConcurrencyInCSharpCookbook/03ParallerBasic/)
 6. [C# 指南](CSharpGuide/docs/)
+    - [.NET 11 学习示例](CSharpGuide/dotnet11-features/README.md)
 7. [深入理解计算机系统（CSAPP）](CSAPP/)
 8. [深入理解C#](CSharpInDepth/)
 9. [设计模式](DesignPattern/DesignPatternCore/)
